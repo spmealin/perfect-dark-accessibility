@@ -262,6 +262,11 @@ file(GLOB_RECURSE SRC_PORT_CXX "${CMAKE_SOURCE_DIR}/port/*.cpp")
 
 file(GLOB_RECURSE SRC_GAME "${CMAKE_SOURCE_DIR}/src/game/*.c")
 
+set(SRC_ACCESSIBILITY
+  "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility.c"
+  "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_log.c"
+)
+
 file(GLOB SRC_LIB_MP3 "${CMAKE_SOURCE_DIR}/src/lib/mp3/*.c")
 file(GLOB SRC_LIB_NAUDIO "${CMAKE_SOURCE_DIR}/src/lib/naudio/*.c")
 file(GLOB SRC_LIB_ULTRA_AUDIO "${CMAKE_SOURCE_DIR}/src/lib/ultra/audio/*.c")
@@ -314,6 +319,7 @@ list(PREPEND SRC_LIB "${CMAKE_SOURCE_DIR}")
 
 set(SRC
   ${SRC_GAME}
+  ${SRC_ACCESSIBILITY}
   ${SRC_PORT}
   ${SRC_PORT_CXX}
   ${SRC_LIB_MP3}

@@ -17,6 +17,7 @@
 #include "mod.h"
 #include "system.h"
 #include "utils.h"
+#include "accessibility/accessibility.h"
 
 u32 g_OsMemSize = 0;
 s32 g_OsMemSizeMb = 16;
@@ -86,6 +87,7 @@ static void gameInit(void)
 static void cleanup(void)
 {
 	sysLogPrintf(LOG_NOTE, "shutdown");
+	accessibilityShutdown();
 	inputSaveBinds();
 	configSave(CONFIG_PATH);
 	videoShutdown();
@@ -104,6 +106,7 @@ int main(int argc, const char **argv)
 	sysInit();
 	fsInit();
 	configInit();
+	accessibilityInit();
 	videoInit();
 	inputInit();
 	audioInit();

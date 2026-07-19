@@ -11,6 +11,7 @@ Before accessibility work, read:
 - `ACCESSIBILITY_ARCHITECTURE.md` for confirmed engine boundaries and proposed interfaces.
 - `ACCESSIBILITY_ROADMAP.md` for milestone order and acceptance criteria.
 - `ACCESSIBILITY_TESTING.md` for evidence and playtest requirements.
+- The matching `ACCESSIBILITY_MILESTONE_XX_PLAN.md`, when one exists, before implementing that milestone.
 
 Treat statements marked **Confirmed** as repository observations. Treat **Proposed** and **Question** as design work that still needs implementation or validation.
 
@@ -46,8 +47,8 @@ Documentation-only changes do not require a rebuild unless they alter build inpu
 - Never block the game loop on speech, logging, device enumeration, or assistive technology.
 - Give announcements priorities, deduplication keys, replacement groups, expiry times, and player context. Do not call a platform speech API directly from gameplay systems.
 - Prefer polling stable semantic state once per logical tick when that avoids several invasive hooks. Prefer a hook when polling would lose an event, source, or ordering.
-- Do not expose pointers, memory addresses, filesystem paths, ROM hashes, player names, free-form profile names, machine names, or unrelated input in accessibility logs.
-- Accessibility logs must be explicitly enabled, stored separately from the general `pd.log`, bounded or rotated, and easy to attach to a playtest report.
+- Accessibility development logs should capture any feature-relevant state that may help implementation or diagnosis. Privacy redaction and data minimization are not requirements for these explicitly enabled local logs; resolved text, names, paths, arguments, positions, input, identifiers, and pointers may be recorded when useful.
+- Accessibility logs must be disabled by default, explicitly enabled, stored separately from the general `pd.log`, ignored by Git, and never uploaded automatically. Never log ROM contents, extracted copyrighted assets, passwords, authentication tokens, or unrelated operating-system secrets.
 - Update the upstream hook ledger in `ACCESSIBILITY_ARCHITECTURE.md` whenever an established source file gains or loses an accessibility call.
 - Document new configuration keys, default values, shortcuts, announcement rules, and backend limitations in the same change that introduces them.
 - Use existing localized strings where they express the correct semantic value. Any new user-facing text needs a localization plan; do not hide English literals in hooks.
@@ -63,7 +64,7 @@ Every handoff should state:
 - assumptions and unresolved questions;
 - build configuration and executable tested;
 - runtime, speech, interaction, and independent-user evidence collected;
-- relevant accessibility log session ID, with private data removed;
+- relevant accessibility log session ID and the diagnostic fields used to reach the conclusion;
 - rollback steps and known regressions.
 
 Do not describe a feature as complete when its acceptance criteria in `ACCESSIBILITY_ROADMAP.md` have not been met.

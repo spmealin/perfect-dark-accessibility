@@ -55,7 +55,7 @@ For a normal startup smoke test:
 
 ## Structured accessibility log
 
-Logging does not exist yet. When implemented, it must be opt-in and separate from `pd.log`.
+Milestone 2 implements an opt-in `$S/accessibility.log` separate from `pd.log`. It is created only when both `Accessibility.Enabled=1` and `Accessibility.LoggingEnabled=1`. The current schema records lifecycle events; later milestones will add feature events.
 
 A JSON Lines or equivalently parseable record could look like this, with the schema finalized in implementation:
 
@@ -69,13 +69,12 @@ Required design properties:
 - explicit schema and build/configuration identifiers;
 - session-local random identifier, not a device/user identifier;
 - normalized category, event, priority, and queue/backend decision;
-- error categories that do not embed native handles or full paths;
-- bounded size/rotation and graceful write failure;
+- detailed errors that may include native handles, pointers, full paths, and raw identifiers when useful;
+- graceful write failure;
 - a visible setting and documentation for enable/disable/delete;
-- redaction of free-form player/profile text and diagnostic-only coordinates;
-- no raw pointers, ROM hashes, machine/user names, environment data, arbitrary keys, typed text, or continuous input history.
+- comprehensive feature-relevant diagnostics, including free-form text, profile names, precise coordinates, input events, environment/path details, and continuous state where useful.
 
-Precise movement traces or resolved free-form text require separate diagnostic consent and should default off. Review logs before attaching them to an issue.
+Privacy redaction and data minimization are not requirements for development logs. Never include ROM contents, extracted copyrighted assets, passwords, authentication tokens, or unrelated operating-system secrets. Logs stay disabled by default, local, ignored by Git, and never upload automatically. Tell testers that a shared log may contain comprehensive raw diagnostics.
 
 ## Speech backend test matrix
 
@@ -101,7 +100,7 @@ Pass criteria must name numerical latency/frame budgets after the technology pro
 
 ### Script A: deterministic focus basics
 
-Precondition: a documented profile/start state that reaches a known dialog; speech enabled; logging enabled with tester consent.
+Precondition: a documented profile/start state that reaches a known dialog; speech enabled; logging explicitly enabled and its comprehensive contents explained to the tester.
 
 1. Open the dialog and listen for title/context followed by final initial focus.
 2. Move once in each supported direction and compare spoken focus to the actual semantic item.
@@ -170,7 +169,7 @@ Every user-visible change should check:
 - no unbounded queue, repeated chatter, stale speech after context change, or material frame-time spike;
 - no new tracked build output, ROM data, generated assets, logs, saves, or configuration files.
 
-Automated tests should cover pure formatting, queue priority/replacement/deduplication/expiry, redaction, config bounds, and semantic adapters that can be isolated. They complement, not replace, interaction and blind-user testing.
+Automated tests should cover pure formatting, queue priority/replacement/deduplication/expiry, JSON escaping, config bounds, and semantic adapters that can be isolated. They complement, not replace, interaction and blind-user testing.
 
 ## Rollback and reproducibility
 
@@ -203,14 +202,14 @@ Exact steps/inputs:
 
 Expected semantic output:
 Actual output and timing:
-Spoken output (exact only when privacy-safe):
+Spoken output:
 Input sequence:
 Task completed independently? yes / no / partial
 Recovery attempted and result:
 Regressions with accessibility disabled:
 
-Privacy review completed before attachment? yes / no
-Relevant redacted log timestamps:
+Tester informed that the log may contain comprehensive diagnostics? yes / no
+Relevant log timestamps:
 Severity/user impact:
 Open questions:
 Suggested next smallest experiment:

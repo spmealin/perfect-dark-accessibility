@@ -1,0 +1,76 @@
+#include <inttypes.h>
+#include <PR/ultratypes.h>
+#include "platform.h"
+#include "config.h"
+#include "fs.h"
+#include "system.h"
+#include "accessibility/accessibility.h"
+#include "accessibility/accessibility_log.h"
+
+static s32 g_AccessibilityEnabledConfig = 0;
+static s32 g_AccessibilityLoggingEnabledConfig = 0;
+static s32 g_AccessibilityInitialized = 0;
+static s32 g_AccessibilityEnabled = 0;
+static s32 g_AccessibilityShutdownComplete = 0;
+static u64 g_AccessibilityStartTimeUs = 0;
+
+void accessibilityInit(void)
+{
+	if (g_AccessibilityInitialized) {
+		return;
+	}
+
+	g_AccessibilityInitialized = 1;
+	g_AccessibilityEnabled = g_AccessibilityEnabledConfig;
+	g_AccessibilityStartTimeUs = sysGetMicroseconds();
+
+	if (!g_AccessibilityEnabled) {
+		return;
+	}
+
+	sysLogPrintf(LOG_NOTE, "accessibility: enabled (logging %s)",
+			g_AccessibilityLoggingEnabledConfig ? "enabled" : "disabled");
+
+	if (g_AccessibilityLoggingEnabledConfig && accessibilityLogInit()) {
+		accessibilityLogEvent("lifecycle", "session_start",
+				"enabled=%d logging=%d path=%s",
+				g_AccessibilityEnabledConfig,
+				g_AccessibilityLoggingEnabledConfig,
+				fsFullPath(ACCESSIBILITY_LOG_PATH));
+	}
+}
+
+void accessibilityShutdown(void)
+{
+	u64 elapsed;
+
+	if (!g_AccessibilityInitialized || g_AccessibilityShutdownComplete) {
+		return;
+	}
+
+	g_AccessibilityShutdownComplete = 1;
+
+	if (accessibilityLogIsOpen()) {
+		elapsed = sysGetMicroseconds() - g_AccessibilityStartTimeUs;
+
+		accessibilityLogEvent("lifecycle", "session_stop",
+				"enabled=%d logging=%d elapsed_us=%" PRIu64,
+				g_AccessibilityEnabledConfig,
+				g_AccessibilityLoggingEnabledConfig,
+				(uint64_t)elapsed);
+	}
+
+	accessibilityLogShutdown();
+	g_AccessibilityEnabled = 0;
+}
+
+s32 accessibilityIsEnabled(void)
+{
+	return g_AccessibilityEnabled;
+}
+
+PD_CONSTRUCTOR static void accessibilityConfigInit(void)
+{
+	configRegisterInt("Accessibility.Enabled", &g_AccessibilityEnabledConfig, 0, 1);
+	configRegisterInt("Accessibility.LoggingEnabled", &g_AccessibilityLoggingEnabledConfig, 0, 1);
+}

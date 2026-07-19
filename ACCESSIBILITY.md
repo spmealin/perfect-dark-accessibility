@@ -4,7 +4,7 @@
 
 This work aims to make the Perfect Dark PC port meaningfully playable by blind and low-vision players, starting with nonvisual access to menus and essential game state and progressing through small, testable gameplay slices.
 
-The current branch contains planning documentation only. It does **not** yet contain a screen-reader backend, spoken menus, navigation assistance, or accessible gameplay.
+The current branch contains the disabled-by-default Milestone 2 accessibility coordinator and opt-in diagnostic logger. It does **not** yet contain a screen-reader backend, spoken menus, navigation assistance, or accessible gameplay.
 
 Perfect Dark is a fast first-person game whose original interface communicates heavily through graphics, spatial audio, motion, timing, and implicit world knowledge. A useful accessibility layer must expose the engine's own semantic state and provide ways to act on it. Merely reading every piece of on-screen text would leave core tasks inaccessible.
 
@@ -15,7 +15,7 @@ The primary users for the first milestones are:
 - blind players who use speech and audio cues;
 - low-vision players who benefit from explicit, repeatable state announcements;
 - screen-reader users who need predictable focus, labels, values, and interruption behaviour;
-- testers and developers who need privacy-conscious event evidence.
+- testers and developers who need detailed event evidence.
 
 Initial work focuses on Windows because a practical speech path is required for the first end-to-end proof. The semantic core should remain platform-independent so other backends can be added without rewriting game hooks.
 
@@ -43,7 +43,7 @@ The first useful slice is startup through the main menus. Later slices cover HUD
 8. **Preserve game behaviour.** With accessibility disabled, hooks should be inert and game logic should remain unchanged.
 9. **Evidence over confidence.** Separate build, runtime, speech-output, task-completion, and independent-user evidence.
 10. **Blind testing early.** Short tests after each user-visible increment are more valuable than a large untested feature dump.
-11. **Privacy by design.** Collect the minimum event data needed to diagnose ordering and missing semantics; make logging opt-in.
+11. **Diagnostic-first logging.** Keep logging opt-in and local, but record all feature-relevant state that can help explain accessibility behaviour during development.
 12. **Legal boundaries.** The project consumes a user-supplied supported ROM and never ships protected game content.
 
 ## Capability areas
@@ -84,7 +84,7 @@ Each increment should follow this loop:
 6. Correlate tester observations with the session log, fix the highest-impact barrier, and repeat.
 7. Expand scope only when the bounded task is reliable and recoverable.
 
-Tester instructions and reports must not request a ROM, ROM hash, personal profile name, machine identity, or unrelated input history. Logs and recordings are shared only with the tester's informed consent.
+Development logs may contain resolved text, names, paths, arguments, positions, input events, identifiers, pointers, and detailed game state when useful. They must never contain ROM contents, extracted copyrighted assets, passwords, authentication tokens, or unrelated operating-system secrets, and they are never uploaded automatically. Testers should be told that the diagnostic log is comprehensive before choosing whether to share it.
 
 ## Glossary
 
@@ -114,4 +114,4 @@ A speech or non-speech indication that helps the player orient, follow a route, 
 
 **Playtest log**
 
-An opt-in, privacy-limited sequence of accessibility events and decisions used to correlate a tester's experience with the feature's internal state. It is separate from the general engine log.
+An opt-in, development-focused sequence of accessibility events and decisions used to correlate a tester's experience with detailed internal state. It is separate from the general engine log and may intentionally contain raw diagnostics.
