@@ -99,7 +99,7 @@ port/src/main.c
 .gitignore
 ACCESSIBILITY_ARCHITECTURE.md
 ACCESSIBILITY_ROADMAP.md
-ACCESSIBILITY_MILESTONE_02_PLAN.md
+milestones/ACCESSIBILITY_MILESTONE_02_PLAN.md
 ```
 
 Do not create `port/src/accessibility/` yet. The logger uses the existing cross-platform `fs.h` and `system.h` interfaces and belongs with the platform-independent accessibility core. Windows-only code begins in Milestone 3.

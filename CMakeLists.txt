@@ -260,11 +260,23 @@ list(APPEND LIBS "${EXTRA_LIBRARIES}")
 file(GLOB_RECURSE SRC_PORT "${CMAKE_SOURCE_DIR}/port/*.c")
 file(GLOB_RECURSE SRC_PORT_CXX "${CMAKE_SOURCE_DIR}/port/*.cpp")
 
+set(SRC_SPEECH_TOLK "${CMAKE_SOURCE_DIR}/port/src/accessibility/speech_tolk.c")
+set(SRC_SPEECH_NULL "${CMAKE_SOURCE_DIR}/port/src/accessibility/speech_null.c")
+list(REMOVE_ITEM SRC_PORT ${SRC_SPEECH_TOLK} ${SRC_SPEECH_NULL})
+
+if(WIN32)
+  list(APPEND SRC_PORT ${SRC_SPEECH_TOLK})
+  include(Tolk)
+else()
+  list(APPEND SRC_PORT ${SRC_SPEECH_NULL})
+endif()
+
 file(GLOB_RECURSE SRC_GAME "${CMAKE_SOURCE_DIR}/src/game/*.c")
 
 set(SRC_ACCESSIBILITY
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_log.c"
+  "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_speech.c"
 )
 
 file(GLOB SRC_LIB_MP3 "${CMAKE_SOURCE_DIR}/src/lib/mp3/*.c")
@@ -349,6 +361,9 @@ add_custom_target(pd_headers ALL DEPENDS ${JSON_HEADERS})
 set(BIN_NAME "pd${BIN_REGION}.${TARGET_ARCH}")
 add_executable(pd ${SRC})
 add_dependencies(pd pd_headers)
+if(WIN32)
+  add_dependencies(pd tolk tolk_runtime_files)
+endif()
 target_link_libraries(pd ${LIBS})
 set_target_properties(pd PROPERTIES OUTPUT_NAME "${BIN_NAME}")
 if(WIN32)

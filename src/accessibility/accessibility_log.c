@@ -18,6 +18,35 @@ static uint64_t g_AccessibilityLogSequence = 0;
 static char g_AccessibilityLogSession[32];
 static s32 g_AccessibilityLogFailureReported = 0;
 
+static size_t accessibilityLogUtf8SequenceLength(const unsigned char *value)
+{
+	const unsigned char first = value[0];
+
+	if (first >= 0xc2 && first <= 0xdf
+			&& value[1] >= 0x80 && value[1] <= 0xbf) {
+		return 2;
+	}
+
+	if (first >= 0xe0 && first <= 0xef
+			&& value[1] >= 0x80 && value[1] <= 0xbf
+			&& value[2] >= 0x80 && value[2] <= 0xbf
+			&& (first != 0xe0 || value[1] >= 0xa0)
+			&& (first != 0xed || value[1] <= 0x9f)) {
+		return 3;
+	}
+
+	if (first >= 0xf0 && first <= 0xf4
+			&& value[1] >= 0x80 && value[1] <= 0xbf
+			&& value[2] >= 0x80 && value[2] <= 0xbf
+			&& value[3] >= 0x80 && value[3] <= 0xbf
+			&& (first != 0xf0 || value[1] >= 0x90)
+			&& (first != 0xf4 || value[1] <= 0x8f)) {
+		return 4;
+	}
+
+	return 0;
+}
+
 static void accessibilityLogWarn(const char *operation, s32 errornum)
 {
 	if (!g_AccessibilityLogFailureReported) {
@@ -40,6 +69,8 @@ static void accessibilityLogWriteJsonString(const char *value)
 	fputc('"', g_AccessibilityLogFile);
 
 	while (*ptr) {
+		size_t utf8length;
+
 		switch (*ptr) {
 		case '"':
 			fputs("\\\"", g_AccessibilityLogFile);
@@ -65,8 +96,19 @@ static void accessibilityLogWriteJsonString(const char *value)
 		default:
 			if (*ptr < 0x20) {
 				fprintf(g_AccessibilityLogFile, "\\u%04x", (u32)*ptr);
-			} else {
+			} else if (*ptr < 0x80) {
 				fputc(*ptr, g_AccessibilityLogFile);
+			} else {
+				utf8length = accessibilityLogUtf8SequenceLength(ptr);
+
+				if (utf8length) {
+					fwrite(ptr, 1, utf8length, g_AccessibilityLogFile);
+					ptr += utf8length;
+					continue;
+				}
+
+				// Preserve invalid octets as JSON escapes instead of emitting invalid JSON.
+				fprintf(g_AccessibilityLogFile, "\\u%04x", (u32)*ptr);
 			}
 			break;
 		}

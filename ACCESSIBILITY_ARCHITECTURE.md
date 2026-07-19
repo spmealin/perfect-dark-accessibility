@@ -107,15 +107,21 @@ Version conditionals such as `VERSION`, `PAL`, and `PLATFORM_N64` occur in relev
 
 ## Accessibility module layout
 
-Milestone 2 implements:
+Milestones 2 and 3 implement:
 
 ```text
 src/accessibility/
   accessibility.c          lifecycle and feature coordinator
   accessibility_log.c      comprehensive structured development log
+  accessibility_speech.c   speech lifecycle and UTF-8 output boundary
 src/include/accessibility/
   accessibility.h
   accessibility_log.h
+  accessibility_speech.h
+  accessibility_speech_backend.h
+port/src/accessibility/
+  speech_null.c             unavailable backend for non-Windows targets
+  speech_tolk.c             dynamically loaded Windows Tolk backend
 ```
 
 Later milestones propose:
@@ -123,17 +129,11 @@ Later milestones propose:
 ```text
 src/accessibility/
   accessibility_events.c   normalized event creation
-  accessibility_speech.c   queue, priority, replacement, throttling
   accessibility_menu.c     menu semantic adapters
   accessibility_status.c   queryable player snapshots
   accessibility_world.c    target/scanner/navigation experiments
 src/include/accessibility/
   accessibility_events.h
-port/src/accessibility/
-  speech_null.c
-  speech_windows.c
-port/include/accessibility/
-  speech_backend.h
 ```
 
 An implementation may use fewer files initially. The dependency direction should remain:
@@ -164,19 +164,18 @@ s32 accessibilityIsEnabled(void);
 
 ### Speech backend
 
-Conceptually:
+Milestone 3 implements this main-thread-only UTF-8 boundary:
 
 ```c
-bool accessibilitySpeechInit(void);
-bool accessibilitySpeechIsAvailable(void);
-void accessibilitySpeechSpeak(const char *utf8, enum accessibility_interrupt mode);
-void accessibilitySpeechCancel(void);
+s32 accessibilitySpeechInit(void);
 void accessibilitySpeechShutdown(void);
+s32 accessibilitySpeechIsAvailable(void);
+const char *accessibilitySpeechGetBackendName(void);
+s32 accessibilitySpeechOutput(const char *utf8, s32 interrupt);
+s32 accessibilitySpeechCancel(void);
 ```
 
-The core owns ordering and formatting. The backend owns native initialization, encoding conversion, cancellation, and technology-specific error reporting. Backend calls must not stall the game loop. Whether the backend needs a worker thread is a **Question** for the proof of concept.
-
-No specific Windows API is selected yet. The proof should compare at least: deployment burden, compatibility with common screen-reader setups, latency, reliable interruption, UTF-8 handling, 32/64-bit compatibility, licensing/distribution, and behaviour when no voice or assistive technology is installed. `port/src/video.c:videoGetWindowHandle` currently exposes the SDL window object, not a documented native `HWND`; do not assume it solves native integration.
+The core owns lifecycle and request logging. The backend owns native initialization, strict UTF-8/UTF-16 conversion, cancellation, and technology-specific error reporting. Windows dynamically loads a separately built `Tolk.dll` from the executable directory and uses Tolk's default screen-reader-only policy; SAPI fallback is not enabled. Non-Windows builds select the null backend. The proof calls Tolk only during startup, explicit test/harness requests, cancellation, and shutdown—never from a frame tick.
 
 ### Events and queue
 
@@ -205,17 +204,17 @@ Exact priority conflicts must be tuned with blind testers and recorded in tests.
 
 ### Configuration
 
-Milestone 2 implements these `pd.ini` keys, both defaulting to off:
+Milestones 2 and 3 implement these `pd.ini` keys, all defaulting to off:
 
 ```ini
 Accessibility.Enabled=0
 Accessibility.LoggingEnabled=0
+Accessibility.SpeechEnabled=0
 ```
 
 Later features may add:
 
 ```ini
-Accessibility.SpeechEnabled=0
 Accessibility.MenuNarration=1
 Accessibility.HudNarration=1
 Accessibility.ObjectiveNarration=1
@@ -261,7 +260,7 @@ This table records implemented and anticipated changes to established files so f
 
 | Established file | Proposed narrow hook or reason | Semantic payload | Why polling alone may be insufficient | Status |
 | --- | --- | --- | --- | --- |
-| `CMakeLists.txt` | Explicitly register core sources; select native/null backend later | Build platform/configuration only | `src/accessibility` is outside the game glob; future backend selection should be explicit | Implemented for Milestone 2 core sources |
+| `CMakeLists.txt` | Register core sources and select exactly one native/null speech backend | Build platform/configuration only | `src/accessibility` is outside the game glob and platform backends must not compile together | Implemented through Milestone 3; Windows also builds/packages Tolk |
 | `port/src/main.c` | Initialize after `configInit`; shut down in `cleanup` | Lifecycle and logger availability | First UI may occur before a later tick; resources need ordered shutdown | Implemented in Milestone 2 with two calls |
 | `port/src/pdmain.c` | Call one accessibility logical tick at a stable point | Frame and per-player context | Coordinator needs one deterministic observation/queue pump point | Proposed; placement experiment required |
 | `src/game/menu.c` | Publish final initial focus and changed focus/dialog | Dialog definition, focused item, player/menu context | Focus transitions and dynamic context can be lost or repeated when inferred externally | Proposed |
@@ -278,7 +277,7 @@ This table records implemented and anticipated changes to established files so f
 
 ## Known uncertainties and required experiments
 
-1. **Windows speech technology:** build a disposable backend probe and measure availability, queue/cancel semantics, UTF-8 conversion, latency, deployment, and failure modes before choosing.
+1. **Windows speech technology:** Milestone 3 implements pinned Tolk commit `e5149f0cb6ef9b941673017e0e7b7c409e485fbe` as a dynamically loaded shared library. NVDA 2026.1 runtime requests, Unicode conversion, cancellation, missing-dependency behavior, and clean unload passed; other readers and future compatibility remain unverified.
 2. **Threading:** determine whether native speech can be pumped without blocking and which calls must occur on the main thread or a COM-initialized worker.
 3. **Menu semantics:** create a type/handler matrix from real dialogs; verify dynamic label lifetime, multiline/control-code cleanup, disabled state, list position, and initial-focus timing.
 4. **Localization:** test all supported ROM configurations for string resolution and region-specific control codes; determine how new accessibility-only strings will be translated.

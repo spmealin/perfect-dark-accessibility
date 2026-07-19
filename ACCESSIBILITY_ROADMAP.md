@@ -15,7 +15,7 @@ This roadmap orders work by user task and evidence. Milestones are not promises 
 ## Milestone 2 — Minimal initialization and playtest logging proof
 
 - **Status:** Implementation and Windows runtime verification complete. Disabled and enabled normal-exit runs passed in the real executable; lifecycle edge cases passed in a focused harness.
-- **Detailed plan:** `ACCESSIBILITY_MILESTONE_02_PLAN.md` is the authoritative implementation handoff.
+- **Detailed plan:** `milestones/ACCESSIBILITY_MILESTONE_02_PLAN.md` is the authoritative implementation handoff.
 - **Goal:** Add a disabled-by-default accessibility service with configuration, safe lifecycle, and opt-in structured session logging.
 - **User-visible result:** With both settings explicitly enabled, startup and shutdown produce a comprehensive local diagnostic log; normal play is otherwise unchanged.
 - **Systems:** `port/src/main.c`, config/filesystem/system services, new core/log modules, and CMake. No frame-tick hook is needed.
@@ -26,11 +26,13 @@ This roadmap orders work by user task and evidence. Milestones are not promises 
 
 ## Milestone 3 — Windows speech backend proof
 
+- **Status:** Implementation and machine-verifiable Windows/NVDA runtime proof complete. Tolk loaded dynamically, NVDA 2026.1 accepted fixed and multilingual output, cancellation succeeded, and dependency failures remained nonfatal. Audible and braille perception were not independently observable by the implementation agent.
+- **Detailed plan:** `milestones/ACCESSIBILITY_MILESTONE_03_PLAN.md` is the executed implementation record. It selects pinned Tolk commit `e5149f0cb6ef9b941673017e0e7b7c409e485fbe` with NVDA as the validated path.
 - **Goal:** Select and validate one replaceable Windows speech path behind the backend interface.
 - **User-visible result:** An explicit test action speaks a fixed, non-game string and can be interrupted; absent/unavailable speech does not block startup.
-- **Systems:** Native backend, null backend, UTF-8 conversion, queue pump, configuration, packaging experiment.
-- **Acceptance:** Availability is reported; first-speech latency and cancellation are measured; calls do not stall a representative frame loop; Unicode examples work; startup/shutdown and no-voice/no-technology cases are nonfatal; licensing/deployment notes are recorded.
-- **Logging/evidence:** Record request, queue decision, complete backend result/error detail, native identifiers/handles when useful, and latency.
+- **Systems:** Core backend boundary, dynamically loaded Tolk Windows backend, null backend, UTF-8 conversion, configuration, and development-output packaging.
+- **Acceptance:** Availability, call durations, cancellation, strict Unicode conversion, startup/shutdown, alternate-working-directory loading, missing DLL/controller/exports, and disabled states are recorded. Human-observed first-audio latency, braille output, other readers, i686 runtime, and non-Windows compilation remain future evidence rather than claimed passes.
+- **Logging/evidence:** Record dependency paths, export resolution, active reader/capabilities, complete request/conversion/backend results and errors, native identifiers/handles when useful, and timing.
 - **Risks and unknowns:** Screen-reader coexistence, native dependencies, and COM/thread constraints may change the technology choice.
 - **Explicit non-goals:** Do not wire gameplay systems directly to the backend or select a backend without measured evidence.
 

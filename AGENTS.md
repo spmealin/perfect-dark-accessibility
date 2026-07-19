@@ -11,7 +11,7 @@ Before accessibility work, read:
 - `ACCESSIBILITY_ARCHITECTURE.md` for confirmed engine boundaries and proposed interfaces.
 - `ACCESSIBILITY_ROADMAP.md` for milestone order and acceptance criteria.
 - `ACCESSIBILITY_TESTING.md` for evidence and playtest requirements.
-- The matching `ACCESSIBILITY_MILESTONE_XX_PLAN.md`, when one exists, before implementing that milestone.
+- The matching `milestones/ACCESSIBILITY_MILESTONE_XX_PLAN.md`, when one exists, before implementing that milestone.
 
 Treat statements marked **Confirmed** as repository observations. Treat **Proposed** and **Question** as design work that still needs implementation or validation.
 
@@ -19,7 +19,7 @@ Treat statements marked **Confirmed** as repository observations. Treat **Propos
 
 - Do not add, copy, modify, or commit a Perfect Dark ROM, extracted ROM content, generated asset output, or copyrighted game data. Testers provide a supported ROM legally.
 - Do not edit `build/`, `src/generated/`, extracted assets, `tools/recomp`, `port/fast3d`, or vendored headers for accessibility work unless the task explicitly requires it and the reason is documented.
-- Prefer new platform-independent code under `src/accessibility/` and port-facing code under `port/src/accessibility/`, with public headers in the corresponding include trees. These directories are proposed and do not exist yet.
+- Keep platform-independent accessibility code under the existing `src/accessibility/` core. Put new port-facing implementations under `port/src/accessibility/`, with public or shared contracts in the corresponding include trees.
 - Keep changes to established game files to small semantic hooks. Put policy, speech queuing, formatting, deduplication, configuration, and logging in the accessibility modules.
 - Do not infer accessibility from rendered pixels when the engine already has the semantic value. Announce the menu label, objective state, HUD message, weapon, target, or world object that the engine knows.
 - Windows speech support must sit behind a backend interface. Core accessibility code must build without Windows APIs and must tolerate no speech backend.

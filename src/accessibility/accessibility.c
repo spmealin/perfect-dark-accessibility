@@ -6,9 +6,11 @@
 #include "system.h"
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_log.h"
+#include "accessibility/accessibility_speech.h"
 
 static s32 g_AccessibilityEnabledConfig = 0;
 static s32 g_AccessibilityLoggingEnabledConfig = 0;
+static s32 g_AccessibilitySpeechEnabledConfig = 0;
 static s32 g_AccessibilityInitialized = 0;
 static s32 g_AccessibilityEnabled = 0;
 static s32 g_AccessibilityShutdownComplete = 0;
@@ -28,15 +30,34 @@ void accessibilityInit(void)
 		return;
 	}
 
-	sysLogPrintf(LOG_NOTE, "accessibility: enabled (logging %s)",
-			g_AccessibilityLoggingEnabledConfig ? "enabled" : "disabled");
+	sysLogPrintf(LOG_NOTE, "accessibility: enabled (logging %s, speech %s)",
+			g_AccessibilityLoggingEnabledConfig ? "enabled" : "disabled",
+			g_AccessibilitySpeechEnabledConfig ? "enabled" : "disabled");
 
 	if (g_AccessibilityLoggingEnabledConfig && accessibilityLogInit()) {
 		accessibilityLogEvent("lifecycle", "session_start",
-				"enabled=%d logging=%d path=%s",
+				"enabled=%d logging=%d speech=%d speech_test=%d path=%s",
 				g_AccessibilityEnabledConfig,
 				g_AccessibilityLoggingEnabledConfig,
+				g_AccessibilitySpeechEnabledConfig,
+				sysArgCheck("--accessibility-speech-test"),
 				fsFullPath(ACCESSIBILITY_LOG_PATH));
+	}
+
+	if (g_AccessibilitySpeechEnabledConfig) {
+		accessibilitySpeechInit();
+
+		if (sysArgCheck("--accessibility-speech-test")) {
+			if (!accessibilitySpeechIsAvailable()) {
+				accessibilityLogEvent("speech", "output_result",
+						"accepted=0 reason=test_backend_unavailable");
+			} else {
+				accessibilitySpeechOutput("Perfect Dark accessibility speech test.", 1);
+			}
+		}
+	} else if (sysArgCheck("--accessibility-speech-test")) {
+		accessibilityLogEvent("speech", "output_result",
+				"accepted=0 reason=test_speech_disabled");
 	}
 }
 
@@ -49,6 +70,7 @@ void accessibilityShutdown(void)
 	}
 
 	g_AccessibilityShutdownComplete = 1;
+	accessibilitySpeechShutdown();
 
 	if (accessibilityLogIsOpen()) {
 		elapsed = sysGetMicroseconds() - g_AccessibilityStartTimeUs;
@@ -73,4 +95,5 @@ PD_CONSTRUCTOR static void accessibilityConfigInit(void)
 {
 	configRegisterInt("Accessibility.Enabled", &g_AccessibilityEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.LoggingEnabled", &g_AccessibilityLoggingEnabledConfig, 0, 1);
+	configRegisterInt("Accessibility.SpeechEnabled", &g_AccessibilitySpeechEnabledConfig, 0, 1);
 }
