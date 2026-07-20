@@ -280,6 +280,8 @@ set(SRC_ACCESSIBILITY
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_log.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_menu.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_speech.c"
+  "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_targeting.c"
+  "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_targeting_game.c"
 )
 
 file(GLOB SRC_LIB_MP3 "${CMAKE_SOURCE_DIR}/src/lib/mp3/*.c")

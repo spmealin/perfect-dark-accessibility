@@ -74,6 +74,7 @@
 #include "types.h"
 #include "system.h"
 #include "accessibility/accessibility_beacon.h"
+#include "accessibility/accessibility_targeting.h"
 
 extern u8 *g_MempHeap;
 extern u32 g_MempHeapSize;
@@ -512,6 +513,7 @@ void mainLoop(void)
 		}
 
 		accessibilityBeaconReset("stage_stop");
+		accessibilityTargetingReset("stage_stop");
 		lvStop();
 		mempDisablePool(MEMPOOL_STAGE);
 		mempDisablePool(MEMPOOL_7);

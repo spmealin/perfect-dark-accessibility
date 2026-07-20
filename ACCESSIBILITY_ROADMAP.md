@@ -93,6 +93,8 @@ This roadmap orders work by user task and evidence. Milestones are not promises 
 
 ## Milestone 9 — Targeting feedback
 
+- **Status:** Firing-range slice implemented; runtime and blind-user acceptance pending. The branch now contains a generic fixed-capacity targeting core, a Carrington Institute firing-range source adapter, serialized positioned visible-target pulses, and an independent centered aim-alignment cadence. This does not complete broader character/combat, relationship, speech/repeat, special-sight, or multiplayer coverage.
+- **Detailed plan and execution record:** `ACCESSIBILITY_MILESTONE_09_PLAN.md` remains active until the firing-range proof is runtime-tested and accepted.
 - **Goal:** Tell a player when a valid aimed target changes and provide truthful relationship/distance cues.
 - **User-visible result:** Optional speech/earcons identify acquired/lost targets and a repeat command describes the current known target.
 - **Systems:** `lv.c` aimed-prop selection, `sightTick`, prop/character/object categories, friendliness rules, position/orientation.

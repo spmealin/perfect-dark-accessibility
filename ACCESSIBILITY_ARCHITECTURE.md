@@ -23,7 +23,7 @@ Status labels:
 | `dist/` | Packaging metadata and platform assets | Only relevant when an accessibility runtime dependency is deliberately packaged. |
 | `tools/` | Asset/build utilities and recomp submodule | Not a first-phase hook location. |
 
-`CMakeLists.txt` recursively includes C and C++ sources under `src/game` and `port`, then generates asset headers for the selected `ROMID`. Milestone 2 adds an explicit `SRC_ACCESSIBILITY` list for `src/accessibility/accessibility.c` and `src/accessibility/accessibility_log.c`. Future platform backend selection still needs an explicit design rather than compiling mutually exclusive implementations accidentally.
+`CMakeLists.txt` recursively includes C and C++ sources under `src/game` and `port`, then generates asset headers for the selected `ROMID`. The explicit `SRC_ACCESSIBILITY` list now owns the coordinator, announcements, menu semantics, beacons, targeting core/source adapter, logging, and speech core. Platform backend selection compiles exactly one native or null speech implementation.
 
 The project builds several ROM configurations. `ROMID` defaults to `ntsc-final`; the README also documents `ntsc-1.0`, `jpn-final`, and `pal-final`. Accessibility logic must not depend on one version's generated addresses or extracted content.
 
@@ -91,7 +91,7 @@ Actual player gun damage is applied in `src/game/chraction.c:chrDamage`, where t
 
 `src/game/lv.c` obtains the prop under aim with `propFindAimingAt`, filters some invalid/cloaked cases, and updates `currentplayer->lookingatprop` and tracked props. `src/game/sight.c:sightTick` manages sight-specific target tracking and includes `sightCanTargetProp` and `sightIsPropFriendly`.
 
-This is sufficient for a target-change experiment, but not yet for a truthful world scanner. Object naming, visibility/knowledge rules, multiplayer ownership, distance units, room transitions, and route graph quality still need investigation.
+The Milestone 9 firing-range slice uses a two-phase observation. It captures fixed-size projected bounds immediately after aim and tracked-prop calculation, before PC prop rendering converts model matrices in place, then consumes and clears that cache after sight/HUD rendering has finalized native alignment state. Its source adapter admits only active, undestroyed `MODEL_TARGET` props that were enabled, non-invisible, rendered this tick, successfully projected to finite coordinates, and intersect the current viewport. It matches `lookingatprop` only against that admitted set and never casts another ray. This proves a narrow truthful target-change boundary, but ordinary combat naming, relationship, visibility/knowledge rules, multiplayer output, and special-sight behavior still need investigation.
 
 ### Input, audio, native platform, and repository boundaries
 
@@ -114,6 +114,8 @@ src/accessibility/
   accessibility.c          lifecycle and feature coordinator
   accessibility_log.c      comprehensive structured development log
   accessibility_speech.c   speech lifecycle and UTF-8 output boundary
+  accessibility_targeting.c generic fixed-capacity target state and owned audio lanes
+  accessibility_targeting_game.c firing-range semantic source adapter
 src/include/accessibility/
   accessibility.h
   accessibility_log.h
@@ -216,6 +218,8 @@ Milestone 4 adds another key, also enabled by default for acceptance testing:
 
 ```ini
 Accessibility.MenuNarration=1
+Accessibility.InteractableBeacons=1
+Accessibility.TargetingFeedback=1
 ```
 
 Later features may add:
@@ -257,7 +261,9 @@ Capture a per-player snapshot at a stable logical tick: health fraction, shield 
 
 ### Target and scanner
 
-A target event may observe changes to the validated aimed-at prop after gameplay target selection. The adapter must map props to safe categories/names and use existing friendliness tests when valid. A scanner is a separate user-enabled query over nearby eligible props; it must not reuse render visibility as its entire semantic model or reveal hidden mission information. Milestone 5 first proves this boundary in Carrington Institute training with only interactable objects and canonicalized doors. Each enabled category refreshes a bounded snapshot twice per second and retains up to three nearby targets using a 150-unit membership margin. A global round-robin scheduler interleaves both categories and transfers one accessibility-owned sound slot between successive positioned cues, guaranteeing that two beacons never start together. Base repeat interval, minimum slot gap, and per-category cap are isolated policy constants so future enemy beacons can use a denser profile without replacing the scheduler. Milestone 10 generalizes categories, names, and query output only after that evidence exists.
+The targeting core accepts bounded observations containing source/profile, stable identity, category, relationship, position/distance, projected bounds, optional localized name, and one aimed identity. It owns per-player fixed arrays, two-frame visible/removal debounce, identity-preserving sort/round-robin state, one `PSTYPE_ACCESSIBILITY_TARGETING` presence channel, and one centered alignment handle. The firing-range profile uses `SFX_MENU_SELECT`, a 36-tick base cycle divided among visible targets with a six-tick minimum, and `SFX_0007` every 12 ticks while aligned. Presence and alignment lanes are independent; both are also isolated from `PSTYPE_ACCESSIBILITY_BEACON`. A later combat adapter should add semantic eligibility/relationship/name resolution and a profile without introducing stage or range types into the core.
+
+A scanner is a separate user-enabled query over nearby eligible props; it must not reuse render visibility as its entire semantic model or reveal hidden mission information. Milestone 5 first proves this boundary in Carrington Institute training with only interactable objects and canonicalized doors. Each enabled category refreshes a bounded snapshot twice per second and retains up to three nearby targets using a 150-unit membership margin. A global round-robin scheduler interleaves both categories and transfers one accessibility-owned sound slot between successive positioned cues, guaranteeing that two beacons never start together. Milestone 10 generalizes categories, names, and query output only after that evidence exists.
 
 ### Navigation
 
@@ -269,9 +275,9 @@ This table records implemented and anticipated changes to established files so f
 
 | Established file | Proposed narrow hook or reason | Semantic payload | Why polling alone may be insufficient | Status |
 | --- | --- | --- | --- | --- |
-| `CMakeLists.txt` | Register core sources and select exactly one native/null speech backend | Build platform/configuration only | `src/accessibility` is outside the game glob and platform backends must not compile together | Implemented through Milestone 5; Windows also builds/packages Tolk and the core list includes the beacon module |
+| `CMakeLists.txt` | Register core sources and select exactly one native/null speech backend | Build platform/configuration only | `src/accessibility` is outside the game glob and platform backends must not compile together | Implemented through the Milestone 9 firing-range slice; includes both targeting modules |
 | `port/src/main.c` | Initialize after `configInit`; shut down in `cleanup` | Lifecycle and logger availability | First UI may occur before a later tick; resources need ordered shutdown | Implemented in Milestone 2 with two calls |
-| `port/src/pdmain.c` | Call one accessibility gameplay tick immediately after `lvTick`, and reset before `lvStop` | Frame, input, stage, current-player context, and safe teardown | Beacon commands and pulse cadence need one stable owner outside render/per-prop loops; sounds must stop before stage prop/audio memory is disabled | Implemented in Milestone 5; runtime transition verification pending |
+| `port/src/pdmain.c` | Call one accessibility gameplay tick immediately after `lvTick`, and reset owned audio before `lvStop` | Frame, input, stage, current-player context, and safe teardown | Beacon commands need a stable owner; beacon and targeting sounds must stop before stage prop/audio memory is disabled | Beacon tick implemented in Milestone 5; targeting stage-stop reset added in the Milestone 9 firing-range slice; runtime transition verification pending |
 | `src/game/menutick.c` | Observe the final active dialog/focus once immediately after `menuProcessInput` | Menu slot/player/root/depth and current menu/dialog state | Captures all focus paths after item state settles without hooks in every transition | Implemented in Milestone 4 with one call |
 | `src/game/menu.c` | Expose a read-only focused-item runtime-data lookup | Dialog/item to existing row/block data | Accessibility must not duplicate private row/block mapping | Implemented in Milestone 4 as `menuGetItemData` |
 | `src/game/menuitem.c` | Expose type-owned ranking/player-stats summaries only if existing APIs cannot be queried safely by the adapter | Current semantic row/stat labels and values | Compound presentation state is assembled inside type-specific render paths | Audit found no hook necessary; generic scroll/selection summaries are used |
@@ -279,11 +285,11 @@ This table records implemented and anticipated changes to established files so f
 | `src/game/hudmsg.c` | Publish after a message passes suppression and is queued | Text, type, flags, player, audio channel | Polling the HUD array loses admission order and reason | Proposed |
 | `src/game/objectives.c` | Publish inside the changed-status branch of `objectivesCheckAll` | Objective index, previous/new state | The existing HUD text can duplicate or omit useful objective identity | Proposed |
 | `src/game/chraction.c` | Optional later directional damage event after actual player damage | Victim player, magnitude band, direction/source category | Snapshot detects loss but not source/direction | Question; not needed for first status query |
-| `src/game/lv.c` | Publish or expose validated aimed-target changes after selection/filtering | Player and target prop semantic handle | Transient target order may be lost between polls | Question; first try stable tick observation |
+| `src/game/lv.c` | Capture projected target bounds before prop rendering, then observe after player sight/HUD rendering | Finite projected bounds plus final filtered `lookingatprop`, native sight state, and player viewport | PC prop rendering converts float model matrices in place before sight/HUD state is final, so one hook cannot safely obtain both states | Implemented for the Milestone 9 firing-range slice with two narrow calls in `lvRender`; stability soak and broader combat runtime validation pending |
 | `src/game/sight.c` | Expose sight-validity/friendliness helpers to adapter | Eligibility and relationship | Avoid duplicating sight rules | Question; prefer existing public APIs if sufficient |
 | `src/game/propobj.c` | Expose the smallest pure/read-only CI object and door eligibility/grouping helpers only if existing public queries are insufficient | Semantic eligibility, CI tag, door canonical identity, and state | Existing immediate interaction tests mix actionability with render/facing/range checks and mutate the selected interaction path | No hook needed in Milestone 5; the core combines existing `propobjGetCiTagId`, `objIsHealthy`, flags, and door data without calling action tests |
 | `src/game/propsnd.c` | Add accessibility-owned stop/identity support only if the public API cannot safely manage the two category-owned prop-attached pulse channels | Prop, sound ID, owner/channel, range, volume, and pan | Each selected category beacon must follow its prop and stop without touching gameplay sounds | No hook needed in Milestone 5; the beacon reuses its tracked `psCreate` slot when ownership still matches and isolates fallback stops with `PSTYPE_ACCESSIBILITY_BEACON` |
-| `src/include/constants.h` | Reserve `PSTYPE_ACCESSIBILITY_BEACON` | Prop-sound ownership only | Stopping by prop and type must never stop a door or other gameplay sound | Implemented in Milestone 5 |
+| `src/include/constants.h` | Reserve `PSTYPE_ACCESSIBILITY_BEACON` and `PSTYPE_ACCESSIBILITY_TARGETING` | Prop-sound ownership only | Each accessibility system must stop/reuse only its own positioned sounds, never gameplay or the other accessibility lane | Beacon owner implemented in Milestone 5; targeting owner added in the Milestone 9 firing-range slice |
 | `port/include/input.h` | Use provisional context-sensitive PC F5/F6 accessibility keys | Development-only action identifiers | Menus use F5 for repeat and F6 for speech cancel; unobscured CI gameplay uses F5 for object beacons and F6 for door beacons | Implemented through Milestone 5; replacement by Milestone 6 required |
 | `port/src/input.c` | Add configurable accessibility actions or a dispatch boundary | Repeat, status, beacon/scan, cancel, navigation commands | Current binding model represents game controls, not a separate action set | Proposed for Milestone 6; provisional keys require no binding-model change |
 | `port/src/optionsmenu.c` | Add an accessibility settings entry/dialog | Existing registered values, including proven beacon actions | Users need discoverable control without editing `pd.ini` | Proposed for Milestone 6 after beacon behavior is tested |

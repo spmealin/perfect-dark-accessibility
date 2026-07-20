@@ -96,6 +96,7 @@
 #include "lib/vars.h"
 #include "lib/vi.h"
 #include "types.h"
+#include "accessibility/accessibility_targeting.h"
 #ifndef PLATFORM_N64
 #include "video.h"
 #endif
@@ -1305,6 +1306,9 @@ Gfx *lvRender(Gfx *gdl)
 					}
 				}
 
+				/* Capture projections before prop rendering converts model matrices in place. */
+				accessibilityTargetingCaptureGame();
+
 				// Handle eyespy Z presses
 				if (g_Vars.currentplayer->eyespy
 						&& (g_Vars.currentplayer->devicesactive & ~g_Vars.currentplayer->devicesinhibit & DEVICE_EYESPY)
@@ -1784,6 +1788,9 @@ Gfx *lvRender(Gfx *gdl)
 			g_Vars.autocutgroupcur = -1;
 		}
 	}
+
+	/* Observe after sight/HUD rendering so lookingatprop is final for this frame. */
+	accessibilityTargetingObserveGame();
 
 	gDPSetScissor(gdl++, G_SC_NON_INTERLACE, 0, 0, viGetWidth(), viGetHeight());
 

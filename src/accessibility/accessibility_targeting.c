@@ -1,0 +1,776 @@
+#include <ultra64.h>
+#include <math.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include "constants.h"
+#include "bss.h"
+#include "data.h"
+#include "system.h"
+#include "game/propsnd.h"
+#include "lib/lib_317f0.h"
+#include "lib/snd.h"
+#include "lib/vars.h"
+#include "accessibility/accessibility.h"
+#include "accessibility/accessibility_log.h"
+#include "accessibility/accessibility_targeting.h"
+
+#define ACCESSIBILITY_TARGETING_VISIBLE_FRAMES 2
+#define ACCESSIBILITY_TARGETING_MISSING_FRAMES 2
+#define ACCESSIBILITY_TARGETING_BASE_CYCLE_TICKS TICKS(36)
+#define ACCESSIBILITY_TARGETING_MIN_SLOT_TICKS TICKS(6)
+#define ACCESSIBILITY_TARGETING_ALIGNMENT_TICKS TICKS(12)
+#define ACCESSIBILITY_TARGETING_FULL_DISTANCE 200.0f
+#define ACCESSIBILITY_TARGETING_FADE_DISTANCE 1200.0f
+#define ACCESSIBILITY_TARGETING_SILENT_DISTANCE 1400.0f
+#define ACCESSIBILITY_TARGETING_NAME_LENGTH 96
+#define ACCESSIBILITY_TARGETING_OBSERVATION_LOG_TICKS TICKS(60)
+#define ACCESSIBILITY_TARGETING_TELEMETRY_TICKS TICKS(60 * 30)
+
+struct accessibilitytargetingrecord {
+	struct accessibilitytargetingcandidate candidate;
+	char localizedname[ACCESSIBILITY_TARGETING_NAME_LENGTH];
+	s32 seenframes;
+	s32 missingframes;
+};
+
+struct accessibilitytargetingpolicy {
+	s32 profile;
+	s16 presencesound;
+	s16 alignmentsound;
+	s32 basecycleticks;
+	s32 minslotticks;
+	s32 alignmentticks;
+	s32 visibleframes;
+	s32 missingframes;
+	f32 fulldistance;
+	f32 fadedistance;
+	f32 silentdistance;
+};
+
+struct accessibilitytargetingstate {
+	struct accessibilitytargetingrecord records[ACCESSIBILITY_TARGETING_MAX_CANDIDATES];
+	s32 recordcount;
+	struct accessibilitytargetingidentity lastpulseidentity;
+	s32 haslastpulseidentity;
+	struct accessibilitytargetingidentity aimedidentity;
+	s32 hasaimedidentity;
+	s32 presencechannel;
+	struct sndstate *alignmenthandle;
+	s32 nextpresence60;
+	s32 nextalignment60;
+	u64 observationcount;
+	u64 presencepulsecount;
+	u64 alignmentpulsecount;
+	s32 haslastobservation;
+	s32 lastcandidatecount;
+	s32 lastaimed;
+	struct accessibilitytargetingidentity lastaimedidentity;
+	s32 nextobservationlog60;
+	s32 nexttelemetry60;
+	s32 memorybaselinevalid;
+	u64 workingsetbaseline;
+	u64 privatebaseline;
+};
+
+static const struct accessibilitytargetingpolicy g_AccessibilityTargetingRangePolicy = {
+	ACCESSIBILITY_TARGETING_PROFILE_FIRING_RANGE,
+	SFX_MENU_SELECT,
+	SFX_0007,
+	ACCESSIBILITY_TARGETING_BASE_CYCLE_TICKS,
+	ACCESSIBILITY_TARGETING_MIN_SLOT_TICKS,
+	ACCESSIBILITY_TARGETING_ALIGNMENT_TICKS,
+	ACCESSIBILITY_TARGETING_VISIBLE_FRAMES,
+	ACCESSIBILITY_TARGETING_MISSING_FRAMES,
+	ACCESSIBILITY_TARGETING_FULL_DISTANCE,
+	ACCESSIBILITY_TARGETING_FADE_DISTANCE,
+	ACCESSIBILITY_TARGETING_SILENT_DISTANCE,
+};
+
+static struct accessibilitytargetingstate g_AccessibilityTargetingStates[MAX_PLAYERS];
+static struct accessibilitytargetingstate *g_AccessibilityTargetingCurrentState;
+static const struct accessibilitytargetingpolicy *g_AccessibilityTargetingCurrentPolicy;
+static s32 g_AccessibilityTargetingStatesInitialized;
+
+#define g_AccessibilityTargetingRecords (g_AccessibilityTargetingCurrentState->records)
+#define g_AccessibilityTargetingRecordCount (g_AccessibilityTargetingCurrentState->recordcount)
+#define g_AccessibilityTargetingLastPulseIdentity (g_AccessibilityTargetingCurrentState->lastpulseidentity)
+#define g_AccessibilityTargetingHasLastPulseIdentity (g_AccessibilityTargetingCurrentState->haslastpulseidentity)
+#define g_AccessibilityTargetingAimedIdentity (g_AccessibilityTargetingCurrentState->aimedidentity)
+#define g_AccessibilityTargetingHasAimedIdentity (g_AccessibilityTargetingCurrentState->hasaimedidentity)
+#define g_AccessibilityTargetingPresenceChannel (g_AccessibilityTargetingCurrentState->presencechannel)
+#define g_AccessibilityTargetingAlignmentHandle (g_AccessibilityTargetingCurrentState->alignmenthandle)
+#define g_AccessibilityTargetingNextPresence60 (g_AccessibilityTargetingCurrentState->nextpresence60)
+#define g_AccessibilityTargetingNextAlignment60 (g_AccessibilityTargetingCurrentState->nextalignment60)
+#define g_AccessibilityTargetingObservationCount (g_AccessibilityTargetingCurrentState->observationcount)
+#define g_AccessibilityTargetingPresencePulseCount (g_AccessibilityTargetingCurrentState->presencepulsecount)
+#define g_AccessibilityTargetingAlignmentPulseCount (g_AccessibilityTargetingCurrentState->alignmentpulsecount)
+
+static s32 accessibilityTargetingPresenceOwned(void);
+
+static void accessibilityTargetingLogTelemetry(s32 frame60)
+{
+	u64 workingset = 0;
+	u64 privatebytes = 0;
+	s32 memoryavailable = sysGetProcessMemoryUsage(&workingset, &privatebytes);
+	s32 channels = IS4MB() ? 30 : 40;
+	s32 inuse = 0;
+	s32 stopped = 0;
+	s32 owned = 0;
+	s32 i;
+
+	for (i = 0; g_PsChannels && i < channels; i++) {
+		if ((g_PsChannels[i].flags & PSFLAG_FREE) == 0) {
+			inuse++;
+			if (g_PsChannels[i].flags2 & PSFLAG2_STOPPED) {
+				stopped++;
+			}
+			if (g_PsChannels[i].type == PSTYPE_ACCESSIBILITY_TARGETING) {
+				owned++;
+			}
+		}
+	}
+
+	if (memoryavailable && !g_AccessibilityTargetingCurrentState->memorybaselinevalid) {
+		g_AccessibilityTargetingCurrentState->memorybaselinevalid = true;
+		g_AccessibilityTargetingCurrentState->workingsetbaseline = workingset;
+		g_AccessibilityTargetingCurrentState->privatebaseline = privatebytes;
+	}
+
+	accessibilityLogEvent("targeting", "telemetry",
+			"frame=%d observations=%llu presence_pulses=%llu alignment_pulses=%llu records=%d aimed=%d memory_available=%d working_set_bytes=%llu working_set_delta=%lld private_bytes=%llu private_delta=%lld snd_states=%d prop_channels_in_use=%d prop_channels_total=%d prop_channels_stopped=%d targeting_channels=%d presence_channel=%d presence_owned=%d alignment_handle=%p alignment_state=%d",
+			frame60,
+			(unsigned long long)g_AccessibilityTargetingObservationCount,
+			(unsigned long long)g_AccessibilityTargetingPresencePulseCount,
+			(unsigned long long)g_AccessibilityTargetingAlignmentPulseCount,
+			g_AccessibilityTargetingRecordCount,
+			g_AccessibilityTargetingHasAimedIdentity, memoryavailable,
+			(unsigned long long)workingset,
+			(long long)workingset
+					- (long long)g_AccessibilityTargetingCurrentState->workingsetbaseline,
+			(unsigned long long)privatebytes,
+			(long long)privatebytes
+					- (long long)g_AccessibilityTargetingCurrentState->privatebaseline,
+			g_SndNumPlaying, inuse, channels, stopped, owned,
+			g_AccessibilityTargetingPresenceChannel,
+			accessibilityTargetingPresenceOwned(),
+			(void *)g_AccessibilityTargetingAlignmentHandle,
+			g_AccessibilityTargetingAlignmentHandle
+					? sndGetState(g_AccessibilityTargetingAlignmentHandle) : AL_STOPPED);
+
+	g_AccessibilityTargetingCurrentState->nexttelemetry60
+			= frame60 + ACCESSIBILITY_TARGETING_TELEMETRY_TICKS;
+}
+
+static const struct accessibilitytargetingpolicy *accessibilityTargetingGetPolicy(s32 profile)
+{
+	if (profile == ACCESSIBILITY_TARGETING_PROFILE_FIRING_RANGE) {
+		return &g_AccessibilityTargetingRangePolicy;
+	}
+
+	return NULL;
+}
+
+static s32 accessibilityTargetingIdentityEqual(
+		const struct accessibilitytargetingidentity *a,
+		const struct accessibilitytargetingidentity *b)
+{
+	return a->playernum == b->playernum
+			&& a->source == b->source
+			&& a->sourceslot == b->sourceslot
+			&& a->propnum == b->propnum
+			&& a->proptype == b->proptype
+			&& a->objectidentity == b->objectidentity;
+}
+
+static s32 accessibilityTargetingPropNum(const struct prop *prop)
+{
+	uintptr_t address;
+	uintptr_t first;
+	uintptr_t end;
+
+	if (!prop || !g_Vars.props || g_Vars.maxprops <= 0) {
+		return -1;
+	}
+
+	address = (uintptr_t)prop;
+	first = (uintptr_t)g_Vars.props;
+	end = first + sizeof(struct prop) * (uintptr_t)g_Vars.maxprops;
+
+	if (address < first || address >= end
+			|| (address - first) % sizeof(struct prop) != 0) {
+		return -1;
+	}
+
+	return (s32)((address - first) / sizeof(struct prop));
+}
+
+static s32 accessibilityTargetingCandidateValid(
+		const struct accessibilitytargetingcandidate *candidate)
+{
+	if (!candidate || !candidate->prop) {
+		return false;
+	}
+
+	if (accessibilityTargetingPropNum(candidate->prop) != candidate->identity.propnum) {
+		return false;
+	}
+
+	return candidate->prop->type == candidate->identity.proptype
+			&& (uintptr_t)candidate->prop->obj == candidate->identity.objectidentity;
+}
+
+static s32 accessibilityTargetingChannelCount(void)
+{
+	return IS4MB() ? 30 : 40;
+}
+
+static s32 accessibilityTargetingPresenceOwned(void)
+{
+	return g_PsChannels
+			&& g_AccessibilityTargetingPresenceChannel >= 0
+			&& g_AccessibilityTargetingPresenceChannel < accessibilityTargetingChannelCount()
+			&& (g_PsChannels[g_AccessibilityTargetingPresenceChannel].flags & PSFLAG_FREE) == 0
+			&& g_PsChannels[g_AccessibilityTargetingPresenceChannel].type
+					== PSTYPE_ACCESSIBILITY_TARGETING;
+}
+
+static s32 accessibilityTargetingPresenceChannelReusable(s32 channel)
+{
+	return g_PsChannels && channel >= 0
+			&& channel < accessibilityTargetingChannelCount()
+			&& ((g_PsChannels[channel].flags & PSFLAG_FREE)
+				|| g_PsChannels[channel].type == PSTYPE_ACCESSIBILITY_TARGETING);
+}
+
+static void accessibilityTargetingStopPresence(const char *reason)
+{
+	s32 channel = g_AccessibilityTargetingPresenceChannel;
+	s32 owned = accessibilityTargetingPresenceOwned();
+
+	if (owned) {
+		psStopChannel(channel);
+	}
+
+	if (channel >= 0) {
+		accessibilityLogEvent("targeting", "presence_stop",
+				"reason=%s channel=%d owned=%d", reason, channel, owned);
+	}
+
+	g_AccessibilityTargetingPresenceChannel = -1;
+}
+
+static void accessibilityTargetingStopAlignment(const char *reason)
+{
+	s32 state = AL_STOPPED;
+
+	if (g_AccessibilityTargetingAlignmentHandle) {
+		state = sndGetState(g_AccessibilityTargetingAlignmentHandle);
+
+		if (state != AL_STOPPED) {
+			audioStop(g_AccessibilityTargetingAlignmentHandle);
+		}
+
+		accessibilityLogEvent("targeting", "alignment_stop",
+				"reason=%s state=%d handle=%p", reason, state,
+				(void *)g_AccessibilityTargetingAlignmentHandle);
+	}
+
+	g_AccessibilityTargetingAlignmentHandle = NULL;
+	g_AccessibilityTargetingNextAlignment60 = 0;
+}
+
+static s32 accessibilityTargetingFindRecord(
+		const struct accessibilitytargetingidentity *identity)
+{
+	s32 i;
+
+	for (i = 0; i < g_AccessibilityTargetingRecordCount; i++) {
+		if (accessibilityTargetingIdentityEqual(
+				identity, &g_AccessibilityTargetingRecords[i].candidate.identity)) {
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+static void accessibilityTargetingCopyCandidate(
+		struct accessibilitytargetingrecord *record,
+		const struct accessibilitytargetingcandidate *candidate)
+{
+	record->candidate = *candidate;
+	record->localizedname[0] = '\0';
+
+	if (candidate->localizedname) {
+		strncpy(record->localizedname, candidate->localizedname,
+				sizeof(record->localizedname) - 1);
+		record->localizedname[sizeof(record->localizedname) - 1] = '\0';
+		record->candidate.localizedname = record->localizedname;
+	} else {
+		record->candidate.localizedname = NULL;
+	}
+}
+
+static s32 accessibilityTargetingRecordCompare(const void *avalue, const void *bvalue)
+{
+	const struct accessibilitytargetingrecord *a = avalue;
+	const struct accessibilitytargetingrecord *b = bvalue;
+	s32 aaimed = g_AccessibilityTargetingHasAimedIdentity
+			&& accessibilityTargetingIdentityEqual(&a->candidate.identity,
+				&g_AccessibilityTargetingAimedIdentity);
+	s32 baimed = g_AccessibilityTargetingHasAimedIdentity
+			&& accessibilityTargetingIdentityEqual(&b->candidate.identity,
+				&g_AccessibilityTargetingAimedIdentity);
+
+	if (aaimed != baimed) {
+		return baimed - aaimed;
+	}
+
+	if (a->candidate.horizontalscreenoffset < b->candidate.horizontalscreenoffset) {
+		return -1;
+	}
+
+	if (a->candidate.horizontalscreenoffset > b->candidate.horizontalscreenoffset) {
+		return 1;
+	}
+
+	if (a->candidate.distance < b->candidate.distance) {
+		return -1;
+	}
+
+	if (a->candidate.distance > b->candidate.distance) {
+		return 1;
+	}
+
+	if (a->candidate.identity.sourceslot != b->candidate.identity.sourceslot) {
+		return a->candidate.identity.sourceslot - b->candidate.identity.sourceslot;
+	}
+
+	return a->candidate.identity.propnum - b->candidate.identity.propnum;
+}
+
+static void accessibilityTargetingMerge(
+		const struct accessibilitytargetingobservation *observation)
+{
+	s32 matched[ACCESSIBILITY_TARGETING_MAX_CANDIDATES] = { 0 };
+	s32 writeindex;
+	s32 i;
+
+	for (i = 0; i < observation->candidatecount; i++) {
+		const struct accessibilitytargetingcandidate *candidate = &observation->candidates[i];
+		s32 index = accessibilityTargetingFindRecord(&candidate->identity);
+
+		if (index < 0 && g_AccessibilityTargetingRecordCount
+				< ACCESSIBILITY_TARGETING_MAX_CANDIDATES) {
+			index = g_AccessibilityTargetingRecordCount++;
+			memset(&g_AccessibilityTargetingRecords[index], 0,
+					sizeof(g_AccessibilityTargetingRecords[index]));
+		}
+
+		if (index >= 0) {
+			struct accessibilitytargetingrecord *record
+					= &g_AccessibilityTargetingRecords[index];
+			s32 aimed = observation->hasaimedtarget
+					&& accessibilityTargetingIdentityEqual(&candidate->identity,
+						&observation->aimedidentity);
+
+			accessibilityTargetingCopyCandidate(record, candidate);
+			record->seenframes++;
+			if (record->seenframes > g_AccessibilityTargetingCurrentPolicy->visibleframes) {
+				record->seenframes = g_AccessibilityTargetingCurrentPolicy->visibleframes;
+			}
+			if (aimed) {
+				record->seenframes = g_AccessibilityTargetingCurrentPolicy->visibleframes;
+			}
+			record->missingframes = 0;
+			matched[index] = true;
+		}
+	}
+
+	for (i = 0; i < g_AccessibilityTargetingRecordCount; i++) {
+		if (!matched[i]) {
+			g_AccessibilityTargetingRecords[i].missingframes++;
+		}
+	}
+
+	writeindex = 0;
+	for (i = 0; i < g_AccessibilityTargetingRecordCount; i++) {
+		if (g_AccessibilityTargetingRecords[i].missingframes
+				< g_AccessibilityTargetingCurrentPolicy->missingframes) {
+			if (writeindex != i) {
+				g_AccessibilityTargetingRecords[writeindex]
+						= g_AccessibilityTargetingRecords[i];
+			}
+			writeindex++;
+		}
+	}
+	g_AccessibilityTargetingRecordCount = writeindex;
+
+	qsort(g_AccessibilityTargetingRecords, g_AccessibilityTargetingRecordCount,
+			sizeof(g_AccessibilityTargetingRecords[0]),
+			accessibilityTargetingRecordCompare);
+
+	for (i = 0; i < g_AccessibilityTargetingRecordCount; i++) {
+		g_AccessibilityTargetingRecords[i].candidate.localizedname
+				= g_AccessibilityTargetingRecords[i].localizedname[0]
+					? g_AccessibilityTargetingRecords[i].localizedname : NULL;
+	}
+}
+
+static s32 accessibilityTargetingEligibleCount(void)
+{
+	s32 count = 0;
+	s32 i;
+
+	for (i = 0; i < g_AccessibilityTargetingRecordCount; i++) {
+		struct accessibilitytargetingrecord *record = &g_AccessibilityTargetingRecords[i];
+
+		if (record->seenframes >= g_AccessibilityTargetingCurrentPolicy->visibleframes
+				&& record->missingframes == 0
+				&& accessibilityTargetingCandidateValid(&record->candidate)) {
+			count++;
+		}
+	}
+
+	return count;
+}
+
+static struct accessibilitytargetingrecord *accessibilityTargetingNextPresence(void)
+{
+	s32 start = 0;
+	s32 i;
+
+	if (g_AccessibilityTargetingHasLastPulseIdentity) {
+		for (i = 0; i < g_AccessibilityTargetingRecordCount; i++) {
+			if (accessibilityTargetingIdentityEqual(
+					&g_AccessibilityTargetingRecords[i].candidate.identity,
+					&g_AccessibilityTargetingLastPulseIdentity)) {
+				start = i + 1;
+				break;
+			}
+		}
+	}
+
+	for (i = 0; i < g_AccessibilityTargetingRecordCount; i++) {
+		s32 index = (start + i) % g_AccessibilityTargetingRecordCount;
+		struct accessibilitytargetingrecord *record = &g_AccessibilityTargetingRecords[index];
+
+		if (record->seenframes >= g_AccessibilityTargetingCurrentPolicy->visibleframes
+				&& record->missingframes == 0
+				&& accessibilityTargetingCandidateValid(&record->candidate)) {
+			return record;
+		}
+	}
+
+	return NULL;
+}
+
+static void accessibilityTargetingPulsePresence(s32 frame60)
+{
+	struct accessibilitytargetingrecord *record = accessibilityTargetingNextPresence();
+	s32 count = accessibilityTargetingEligibleCount();
+	s32 previouschannel = g_AccessibilityTargetingPresenceChannel;
+	s32 interval;
+	s16 channel = -1;
+	s32 reused = false;
+
+	if (!record || count <= 0) {
+		accessibilityTargetingStopPresence("no_eligible_target");
+		return;
+	}
+
+	interval = g_AccessibilityTargetingCurrentPolicy->basecycleticks / count;
+	if (interval < g_AccessibilityTargetingCurrentPolicy->minslotticks) {
+		interval = g_AccessibilityTargetingCurrentPolicy->minslotticks;
+	}
+
+	if (accessibilityTargetingPresenceChannelReusable(previouschannel)) {
+		if ((g_PsChannels[previouschannel].flags & PSFLAG_FREE) == 0) {
+			psStopChannel(previouschannel);
+		}
+
+		channel = psCreate(&g_PsChannels[previouschannel],
+				record->candidate.prop, g_AccessibilityTargetingCurrentPolicy->presencesound, -1,
+				AL_VOL_FULL, 0, PSFLAG2_MPPAUSABLE,
+				PSTYPE_ACCESSIBILITY_TARGETING, NULL, -1.0f, NULL, -1,
+				g_AccessibilityTargetingCurrentPolicy->fulldistance,
+				g_AccessibilityTargetingCurrentPolicy->fadedistance,
+				g_AccessibilityTargetingCurrentPolicy->silentdistance);
+		reused = channel == previouschannel;
+	}
+
+	if (channel < 0) {
+		accessibilityTargetingStopPresence("round_robin_advance");
+		psStopSound(record->candidate.prop, PSTYPE_ACCESSIBILITY_TARGETING, 0);
+		channel = psCreate(NULL, record->candidate.prop,
+				g_AccessibilityTargetingCurrentPolicy->presencesound, -1,
+				AL_VOL_FULL, 0, PSFLAG2_MPPAUSABLE,
+				PSTYPE_ACCESSIBILITY_TARGETING, NULL, -1.0f, NULL, -1,
+				g_AccessibilityTargetingCurrentPolicy->fulldistance,
+				g_AccessibilityTargetingCurrentPolicy->fadedistance,
+				g_AccessibilityTargetingCurrentPolicy->silentdistance);
+	}
+
+	g_AccessibilityTargetingPresenceChannel = channel;
+	g_AccessibilityTargetingLastPulseIdentity = record->candidate.identity;
+	g_AccessibilityTargetingHasLastPulseIdentity = true;
+	g_AccessibilityTargetingNextPresence60 = frame60 + interval;
+	g_AccessibilityTargetingPresencePulseCount++;
+
+	accessibilityLogEvent("targeting", "presence_pulse",
+			"pulse=%llu frame=%d next_frame=%d interval=%d eligible=%d channel=%d previous_channel=%d reused=%d sound=%d source=%d slot=%d propnum=%d prop=%p distance=%.3f screen=%.3f,%.3f,%.3f,%.3f position=%.3f,%.3f,%.3f",
+			(unsigned long long)g_AccessibilityTargetingPresencePulseCount,
+			frame60, g_AccessibilityTargetingNextPresence60, interval, count,
+			channel, previouschannel, reused,
+			g_AccessibilityTargetingCurrentPolicy->presencesound,
+			record->candidate.identity.source,
+			record->candidate.identity.sourceslot,
+			record->candidate.identity.propnum, (void *)record->candidate.prop,
+			record->candidate.distance, record->candidate.screenx1,
+			record->candidate.screeny1, record->candidate.screenx2,
+			record->candidate.screeny2, record->candidate.position.x,
+			record->candidate.position.y, record->candidate.position.z);
+}
+
+static void accessibilityTargetingPulseAlignment(s32 frame60, const char *reason)
+{
+	if (g_AccessibilityTargetingAlignmentHandle
+			&& sndGetState(g_AccessibilityTargetingAlignmentHandle) != AL_STOPPED) {
+		audioStop(g_AccessibilityTargetingAlignmentHandle);
+	}
+
+	g_AccessibilityTargetingAlignmentHandle = snd00010718(
+			&g_AccessibilityTargetingAlignmentHandle, 0, AL_VOL_FULL,
+			AL_PAN_CENTER, g_AccessibilityTargetingCurrentPolicy->alignmentsound,
+			1.0f, 1, -1, true);
+	g_AccessibilityTargetingNextAlignment60
+			= frame60 + g_AccessibilityTargetingCurrentPolicy->alignmentticks;
+	g_AccessibilityTargetingAlignmentPulseCount++;
+
+	accessibilityLogEvent("targeting", "alignment_pulse",
+			"pulse=%llu frame=%d next_frame=%d cadence=%d sound=%d reason=%s handle=%p source=%d slot=%d propnum=%d",
+			(unsigned long long)g_AccessibilityTargetingAlignmentPulseCount,
+			frame60, g_AccessibilityTargetingNextAlignment60,
+			g_AccessibilityTargetingCurrentPolicy->alignmentticks,
+			g_AccessibilityTargetingCurrentPolicy->alignmentsound, reason,
+			(void *)g_AccessibilityTargetingAlignmentHandle,
+			g_AccessibilityTargetingAimedIdentity.source,
+			g_AccessibilityTargetingAimedIdentity.sourceslot,
+			g_AccessibilityTargetingAimedIdentity.propnum);
+}
+
+void accessibilityTargetingObserve(
+		const struct accessibilitytargetingobservation *observation)
+{
+	s32 acquisition;
+	s32 aimedvalid;
+	s32 i;
+
+	if (!observation || !observation->inscope
+			|| !accessibilityIsTargetingFeedbackEnabled()) {
+		accessibilityTargetingReset(observation ? "scope_lost" : "null_observation");
+		return;
+	}
+
+	if (observation->playernum < 0 || observation->playernum >= MAX_PLAYERS) {
+		accessibilityTargetingReset("invalid_player");
+		return;
+	}
+
+	g_AccessibilityTargetingCurrentPolicy
+			= accessibilityTargetingGetPolicy(observation->profile);
+	if (!g_AccessibilityTargetingCurrentPolicy) {
+		accessibilityTargetingReset("invalid_profile");
+		return;
+	}
+	g_AccessibilityTargetingCurrentState
+			= &g_AccessibilityTargetingStates[observation->playernum];
+
+	g_AccessibilityTargetingObservationCount++;
+	aimedvalid = false;
+
+	if (observation->hasaimedtarget) {
+		for (i = 0; i < observation->candidatecount; i++) {
+			if (accessibilityTargetingIdentityEqual(&observation->aimedidentity,
+					&observation->candidates[i].identity)) {
+				aimedvalid = true;
+				break;
+			}
+		}
+	}
+
+	acquisition = aimedvalid && (!g_AccessibilityTargetingHasAimedIdentity
+			|| !accessibilityTargetingIdentityEqual(&observation->aimedidentity,
+				&g_AccessibilityTargetingAimedIdentity));
+
+	if (!aimedvalid) {
+		if (g_AccessibilityTargetingHasAimedIdentity) {
+			accessibilityLogEvent("targeting", "aim_loss",
+					"frame=%d source=%d slot=%d propnum=%d",
+					observation->frame60,
+					g_AccessibilityTargetingAimedIdentity.source,
+					g_AccessibilityTargetingAimedIdentity.sourceslot,
+					g_AccessibilityTargetingAimedIdentity.propnum);
+		}
+
+		g_AccessibilityTargetingHasAimedIdentity = false;
+		memset(&g_AccessibilityTargetingAimedIdentity, 0,
+				sizeof(g_AccessibilityTargetingAimedIdentity));
+		accessibilityTargetingStopAlignment("aim_lost");
+	} else {
+		if (acquisition && g_AccessibilityTargetingHasAimedIdentity) {
+			accessibilityTargetingStopAlignment("aim_changed");
+		}
+
+		g_AccessibilityTargetingAimedIdentity = observation->aimedidentity;
+		g_AccessibilityTargetingHasAimedIdentity = true;
+
+		if (acquisition) {
+			accessibilityLogEvent("targeting", "aim_acquisition",
+					"frame=%d source=%d slot=%d propnum=%d native_expected=%d",
+					observation->frame60, observation->aimedidentity.source,
+					observation->aimedidentity.sourceslot,
+					observation->aimedidentity.propnum,
+					observation->nativealignmentexpected);
+
+			if (observation->nativealignmentexpected) {
+				g_AccessibilityTargetingNextAlignment60
+						= observation->frame60
+								+ g_AccessibilityTargetingCurrentPolicy->alignmentticks;
+				accessibilityLogEvent("targeting", "alignment_suppressed",
+						"frame=%d reason=native_acquisition_sound_expected next_frame=%d",
+						observation->frame60,
+						g_AccessibilityTargetingNextAlignment60);
+			} else {
+				accessibilityTargetingPulseAlignment(observation->frame60, "acquisition");
+			}
+		} else if (observation->frame60 >= g_AccessibilityTargetingNextAlignment60) {
+			accessibilityTargetingPulseAlignment(observation->frame60, "held");
+		}
+	}
+
+	accessibilityTargetingMerge(observation);
+
+	if (g_AccessibilityTargetingHasLastPulseIdentity) {
+		s32 lastindex = accessibilityTargetingFindRecord(
+				&g_AccessibilityTargetingLastPulseIdentity);
+
+		if (lastindex < 0
+				|| g_AccessibilityTargetingRecords[lastindex].missingframes != 0
+				|| !accessibilityTargetingCandidateValid(
+					&g_AccessibilityTargetingRecords[lastindex].candidate)) {
+			accessibilityTargetingStopPresence("last_target_unavailable");
+			g_AccessibilityTargetingNextPresence60 = observation->frame60;
+		}
+	}
+
+	if (observation->frame60 >= g_AccessibilityTargetingNextPresence60) {
+		accessibilityTargetingPulsePresence(observation->frame60);
+	}
+
+	if (!g_AccessibilityTargetingCurrentState->haslastobservation
+			|| observation->candidatecount
+					!= g_AccessibilityTargetingCurrentState->lastcandidatecount
+			|| aimedvalid != g_AccessibilityTargetingCurrentState->lastaimed
+			|| (aimedvalid && !accessibilityTargetingIdentityEqual(
+				&observation->aimedidentity,
+				&g_AccessibilityTargetingCurrentState->lastaimedidentity))
+			|| observation->frame60
+					>= g_AccessibilityTargetingCurrentState->nextobservationlog60) {
+		accessibilityLogEvent("targeting", "observation",
+				"count=%llu frame=%d stage=%d player=%d source=%d profile=%d sight_on=%d indicator_visible=%d candidates=%d tracked=%d aimed=%d acquisition=%d next_presence=%d next_alignment=%d",
+				(unsigned long long)g_AccessibilityTargetingObservationCount,
+				observation->frame60, observation->stagenum, observation->playernum,
+				observation->source, observation->profile, observation->sighton,
+				observation->targetindicatorvisible, observation->candidatecount,
+				g_AccessibilityTargetingRecordCount, aimedvalid, acquisition,
+				g_AccessibilityTargetingNextPresence60,
+				g_AccessibilityTargetingNextAlignment60);
+		g_AccessibilityTargetingCurrentState->nextobservationlog60
+				= observation->frame60 + ACCESSIBILITY_TARGETING_OBSERVATION_LOG_TICKS;
+	}
+
+	g_AccessibilityTargetingCurrentState->haslastobservation = true;
+	g_AccessibilityTargetingCurrentState->lastcandidatecount
+			= observation->candidatecount;
+	g_AccessibilityTargetingCurrentState->lastaimed = aimedvalid;
+	if (aimedvalid) {
+		g_AccessibilityTargetingCurrentState->lastaimedidentity
+				= observation->aimedidentity;
+	}
+
+	if (g_AccessibilityTargetingCurrentState->nexttelemetry60 == 0
+			|| observation->frame60
+					>= g_AccessibilityTargetingCurrentState->nexttelemetry60) {
+		accessibilityTargetingLogTelemetry(observation->frame60);
+	}
+}
+
+static void accessibilityTargetingResetCurrent(const char *reason)
+{
+	s32 hadstate = g_AccessibilityTargetingRecordCount
+			|| g_AccessibilityTargetingHasAimedIdentity
+			|| g_AccessibilityTargetingPresenceChannel >= 0
+			|| g_AccessibilityTargetingAlignmentHandle;
+
+	accessibilityTargetingStopPresence(reason ? reason : "reset");
+	accessibilityTargetingStopAlignment(reason ? reason : "reset");
+
+	if (hadstate) {
+		accessibilityLogEvent("targeting", "reset",
+				"reason=%s observations=%llu presence_pulses=%llu alignment_pulses=%llu records=%d aimed=%d",
+				reason ? reason : "reset",
+				(unsigned long long)g_AccessibilityTargetingObservationCount,
+				(unsigned long long)g_AccessibilityTargetingPresencePulseCount,
+				(unsigned long long)g_AccessibilityTargetingAlignmentPulseCount,
+				g_AccessibilityTargetingRecordCount,
+				g_AccessibilityTargetingHasAimedIdentity);
+	}
+
+	memset(g_AccessibilityTargetingRecords, 0,
+			sizeof(g_AccessibilityTargetingRecords));
+	memset(&g_AccessibilityTargetingLastPulseIdentity, 0,
+			sizeof(g_AccessibilityTargetingLastPulseIdentity));
+	memset(&g_AccessibilityTargetingAimedIdentity, 0,
+			sizeof(g_AccessibilityTargetingAimedIdentity));
+	g_AccessibilityTargetingRecordCount = 0;
+	g_AccessibilityTargetingHasLastPulseIdentity = false;
+	g_AccessibilityTargetingHasAimedIdentity = false;
+	g_AccessibilityTargetingNextPresence60 = 0;
+	g_AccessibilityTargetingNextAlignment60 = 0;
+	g_AccessibilityTargetingObservationCount = 0;
+	g_AccessibilityTargetingPresencePulseCount = 0;
+	g_AccessibilityTargetingAlignmentPulseCount = 0;
+	g_AccessibilityTargetingCurrentState->haslastobservation = false;
+	g_AccessibilityTargetingCurrentState->lastcandidatecount = 0;
+	g_AccessibilityTargetingCurrentState->lastaimed = false;
+	memset(&g_AccessibilityTargetingCurrentState->lastaimedidentity, 0,
+			sizeof(g_AccessibilityTargetingCurrentState->lastaimedidentity));
+	g_AccessibilityTargetingCurrentState->nextobservationlog60 = 0;
+	g_AccessibilityTargetingCurrentState->nexttelemetry60 = 0;
+	g_AccessibilityTargetingCurrentState->memorybaselinevalid = false;
+	g_AccessibilityTargetingCurrentState->workingsetbaseline = 0;
+	g_AccessibilityTargetingCurrentState->privatebaseline = 0;
+}
+
+void accessibilityTargetingReset(const char *reason)
+{
+	s32 playernum;
+
+	if (!g_AccessibilityTargetingStatesInitialized) {
+		for (playernum = 0; playernum < MAX_PLAYERS; playernum++) {
+			g_AccessibilityTargetingStates[playernum].presencechannel = -1;
+		}
+		g_AccessibilityTargetingStatesInitialized = true;
+	}
+
+	for (playernum = 0; playernum < MAX_PLAYERS; playernum++) {
+		g_AccessibilityTargetingCurrentState
+				= &g_AccessibilityTargetingStates[playernum];
+		accessibilityTargetingResetCurrent(reason);
+	}
+
+	g_AccessibilityTargetingCurrentState = NULL;
+	g_AccessibilityTargetingCurrentPolicy = NULL;
+}
