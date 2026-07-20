@@ -142,6 +142,105 @@ static s32 frGetAccessibilitySummary(char *buffer, u32 bufferlen)
 	return buffer[0] != '\0';
 }
 
+static void frAccessibilityAppendStat(char *buffer, u32 bufferlen,
+		const char *label, const char *value, s32 first)
+{
+	frAccessibilityAppend(buffer, bufferlen, label, first ? " " : ". ");
+	frAccessibilityAppend(buffer, bufferlen, value, " ");
+}
+
+static s32 frGetAccessibilityStatsSummary(char *buffer, u32 bufferlen)
+{
+	struct frdata *frdata = frGetData();
+	const char *difficulties[] = {
+		langGet(L_MPMENU_439), // "Bronze"
+		langGet(L_MPMENU_440), // "Silver"
+		langGet(L_MPMENU_441), // "Gold"
+	};
+	u16 failreasons[] = {
+		L_MPMENU_456, // "Not Failed"
+		L_MPMENU_457, // "Out of Ammo"
+		L_MPMENU_458, // "Time Over"
+		L_MPMENU_459, // "Score Unattainable"
+		L_MPMENU_460, // "Too Inaccurate"
+	};
+	char value[128];
+	f32 accuracy;
+	f32 seconds;
+	s32 totalhits;
+	s32 minutes;
+
+	if (!buffer || !bufferlen || !frdata) {
+		return false;
+	}
+
+	buffer[0] = '\0';
+
+	if (frdata->menutype == FRMENUTYPE_COMPLETED) {
+		frAccessibilityAppend(buffer, bufferlen, langGet(L_MPMENU_449), NULL);
+	} else if (frdata->failreason >= 0
+			&& frdata->failreason < ARRAYCOUNT(failreasons)) {
+		frAccessibilityAppend(buffer, bufferlen,
+				langGet(failreasons[frdata->failreason]), NULL);
+	}
+
+	snprintf(value, sizeof(value), "%d", frdata->score);
+	frAccessibilityAppendStat(buffer, bufferlen, langGet(L_MPMENU_450), value, true);
+	snprintf(value, sizeof(value), "%d", frdata->targetsdestroyed);
+	frAccessibilityAppendStat(buffer, bufferlen, langGet(L_MPMENU_451), value, false);
+
+	if (frdata->difficulty >= 0 && frdata->difficulty < ARRAYCOUNT(difficulties)) {
+		frAccessibilityAppendStat(buffer, bufferlen, langGet(L_MPMENU_452),
+				difficulties[frdata->difficulty], false);
+	}
+
+	seconds = frdata->timetaken / (PAL ? 50.0f : 60.0f);
+
+	if (seconds > frdata->timelimit) {
+		seconds = frdata->timelimit;
+	}
+
+	if (seconds >= 60.0f) {
+		minutes = (s32)(seconds / 60.0f);
+		seconds -= minutes * 60.0f;
+		snprintf(value, sizeof(value), "%dm %2ds", minutes, (s32)ceilf(seconds));
+	} else {
+		snprintf(value, sizeof(value), "%2.2fs", seconds);
+	}
+
+	frAccessibilityAppendStat(buffer, bufferlen, langGet(L_MPMENU_453), value, false);
+	frAccessibilityAppendStat(buffer, bufferlen, langGet(L_MPMENU_454),
+			bgunGetName(frGetWeaponBySlot(frGetSlot())), false);
+
+	totalhits = frdata->numhitsring3 + frdata->numhitsbullseye
+			+ frdata->numhitsring1 + frdata->numhitsring2;
+	accuracy = frdata->numshots ? totalhits * 100.0f / frdata->numshots : 0.0f;
+
+	if (accuracy > 100.0f) {
+		accuracy = 100.0f;
+	}
+
+	snprintf(value, sizeof(value), "%.1f%%", accuracy);
+	frAccessibilityAppendStat(buffer, bufferlen, langGet(L_MPMENU_455), value, false);
+
+	snprintf(value, sizeof(value), "%d, %s %d", frdata->numhitsbullseye,
+			langGet(L_MPMENU_450), frdata->numhitsbullseye * 10);
+	frAccessibilityAppendStat(buffer, bufferlen, langGet(L_MPMENU_461), value, false);
+	snprintf(value, sizeof(value), "%d, %s %d", frdata->numhitsring1,
+			langGet(L_MPMENU_450), frdata->numhitsring1 * 5);
+	frAccessibilityAppendStat(buffer, bufferlen, langGet(L_MPMENU_462), value, false);
+	snprintf(value, sizeof(value), "%d, %s %d", frdata->numhitsring2,
+			langGet(L_MPMENU_450), frdata->numhitsring2 * 2);
+	frAccessibilityAppendStat(buffer, bufferlen, langGet(L_MPMENU_463), value, false);
+	snprintf(value, sizeof(value), "%d, %s %d", frdata->numhitsring3,
+			langGet(L_MPMENU_450), frdata->numhitsring3);
+	frAccessibilityAppendStat(buffer, bufferlen, langGet(L_MPMENU_464), value, false);
+	snprintf(value, sizeof(value), "%d", totalhits);
+	frAccessibilityAppendStat(buffer, bufferlen, langGet(L_MPMENU_465), value, false);
+
+	return buffer[0] != '\0';
+}
+
 MenuItemHandlerResult frDetailsOkMenuHandler(s32 operation, struct menuitem *item, union handlerdata *data)
 {
 	s32 i;
@@ -699,7 +798,13 @@ char *frMenuTextAmmoLimitValue(struct menuitem *item)
  */
 MenuItemHandlerResult frScoringMenuHandler(s32 operation, struct menuitem *item, union handlerdata *data)
 {
-	if (operation == MENUOP_RENDER) {
+	if (operation == MENUOP_GETACCESSIBILITYTEXT) {
+		if (data->accessibility.part == MENUACCESSIBILITYPART_SUMMARY
+				&& data->accessibility.buffer && data->accessibility.bufferlen > 0) {
+			return frGetAccessibilityStatsSummary(data->accessibility.buffer,
+					data->accessibility.bufferlen);
+		}
+	} else if (operation == MENUOP_RENDER) {
 		Gfx *gdl = data->type19.gdl;
 		struct menuitemrenderdata *renderdata = data->type19.renderdata2;
 		s32 x;
@@ -1387,7 +1492,8 @@ struct menuitem g_FrCompletedMenuItems[] = {
 	{
 		MENUITEMTYPE_MODEL,
 		0,
-		MENUITEMFLAG_00000002 | MENUITEMFLAG_LIST_CUSTOMRENDER,
+		MENUITEMFLAG_00000002 | MENUITEMFLAG_LIST_CUSTOMRENDER
+				| MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		0x000000d2,
 		0x00000050,
 		frScoringMenuHandler,
@@ -1513,7 +1619,8 @@ struct menuitem g_FrFailedMenuItems[] = {
 	{
 		MENUITEMTYPE_MODEL,
 		0,
-		MENUITEMFLAG_00000002 | MENUITEMFLAG_LIST_CUSTOMRENDER,
+		MENUITEMFLAG_00000002 | MENUITEMFLAG_LIST_CUSTOMRENDER
+				| MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		0x000000d2,
 		0x00000050,
 		frScoringMenuHandler,

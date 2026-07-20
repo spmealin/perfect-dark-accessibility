@@ -334,6 +334,21 @@ static void accessibilityMenuDescribeItem(struct accessibilitymenusnapshot *snap
 	switch (item->type) {
 	case MENUITEMTYPE_SELECTABLE:
 		strcpy(snapshot->role, "button");
+
+		/* Some centered buttons render their visible caption from param3. */
+		if (!snapshot->label[0] && item->param3) {
+#ifndef PLATFORM_N64
+			if (item->flags & MENUITEMFLAG_LITERAL_TEXT) {
+				text = (const char *)item->param3;
+			} else
+#endif
+			{
+				text = menuResolveText(item->param3, item);
+			}
+
+			accessibilityMenuCopyNormalized(snapshot->label,
+					sizeof(snapshot->label), text);
+		}
 		break;
 	case MENUITEMTYPE_CHECKBOX:
 		strcpy(snapshot->role, "checkbox");
