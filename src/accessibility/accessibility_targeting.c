@@ -65,6 +65,8 @@ struct accessibilitytargetingstate {
 	s32 haslastobservation;
 	s32 lastcandidatecount;
 	s32 lastaimed;
+	s32 lastaimedcandidate;
+	s32 lastaimedshootability;
 	struct accessibilitytargetingidentity lastaimedidentity;
 	s32 nextobservationlog60;
 	s32 nexttelemetry60;
@@ -107,6 +109,18 @@ static s32 g_AccessibilityTargetingStatesInitialized;
 #define g_AccessibilityTargetingAlignmentPulseCount (g_AccessibilityTargetingCurrentState->alignmentpulsecount)
 
 static s32 accessibilityTargetingPresenceOwned(void);
+
+static const char *accessibilityTargetingShootabilityName(s32 shootability)
+{
+	switch (shootability) {
+	case ACCESSIBILITY_TARGETING_SHOOTABILITY_SHOOTABLE:
+		return "shootable";
+	case ACCESSIBILITY_TARGETING_SHOOTABILITY_FACING_AWAY:
+		return "facing_away";
+	default:
+		return "unknown";
+	}
+}
 
 static void accessibilityTargetingLogTelemetry(s32 frame60)
 {
@@ -564,6 +578,8 @@ void accessibilityTargetingObserve(
 		const struct accessibilitytargetingobservation *observation)
 {
 	s32 acquisition;
+	s32 aimedcandidate;
+	s32 aimedshootability;
 	s32 aimedvalid;
 	s32 i;
 
@@ -588,13 +604,18 @@ void accessibilityTargetingObserve(
 			= &g_AccessibilityTargetingStates[observation->playernum];
 
 	g_AccessibilityTargetingObservationCount++;
+	aimedcandidate = false;
+	aimedshootability = ACCESSIBILITY_TARGETING_SHOOTABILITY_UNKNOWN;
 	aimedvalid = false;
 
 	if (observation->hasaimedtarget) {
 		for (i = 0; i < observation->candidatecount; i++) {
 			if (accessibilityTargetingIdentityEqual(&observation->aimedidentity,
 					&observation->candidates[i].identity)) {
-				aimedvalid = true;
+				aimedcandidate = true;
+				aimedshootability = observation->candidates[i].shootability;
+				aimedvalid = aimedshootability
+						== ACCESSIBILITY_TARGETING_SHOOTABILITY_SHOOTABLE;
 				break;
 			}
 		}
@@ -607,17 +628,23 @@ void accessibilityTargetingObserve(
 	if (!aimedvalid) {
 		if (g_AccessibilityTargetingHasAimedIdentity) {
 			accessibilityLogEvent("targeting", "aim_loss",
-					"frame=%d source=%d slot=%d propnum=%d",
+					"frame=%d source=%d slot=%d propnum=%d aimed_candidate=%d shootability=%d reason=%s",
 					observation->frame60,
 					g_AccessibilityTargetingAimedIdentity.source,
 					g_AccessibilityTargetingAimedIdentity.sourceslot,
-					g_AccessibilityTargetingAimedIdentity.propnum);
+					g_AccessibilityTargetingAimedIdentity.propnum,
+					aimedcandidate, aimedshootability,
+					aimedcandidate
+						? accessibilityTargetingShootabilityName(aimedshootability)
+						: "aim_lost");
 		}
 
 		g_AccessibilityTargetingHasAimedIdentity = false;
 		memset(&g_AccessibilityTargetingAimedIdentity, 0,
 				sizeof(g_AccessibilityTargetingAimedIdentity));
-		accessibilityTargetingStopAlignment("aim_lost");
+		accessibilityTargetingStopAlignment(aimedcandidate
+				? accessibilityTargetingShootabilityName(aimedshootability)
+				: "aim_lost");
 	} else {
 		if (acquisition && g_AccessibilityTargetingHasAimedIdentity) {
 			accessibilityTargetingStopAlignment("aim_changed");
@@ -628,10 +655,12 @@ void accessibilityTargetingObserve(
 
 		if (acquisition) {
 			accessibilityLogEvent("targeting", "aim_acquisition",
-					"frame=%d source=%d slot=%d propnum=%d native_expected=%d",
+					"frame=%d source=%d slot=%d propnum=%d shootability=%d reason=%s native_expected=%d",
 					observation->frame60, observation->aimedidentity.source,
 					observation->aimedidentity.sourceslot,
 					observation->aimedidentity.propnum,
+					aimedshootability,
+					accessibilityTargetingShootabilityName(aimedshootability),
 					observation->nativealignmentexpected);
 
 			if (observation->nativealignmentexpected) {
@@ -673,18 +702,24 @@ void accessibilityTargetingObserve(
 			|| observation->candidatecount
 					!= g_AccessibilityTargetingCurrentState->lastcandidatecount
 			|| aimedvalid != g_AccessibilityTargetingCurrentState->lastaimed
-			|| (aimedvalid && !accessibilityTargetingIdentityEqual(
+			|| aimedcandidate
+					!= g_AccessibilityTargetingCurrentState->lastaimedcandidate
+			|| aimedshootability
+					!= g_AccessibilityTargetingCurrentState->lastaimedshootability
+			|| (aimedcandidate && !accessibilityTargetingIdentityEqual(
 				&observation->aimedidentity,
 				&g_AccessibilityTargetingCurrentState->lastaimedidentity))
 			|| observation->frame60
 					>= g_AccessibilityTargetingCurrentState->nextobservationlog60) {
 		accessibilityLogEvent("targeting", "observation",
-				"count=%llu frame=%d stage=%d player=%d source=%d profile=%d sight_on=%d indicator_visible=%d candidates=%d tracked=%d aimed=%d acquisition=%d next_presence=%d next_alignment=%d",
+				"count=%llu frame=%d stage=%d player=%d source=%d profile=%d sight_on=%d indicator_visible=%d candidates=%d tracked=%d aimed_candidate=%d aimed_shootable=%d shootability=%d shootability_reason=%s acquisition=%d next_presence=%d next_alignment=%d",
 				(unsigned long long)g_AccessibilityTargetingObservationCount,
 				observation->frame60, observation->stagenum, observation->playernum,
 				observation->source, observation->profile, observation->sighton,
 				observation->targetindicatorvisible, observation->candidatecount,
-				g_AccessibilityTargetingRecordCount, aimedvalid, acquisition,
+				g_AccessibilityTargetingRecordCount, aimedcandidate, aimedvalid,
+				aimedshootability,
+				accessibilityTargetingShootabilityName(aimedshootability), acquisition,
 				g_AccessibilityTargetingNextPresence60,
 				g_AccessibilityTargetingNextAlignment60);
 		g_AccessibilityTargetingCurrentState->nextobservationlog60
@@ -695,7 +730,9 @@ void accessibilityTargetingObserve(
 	g_AccessibilityTargetingCurrentState->lastcandidatecount
 			= observation->candidatecount;
 	g_AccessibilityTargetingCurrentState->lastaimed = aimedvalid;
-	if (aimedvalid) {
+	g_AccessibilityTargetingCurrentState->lastaimedcandidate = aimedcandidate;
+	g_AccessibilityTargetingCurrentState->lastaimedshootability = aimedshootability;
+	if (aimedcandidate) {
 		g_AccessibilityTargetingCurrentState->lastaimedidentity
 				= observation->aimedidentity;
 	}

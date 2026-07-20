@@ -28,6 +28,7 @@ struct accessibilitytargetinggameaudit {
 	u8 active;
 	u8 destroyed;
 	u8 accepted;
+	s32 shootability;
 	const char *reason;
 };
 
@@ -65,7 +66,8 @@ static s32 accessibilityTargetingGameAuditEqual(
 			&& a->modelnum == b->modelnum && a->propflags == b->propflags
 			&& a->objflags2 == b->objflags2 && a->inuse == b->inuse
 			&& a->active == b->active && a->destroyed == b->destroyed
-			&& a->accepted == b->accepted && a->reason == b->reason;
+			&& a->accepted == b->accepted && a->shootability == b->shootability
+			&& a->reason == b->reason;
 }
 
 static s32 accessibilityTargetingGamePropNum(const struct prop *prop)
@@ -236,6 +238,7 @@ void accessibilityTargetingObserveGame(void)
 	s32 i;
 	s32 detailed;
 	s32 scopechanged;
+	s32 aimedshootability = ACCESSIBILITY_TARGETING_SHOOTABILITY_UNKNOWN;
 
 	memset(&observation, 0, sizeof(observation));
 	observation.playernum = g_Vars.currentplayernum;
@@ -301,6 +304,7 @@ void accessibilityTargetingObserveGame(void)
 		f32 dz;
 		s32 propnum = accessibilityTargetingGamePropNum(prop);
 		s32 eligible = true;
+		s32 shootability = ACCESSIBILITY_TARGETING_SHOOTABILITY_UNKNOWN;
 		struct accessibilitytargetinggameaudit audit;
 
 		if (propnum >= 0) {
@@ -365,6 +369,13 @@ void accessibilityTargetingObserveGame(void)
 			}
 		}
 
+		if (eligible) {
+			shootability = frIsTargetFacingPos(prop,
+					&g_Vars.currentplayer->prop->pos)
+				? ACCESSIBILITY_TARGETING_SHOOTABILITY_SHOOTABLE
+				: ACCESSIBILITY_TARGETING_SHOOTABILITY_FACING_AWAY;
+		}
+
 		memset(&audit, 0, sizeof(audit));
 		audit.prop = (uintptr_t)prop;
 		audit.obj = (uintptr_t)obj;
@@ -377,14 +388,20 @@ void accessibilityTargetingObserveGame(void)
 		audit.active = target->active;
 		audit.destroyed = target->destroyed;
 		audit.accepted = eligible;
+		audit.shootability = shootability;
 		audit.reason = reason;
 
 		if (detailed || !g_AccessibilityTargetingGameAuditValid
 				|| !accessibilityTargetingGameAuditEqual(
 					&audit, &g_AccessibilityTargetingGameAudit[i])) {
 			accessibilityLogEvent("targeting", "range_candidate",
-				"frame=%d slot=%d accepted=%d reason=%s inuse=%d active=%d destroyed=%d prop=%p propnum=%d obj=%p prop_type=%d model=%d prop_flags=0x%02x obj_flags2=0x%08x capture_valid=%d projected=%d finite=%d screen=%.3f,%.3f,%.3f,%.3f",
-				g_Vars.lvframe60, i, eligible, reason, target->inuse,
+				"frame=%d slot=%d accepted=%d reason=%s shootability=%d shootability_reason=%s inuse=%d active=%d destroyed=%d prop=%p propnum=%d obj=%p prop_type=%d model=%d prop_flags=0x%02x obj_flags2=0x%08x capture_valid=%d projected=%d finite=%d screen=%.3f,%.3f,%.3f,%.3f",
+				g_Vars.lvframe60, i, eligible, reason, shootability,
+				shootability == ACCESSIBILITY_TARGETING_SHOOTABILITY_SHOOTABLE
+						? "shootable" : shootability
+								== ACCESSIBILITY_TARGETING_SHOOTABILITY_FACING_AWAY
+							? "facing_away" : "unknown",
+				target->inuse,
 				target->active, target->destroyed, (void *)prop, propnum,
 				(void *)obj, propnum >= 0 ? prop->type : -1,
 				obj ? obj->modelnum : -1, propnum >= 0 ? prop->flags : 0,
@@ -416,6 +433,7 @@ void accessibilityTargetingObserveGame(void)
 		candidate->prop = prop;
 		candidate->category = ACCESSIBILITY_TARGETING_CATEGORY_RANGE_TARGET;
 		candidate->relationship = ACCESSIBILITY_TARGETING_RELATIONSHIP_NEUTRAL;
+		candidate->shootability = shootability;
 		candidate->position = prop->pos;
 		candidate->screenx1 = x1;
 		candidate->screeny1 = y1;
@@ -432,6 +450,7 @@ void accessibilityTargetingObserveGame(void)
 		if (prop == aimedprop) {
 			observation.hasaimedtarget = true;
 			observation.aimedidentity = candidate->identity;
+			aimedshootability = candidate->shootability;
 		}
 	}
 
@@ -453,14 +472,16 @@ void accessibilityTargetingObserveGame(void)
 
 	observation.nativealignmentexpected
 			= observation.hasaimedtarget
+			&& aimedshootability == ACCESSIBILITY_TARGETING_SHOOTABILITY_SHOOTABLE
 			&& accessibilityTargetingGameNativeAlignmentExpected(aimedprop);
 
 	if (detailed || scopechanged) {
 		accessibilityLogEvent("targeting", "scope_gate",
-			"frame=%d stage=%d player=%d accepted=1 reason=in_scope candidates=%d aimed=%d aimed_prop=%p native_alignment_expected=%d viewport=%.3f,%.3f,%.3f,%.3f",
+			"frame=%d stage=%d player=%d accepted=1 reason=in_scope candidates=%d aimed=%d aimed_prop=%p aimed_shootability=%d native_alignment_expected=%d viewport=%.3f,%.3f,%.3f,%.3f",
 			g_Vars.lvframe60, g_Vars.stagenum, g_Vars.currentplayernum,
 			observation.candidatecount, observation.hasaimedtarget,
-			(void *)aimedprop, observation.nativealignmentexpected,
+			(void *)aimedprop, aimedshootability,
+			observation.nativealignmentexpected,
 			viewleft, viewtop, viewright, viewbottom);
 	}
 	g_AccessibilityTargetingGameAuditValid = true;

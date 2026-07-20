@@ -36,6 +36,12 @@ enum accessibilitytargetingrelationship {
 	ACCESSIBILITY_TARGETING_RELATIONSHIP_NEUTRAL = 3,
 };
 
+enum accessibilitytargetingshootability {
+	ACCESSIBILITY_TARGETING_SHOOTABILITY_UNKNOWN = 0,
+	ACCESSIBILITY_TARGETING_SHOOTABILITY_SHOOTABLE = 1,
+	ACCESSIBILITY_TARGETING_SHOOTABILITY_FACING_AWAY = 2,
+};
+
 struct accessibilitytargetingidentity {
 	s32 playernum;
 	s32 source;
@@ -50,6 +56,7 @@ struct accessibilitytargetingcandidate {
 	struct prop *prop;
 	s32 category;
 	s32 relationship;
+	s32 shootability;
 	struct coord position;
 	f32 distance;
 	f32 screenx1;

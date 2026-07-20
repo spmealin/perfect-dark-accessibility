@@ -26,11 +26,12 @@ The current branch contains the Milestone 2 accessibility coordinator/logger, th
 
 - Every active, undestroyed firing-range target that the renderer placed in the current viewport becomes eligible after two consecutive observations.
 - Eligible targets emit positioned `SFX_MENU_SELECT` pulses. One targeting-owned property-sound channel rotates through the set: one target repeats every 36 ticks, while larger sets divide that cycle down to a minimum six-tick gap.
-- When the gameâ€™s final aiming ray reports one of those visible targets in `lookingatprop`, a centered `SFX_0007` alignment cue repeats every 12 ticks. The cue stops on the first observation that loses the target.
+- Visible targets keep their positioned presence pulses while they rotate. The firing-range adapter separately reports whether each target is currently shootable, using the range's own facing test rather than duplicating its angle math.
+- When the gameâ€™s final aiming ray reports one of those visible targets in `lookingatprop` and the target is facing the player, a centered `SFX_0007` alignment cue repeats every 12 ticks. The cue stops on the first observation that loses the target or reports it as facing away, and resumes when that same target becomes shootable again.
 - If the native sight path is expected to have played the same acquisition sound, the accessibility layer suppresses its immediate duplicate and begins only the hold cadence.
 - Menu, pause, endscreen, cutscene/non-gameplay camera, death, exercise end, feature disable, and stage teardown clear both targeting audio lanes.
 - The observer uses the rangeâ€™s fixed 18 target slots, fixed-capacity core storage, stable prop/object identity, existing projection data, and the already-filtered aiming result. It does not cast a second aim ray, alter aim, select a target, expose off-screen targets, or change range scripts.
-- Logs include scope decisions, changed/periodic audits for all 18 slots, projection and identity data, aimed-target rejection/acquisition/loss, pulse/channel ownership, and 30-second sound/memory telemetry. Unchanged high-frequency state is aggregated to protect frame time while retaining periodic complete snapshots.
+- Logs include scope decisions, changed/periodic audits for all 18 slots, projection and identity data, shootability and `facing_away` transitions, aimed-target rejection/acquisition/loss, pulse/channel ownership, and 30-second sound/memory telemetry. Unchanged high-frequency state is aggregated to protect frame time while retaining periodic complete snapshots.
 
 This is only the firing-range proof. Hostile/friendly character semantics, ordinary combat, cloaking and occlusion policy, special sights, target speech/repeat, multiplayer output, and full Milestone 9 blind-user acceptance remain pending.
 
