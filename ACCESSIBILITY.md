@@ -4,7 +4,7 @@
 
 This work aims to make the Perfect Dark PC port meaningfully playable by blind and low-vision players, starting with nonvisual access to menus and essential game state and progressing through small, testable gameplay slices.
 
-The current branch contains the Milestone 2 accessibility coordinator/logger, the Milestone 3 Tolk/NVDA Windows speech backend, the completed Milestone 4 menu-agnostic focus-narration slice, and an engineering-complete Milestone 5 Carrington Institute beacon prototype awaiting runtime and blind-user acceptance. Accessibility, comprehensive logging, speech, and menu narration default to enabled for testing. Milestone 4 observes final menu focus, resolves all currently used focusable control families, exposes semantic text for custom-rendered rows such as `New Agent...`, replaces stale menu speech, and provides provisional F5 repeat/F6 cancel commands. Its MinGW64 build passed, and the project owner completed blind-user acceptance testing and accepted the spoken-menu behavior. The Milestone 5 prototype can spatially beacon nearby CI interactable objects and doors; broader gameplay accessibility and navigation are not implemented.
+The current branch contains the Milestone 2 accessibility coordinator/logger, the Milestone 3 Tolk/NVDA Windows speech backend, the completed Milestone 4 menu-agnostic focus-narration slice, and an engineering-complete Milestone 5 Carrington Institute beacon prototype awaiting runtime and blind-user acceptance. Accessibility, comprehensive logging, speech, and menu narration default to enabled for testing. Milestone 4 observes final menu focus, resolves all currently used focusable control families, exposes semantic text for custom-rendered rows such as `New Agent...`, supports one-time semantic dialog summaries for important non-focusable content, replaces stale menu speech, and provides provisional F5 repeat/F6 cancel commands. Its MinGW64 build passed, and the project owner completed blind-user acceptance testing and accepted the spoken-menu behavior. The firing-range training-information dialog supplies its localized weapon name, challenge values, and weapon description through that summary path. The separate CI `Weapons Available` laptop supplies the focused weapon's localized manufacturer, primary and secondary functions, and marquee description as part of each list announcement. The Milestone 5 prototype can spatially beacon nearby CI interactable objects and doors; broader gameplay accessibility and navigation are not implemented.
 
 ### Carrington Institute beacon prototype
 
@@ -63,7 +63,7 @@ The first useful slice is startup through the main menus. Later slices cover HUD
 
 ### Menus and settings
 
-Announce dialog context, focused control, role, value, availability, and relevant hints. Support repeat, speech cancellation, and predictable handling of lists, sliders, checkboxes, dropdowns, scrollable briefing text, and dynamic labels.
+Announce dialog context, focused control, role, value, availability, relevant hints, and explicitly provided summaries for important non-focusable content. Support repeat, speech cancellation, and predictable handling of lists, sliders, checkboxes, dropdowns, scrollable briefing text, and dynamic labels.
 
 ### Messages, dialogue, and objectives
 

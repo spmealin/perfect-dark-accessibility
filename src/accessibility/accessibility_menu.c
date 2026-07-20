@@ -43,6 +43,7 @@ struct accessibilitymenusnapshot {
 	char label[ACCESSIBILITY_MENU_FIELD_MAX];
 	char role[64];
 	char value[ACCESSIBILITY_MENU_FIELD_MAX];
+	char summary[ACCESSIBILITY_MENU_FIELD_MAX];
 	char keyboardtext[MPSETUP_MAXNAME + 1];
 	char utterance[ACCESSIBILITY_MENU_TEXT_MAX];
 };
@@ -192,6 +193,28 @@ static s32 accessibilityMenuGetProviderText(struct menuitem *item, s32 part, s32
 	return dst[0] != '\0';
 }
 
+static s32 accessibilityMenuGetDialogSummary(struct menudialogdef *dialogdef,
+		char *dst, size_t dstlen)
+{
+	struct menuitem *item;
+
+	if (!dialogdef || !dialogdef->items || !dst || !dstlen) {
+		return false;
+	}
+
+	dst[0] = '\0';
+
+	for (item = dialogdef->items; item->type != MENUITEMTYPE_END; item++) {
+		if ((item->flags & MENUITEMFLAG_ACCESSIBILITYSUMMARY)
+				&& accessibilityMenuGetProviderText(item, MENUACCESSIBILITYPART_SUMMARY,
+				-1, dst, dstlen)) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static s32 accessibilityMenuGetHandlerValue(struct menuitem *item, s32 operation)
 {
 	union handlerdata data;
@@ -217,7 +240,7 @@ static void accessibilityMenuGetOptionText(struct menuitem *item, s32 index,
 		return;
 	}
 
-	if ((item->flags & MENUITEMFLAG_LIST_CUSTOMRENDER)
+	if ((item->flags & (MENUITEMFLAG_LIST_CUSTOMRENDER | MENUITEMFLAG_ACCESSIBILITYOPTION))
 			&& accessibilityMenuGetProviderText(item, MENUACCESSIBILITYPART_OPTION,
 					index, dst, dstlen)) {
 		return;
@@ -420,7 +443,7 @@ static void accessibilityMenuDescribeItem(struct accessibilitymenusnapshot *snap
 }
 
 static void accessibilityMenuCompose(struct accessibilitymenusnapshot *snapshot,
-		s32 includetitle)
+		s32 includetitle, s32 includesummary)
 {
 	char position[96];
 
@@ -429,6 +452,10 @@ static void accessibilityMenuCompose(struct accessibilitymenusnapshot *snapshot,
 	if (includetitle) {
 		accessibilityMenuAppendPart(snapshot->utterance, sizeof(snapshot->utterance),
 				snapshot->title, NULL);
+	}
+	if (includesummary) {
+		accessibilityMenuAppendPart(snapshot->utterance, sizeof(snapshot->utterance),
+				snapshot->summary, snapshot->utterance[0] ? ". " : NULL);
 	}
 	accessibilityMenuAppendPart(snapshot->utterance, sizeof(snapshot->utterance),
 			snapshot->label, snapshot->utterance[0] ? ". " : NULL);
@@ -482,6 +509,7 @@ static s32 accessibilityMenuRelevantEqual(const struct accessibilitymenusnapshot
 		&& strcmp(a->label, b->label) == 0
 		&& strcmp(a->role, b->role) == 0
 		&& strcmp(a->value, b->value) == 0
+		&& strcmp(a->summary, b->summary) == 0
 		&& strcmp(a->keyboardtext, b->keyboardtext) == 0;
 }
 
@@ -546,6 +574,8 @@ void accessibilityMenuObserve(s32 menuslot, s32 playernum, s32 menuroot,
 	next.disabled = menuIsItemDisabled(next.item, dialog);
 	itemdata = menuGetItemData(dialog, next.item);
 	accessibilityMenuDescribeItem(&next, itemdata);
+	accessibilityMenuGetDialogSummary(dialog->definition,
+			next.summary, sizeof(next.summary));
 	changed = !accessibilityMenuRelevantEqual(previous, &next);
 
 	if (changed) {
@@ -561,11 +591,12 @@ void accessibilityMenuObserve(s32 menuslot, s32 playernum, s32 menuroot,
 		}
 
 		accessibilityMenuCompose(&next,
+				reason == ACCESSIBILITY_ANNOUNCEMENT_DIALOG,
 				reason == ACCESSIBILITY_ANNOUNCEMENT_DIALOG);
 		g_AccessibilityMenuChanges++;
 		elapsed = sysGetMicroseconds() - started;
 		accessibilityLogEvent("menu", "snapshot_changed",
-				"slot=%d player=%d root=%d depth=%d dialog=%p dialog_def=%p item=%p item_index=%d type=%d param=%d flags=0x%08x handler=%p disabled=%d dimmed=%d subindex=%d selected=%d count=%d scroll=%d max_scroll=%d keyboard_row=%d keyboard_col=%d keyboard_caps=%d title=%s title_spoken=%d label=%s role=%s value=%s text=%s elapsed_us=%llu",
+				"slot=%d player=%d root=%d depth=%d dialog=%p dialog_def=%p item=%p item_index=%d type=%d param=%d flags=0x%08x handler=%p disabled=%d dimmed=%d subindex=%d selected=%d count=%d scroll=%d max_scroll=%d keyboard_row=%d keyboard_col=%d keyboard_caps=%d title=%s title_spoken=%d summary=%s summary_spoken=%d label=%s role=%s value=%s text=%s elapsed_us=%llu",
 				menuslot, playernum, menuroot, menudepth,
 				(void *)dialog, (void *)dialog->definition, (void *)next.item,
 				next.itemindex, next.itemtype, next.item->param, next.item->flags,
@@ -574,6 +605,7 @@ void accessibilityMenuObserve(s32 menuslot, s32 playernum, s32 menuroot,
 				next.scrolloffset, next.maxscrolloffset,
 				next.keyboardrow, next.keyboardcol, next.keyboardcaps,
 				next.title, reason == ACCESSIBILITY_ANNOUNCEMENT_DIALOG,
+				next.summary, reason == ACCESSIBILITY_ANNOUNCEMENT_DIALOG,
 				next.label, next.role, next.value, next.utterance,
 				(unsigned long long)elapsed);
 		*previous = next;
@@ -588,6 +620,7 @@ void accessibilityMenuObserve(s32 menuslot, s32 playernum, s32 menuroot,
 	}
 
 	if (repeatrequested && previous->valid) {
+		accessibilityMenuCompose(previous, true, true);
 		accessibilityLogEvent("menu", "command",
 				"action=repeat key=F5 slot=0 dialog=%p text=%s",
 				(void *)dialog, previous->utterance);

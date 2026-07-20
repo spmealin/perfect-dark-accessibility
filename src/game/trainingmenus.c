@@ -1,4 +1,6 @@
 #include <ultra64.h>
+#include <stdio.h>
+#include <string.h>
 #include "constants.h"
 #include "game/chraction.h"
 #include "game/ceil.h"
@@ -33,11 +35,125 @@ struct menudialogdef g_BioTextMenuDialog;
 struct menudialogdef g_HangarLocationDetailsMenuDialog;
 struct menudialogdef g_HangarVehicleDetailsMenuDialog;
 
+static void frAccessibilityAppend(char *buffer, u32 bufferlen, const char *text,
+		const char *separator)
+{
+	size_t used;
+
+	if (!buffer || !bufferlen || !text || !text[0]) {
+		return;
+	}
+
+	used = strlen(buffer);
+
+	while (used > 0 && (unsigned char)buffer[used - 1] <= ' ') {
+		buffer[--used] = '\0';
+	}
+
+	if (used >= bufferlen - 1) {
+		return;
+	}
+
+	if (used && separator) {
+		snprintf(buffer + used, bufferlen - used, "%s", separator);
+		used = strlen(buffer);
+	}
+
+	if (used < bufferlen - 1) {
+		snprintf(buffer + used, bufferlen - used, "%s", text);
+		used = strlen(buffer);
+
+		while (used > 0 && (unsigned char)buffer[used - 1] <= ' ') {
+			buffer[--used] = '\0';
+		}
+	}
+}
+
+static s32 frGetAccessibilitySummary(char *buffer, u32 bufferlen)
+{
+	struct frdata *frdata = frGetData();
+	const char *difficulties[] = {
+		langGet(L_MPMENU_439), // "Bronze"
+		langGet(L_MPMENU_440), // "Silver"
+		langGet(L_MPMENU_441), // "Gold"
+	};
+	char value[64];
+	s32 secs;
+	s32 mins;
+	s32 weaponnum;
+
+	if (!buffer || !bufferlen || !frdata) {
+		return false;
+	}
+
+	buffer[0] = '\0';
+	weaponnum = frGetWeaponBySlot(frGetSlot());
+	frAccessibilityAppend(buffer, bufferlen, bgunGetName(weaponnum), NULL);
+
+	if (frdata->difficulty >= 0 && frdata->difficulty < ARRAYCOUNT(difficulties)) {
+		frAccessibilityAppend(buffer, bufferlen, langGet(L_MPMENU_443), ". ");
+		frAccessibilityAppend(buffer, bufferlen, difficulties[frdata->difficulty], " ");
+	}
+
+	if (frdata->goalscore > 0) {
+		snprintf(value, sizeof(value), "%d", frdata->goalscore);
+		frAccessibilityAppend(buffer, bufferlen, langGet(L_MPMENU_475), ". ");
+		frAccessibilityAppend(buffer, bufferlen, value, " ");
+	}
+
+	if (frdata->goalaccuracy > 0) {
+		snprintf(value, sizeof(value), "%d%%", frdata->goalaccuracy);
+		frAccessibilityAppend(buffer, bufferlen, langGet(L_MPMENU_473), ". ");
+		frAccessibilityAppend(buffer, bufferlen, value, " ");
+	} else if (frdata->goaltargets != 255) {
+		snprintf(value, sizeof(value), "%d", frdata->goaltargets);
+		frAccessibilityAppend(buffer, bufferlen, langGet(L_MPMENU_474), ". ");
+		frAccessibilityAppend(buffer, bufferlen, value, " ");
+	}
+
+	if (frdata->timelimit != 255) {
+		secs = frdata->timelimit;
+		mins = secs / 60;
+		secs %= 60;
+
+		if (mins > 0) {
+			snprintf(value, sizeof(value), "%dm %ds", mins, secs);
+		} else {
+			snprintf(value, sizeof(value), "%ds", secs);
+		}
+
+		frAccessibilityAppend(buffer, bufferlen, langGet(L_MPMENU_472), ". ");
+		frAccessibilityAppend(buffer, bufferlen, value, " ");
+	}
+
+	if (frdata->ammolimit != 255) {
+		if (weaponnum == WEAPON_SUPERDRAGON && frdata->sdgrenadelimit != 255) {
+			snprintf(value, sizeof(value), "%d/%d",
+					frdata->ammolimit, frdata->sdgrenadelimit);
+		} else {
+			snprintf(value, sizeof(value), "%d", frdata->ammolimit);
+		}
+
+		frAccessibilityAppend(buffer, bufferlen, langGet(L_MPMENU_471), ". ");
+		frAccessibilityAppend(buffer, bufferlen, value, " ");
+	}
+
+	frAccessibilityAppend(buffer, bufferlen, frGetWeaponDescription(), ". ");
+	return buffer[0] != '\0';
+}
+
 MenuItemHandlerResult frDetailsOkMenuHandler(s32 operation, struct menuitem *item, union handlerdata *data)
 {
 	s32 i;
 
 	switch (operation) {
+	case MENUOP_GETACCESSIBILITYTEXT:
+		if (data->accessibility.part == MENUACCESSIBILITYPART_SUMMARY
+				&& data->accessibility.buffer && data->accessibility.bufferlen > 0) {
+			return frGetAccessibilitySummary(data->accessibility.buffer,
+					data->accessibility.bufferlen);
+		}
+		break;
 	case MENUOP_CHECKPREFOCUSED:
 		return true;
 	case MENUOP_SET:
@@ -1057,7 +1173,8 @@ struct menuitem g_FrTrainingInfoInGameMenuItems[] = {
 	{
 		MENUITEMTYPE_SELECTABLE,
 		0,
-		MENUITEMFLAG_SELECTABLE_CLOSESDIALOG | MENUITEMFLAG_SELECTABLE_CENTRE,
+		MENUITEMFLAG_SELECTABLE_CLOSESDIALOG | MENUITEMFLAG_SELECTABLE_CENTRE
+				| MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		L_OPTIONS_003, // ""
 		L_MPMENU_428, // "Resume"
 		frDetailsOkMenuHandler,
@@ -1150,7 +1267,8 @@ struct menuitem g_FrTrainingInfoPreGameMenuItems[] = {
 	{
 		MENUITEMTYPE_SELECTABLE,
 		0,
-		MENUITEMFLAG_SELECTABLE_CLOSESDIALOG | MENUITEMFLAG_SELECTABLE_CENTRE,
+		MENUITEMFLAG_SELECTABLE_CLOSESDIALOG | MENUITEMFLAG_SELECTABLE_CENTRE
+				| MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		L_OPTIONS_003, // ""
 		L_MPMENU_427, // "Ok"
 		frDetailsOkMenuHandler,

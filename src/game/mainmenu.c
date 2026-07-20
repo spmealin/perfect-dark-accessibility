@@ -4174,7 +4174,7 @@ struct menuitem g_FrWeaponsAvailableMenuItems[] = {
 	{
 		MENUITEMTYPE_LIST,
 		0,
-		0,
+		MENUITEMFLAG_ACCESSIBILITYOPTION,
 		0x0000006e,
 		0x00000063,
 		menuhandlerFrInventoryList,
@@ -4252,11 +4252,61 @@ struct menudialogdef g_FrWeaponsAvailableMenuDialog = {
 	NULL,
 };
 
+static MenuItemHandlerResult frInventoryGetAccessibilityText(union handlerdata *data)
+{
+	struct weapon *weapon;
+	struct weaponfunc *primaryfunc;
+	struct weaponfunc *secondaryfunc;
+	const char *manufacturer;
+	const char *primary;
+	const char *secondary;
+	const char *description;
+	s32 weaponnum;
+
+	if (data->accessibility.part != MENUACCESSIBILITYPART_OPTION
+			|| !data->accessibility.buffer || data->accessibility.bufferlen == 0
+			|| data->accessibility.index < 0
+			|| data->accessibility.index >= frGetNumWeaponsAvailable()) {
+		return 0;
+	}
+
+	weaponnum = frGetWeaponBySlot(data->accessibility.index);
+	weapon = weaponFindById(weaponnum);
+
+	if (!weapon) {
+		return 0;
+	}
+
+	primaryfunc = weaponGetFunctionById(weaponnum, 0);
+	secondaryfunc = weaponGetFunctionById(weaponnum, 1);
+	manufacturer = weapon->manufacturer != L_GUN_000
+			? langGet(weapon->manufacturer) : NULL;
+	primary = primaryfunc ? langGet(primaryfunc->name) : NULL;
+	secondary = secondaryfunc ? langGet(secondaryfunc->name) : NULL;
+	description = langGet(weapon->description);
+
+	snprintf(data->accessibility.buffer, data->accessibility.bufferlen,
+			"%s%s%s%s%s%s%s%s%s",
+			bgunGetName(weaponnum),
+			manufacturer ? ". Manufacturer: " : "",
+			manufacturer ? manufacturer : "",
+			primary ? ". Primary function: " : "",
+			primary ? primary : "",
+			secondary ? ". Secondary function: " : "",
+			secondary ? secondary : "",
+			description && description[0] ? ". " : "",
+			description && description[0] ? description : "");
+
+	return 1;
+}
+
 MenuItemHandlerResult menuhandlerFrInventoryList(s32 operation, struct menuitem *item, union handlerdata *data)
 {
 	static u8 g_FrFocusedSlotIndex = 0;
 
 	switch (operation) {
+	case MENUOP_GETACCESSIBILITYTEXT:
+		return frInventoryGetAccessibilityText(data);
 	case MENUOP_GETOPTGROUPCOUNT:
 		data->list.value = 0;
 		break;
