@@ -4,6 +4,8 @@
 #include "data.h"
 #include "types.h"
 
+extern u8 g_KeyboardKeys[5][10];
+
 s32 menuitem0f0e5d2c(s32 arg0, struct menuitem *item);
 s16 menuitemListGetOffsetY(s16 optionindex, struct menuitem *item);
 Gfx *menuitemListRenderHeader(Gfx *gdl, s16 x1, s16 y1, s16 width, s16 arg4, s16 height, char *text, struct menudialog *dialog);

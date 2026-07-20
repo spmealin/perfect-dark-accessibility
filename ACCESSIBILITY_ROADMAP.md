@@ -17,6 +17,7 @@ This roadmap orders work by user task and evidence. Milestones are not promises 
 - **Status:** Implementation and Windows runtime verification complete. Disabled and enabled normal-exit runs passed in the real executable; lifecycle edge cases passed in a focused harness.
 - **Detailed plan:** `milestones/ACCESSIBILITY_MILESTONE_02_PLAN.md` is the authoritative implementation handoff.
 - **Goal:** Add a disabled-by-default accessibility service with configuration, safe lifecycle, and opt-in structured session logging.
+- **Later default change:** These controls now default on during blind-user acceptance testing and remain configurable.
 - **User-visible result:** With both settings explicitly enabled, startup and shutdown produce a comprehensive local diagnostic log; normal play is otherwise unchanged.
 - **Systems:** `port/src/main.c`, config/filesystem/system services, new core/log modules, and CMake. No frame-tick hook is needed.
 - **Acceptance:** Disabled mode creates no accessibility log; enabled logging records schema/build/session/start/stop; JSON lines parse; open/write failure is nonfatal; repeated init/shutdown is safe; the Windows baseline builds, with a non-Windows compile checked when an environment is available.
@@ -36,15 +37,17 @@ This roadmap orders work by user task and evidence. Milestones are not promises 
 - **Risks and unknowns:** Screen-reader coexistence, native dependencies, and COM/thread constraints may change the technology choice.
 - **Explicit non-goals:** Do not wire gameplay systems directly to the backend or select a backend without measured evidence.
 
-## Milestone 4 — Main-menu narration slice
+## Milestone 4 — Menu-agnostic focus narration
 
-- **Goal:** Let a blind user understand and operate the startup/main-menu path with reliable focus and values.
-- **User-visible result:** Dialog context and supported focused controls are spoken; repeat and cancel work; opening/closing dialogs produces predictable context.
-- **Systems:** `menuOpenDialog`, `dialogChangeItemFocus`/`dialogTick`, text resolution, item handlers/types, announcement queue.
-- **Acceptance:** A defined script covers first focus, directional/mouse focus parity, selectable controls, checkbox, slider, list/dropdown, disabled item, back, repeat, and rapid navigation; unsupported types are logged without misleading speech; a blind tester reaches a chosen main-menu destination unaided.
-- **Logging/evidence:** Dialog/focus semantic and raw IDs, resolved text, role/value, pointers when useful, queue decision, input, and tester timestamps.
-- **Risks and unknowns:** Dynamic labels, item callbacks, initial focus, and rapid transitions have lifetime/context hazards.
-- **Explicit non-goals:** Do not claim every game menu or briefing is accessible.
+- **Status:** Complete. The MinGW64 build passed, accessibility/logging/speech/menu narration default on for testing, and the project owner completed blind-user acceptance testing and accepted the spoken-menu behavior, including context-only menu titles and percentage-based sliders.
+- **Detailed plan:** `milestones/ACCESSIBILITY_MILESTONE_04_PLAN.md` is the authoritative handoff.
+- **Goal:** Let a blind user understand and operate the startup/New Agent/settings path while establishing shared semantics for every focusable control family used by the menu engine.
+- **User-visible result:** Final dialog context and focused control semantics are spoken; values and internal list/grid focus update predictably; repeat and cancel work; rapid navigation replaces stale output.
+- **Systems:** One post-`menuProcessInput` observer, runtime item-data query, type-based semantic adapter, generic custom-render semantic operation, replaceable menu announcement dispatcher, and provisional PC repeat/cancel commands.
+- **Acceptance:** The startup list announces `New Agent...` without recognizing that screen; the keyboard and settings route work; a source/runtime audit covers selectable, checkbox, slider, dropdown, standard/custom list, keyboard, scrollable, carousel, ranking, and player-stats controls; keyboard/controller/mouse focus produces equivalent semantics; backend/log failures are nonfatal; a blind tester reaches and changes a chosen setting unaided.
+- **Logging/evidence:** Record all feature-relevant raw and normalized dialog/control text, IDs, pointers, types, flags, handler operations, values, indexes/counts, input, diff/replacement decisions, output/cancel results, failures, and timings. Aggregate unchanged-frame evidence only when needed for performance.
+- **Risks and unknowns:** Dynamic callback lifetimes, custom-rendered rows, compound controls, localization/control codes, multiple local players, and provisional input collisions need measured evidence.
+- **Explicit non-goals:** Structural support for all current focusable control families is not a claim that every menu or briefing has been blind-user validated. Rich briefing/objective reading and permanent configurable actions remain later milestones.
 
 ## Milestone 5 — Discoverable accessibility settings
 

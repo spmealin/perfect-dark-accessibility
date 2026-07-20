@@ -581,6 +581,16 @@ MenuItemHandlerResult func0f179d6c(s32 operation, struct menuitem *item, union h
 MenuItemHandlerResult mpCharacterBodyMenuHandler(s32 operation, struct menuitem *item, union handlerdata *data, s32 mpbodynum, s32 mpheadnum, bool isplayer)
 {
 	switch (operation) {
+	case MENUOP_GETACCESSIBILITYTEXT:
+		if (data->accessibility.part == MENUACCESSIBILITYPART_OPTION
+				&& data->accessibility.buffer && data->accessibility.bufferlen > 0
+				&& data->accessibility.index >= 0
+				&& data->accessibility.index < mpGetNumBodies()) {
+			snprintf(data->accessibility.buffer, data->accessibility.bufferlen,
+					"%s", mpGetBodyName(data->accessibility.index));
+			return 1;
+		}
+		break;
 	case MENUOP_GETOPTIONCOUNT:
 		data->carousel.value = mpGetNumBodies();
 		break;
@@ -716,6 +726,21 @@ MenuItemHandlerResult mpChallengesListHandler(s32 operation, struct menuitem *it
 	s32 size = 11;
 
 	switch (operation) {
+	case MENUOP_GETACCESSIBILITYTEXT:
+		if (data->accessibility.part == MENUACCESSIBILITYPART_OPTION
+				&& data->accessibility.buffer && data->accessibility.bufferlen > 0
+				&& data->accessibility.index >= 0) {
+			union handlerdata countdata;
+			memset(&countdata, 0, sizeof(countdata));
+			mpChallengesListHandler(MENUOP_GETOPTIONCOUNT, item, &countdata);
+
+			if (data->accessibility.index < (s32)countdata.list.value) {
+				snprintf(data->accessibility.buffer, data->accessibility.bufferlen,
+						"%s", challengeGetName2(g_MpPlayerNum, data->accessibility.index));
+				return 1;
+			}
+		}
+		break;
 	case MENUOP_GETOPTIONCOUNT:
 		data->list.value = challengeGetAutoFocusedIndex(g_MpPlayerNum);
 		break;
@@ -2128,6 +2153,16 @@ MenuItemHandlerResult mpCharacterHeadMenuHandler(s32 operation, struct menuitem 
 	};
 
 	switch (operation) {
+	case MENUOP_GETACCESSIBILITYTEXT:
+		if (data->accessibility.part == MENUACCESSIBILITYPART_OPTION
+				&& data->accessibility.buffer && data->accessibility.bufferlen > 0
+				&& data->accessibility.index >= 0
+				&& data->accessibility.index < mpGetNumHeads2()) {
+			snprintf(data->accessibility.buffer, data->accessibility.bufferlen,
+					"Head %d", data->accessibility.index + 1);
+			return 1;
+		}
+		break;
 	case MENUOP_GETOPTIONCOUNT:
 		data->carousel.value = mpGetNumHeads2();
 		break;
@@ -4758,6 +4793,16 @@ MenuItemHandlerResult mpChallengesListMenuHandler(s32 operation, struct menuitem
 	s32 i;
 
 	switch (operation) {
+	case MENUOP_GETACCESSIBILITYTEXT:
+		if (data->accessibility.part == MENUACCESSIBILITYPART_OPTION
+				&& data->accessibility.buffer && data->accessibility.bufferlen > 0
+				&& data->accessibility.index >= 0
+				&& data->accessibility.index < challengeGetNumAvailable()) {
+			snprintf(data->accessibility.buffer, data->accessibility.bufferlen,
+					"%s", challengeGetNameBySlot(data->accessibility.index));
+			return 1;
+		}
+		break;
 	case MENUOP_CHECKHIDDEN:
 		if (g_BossFile.locktype == MPLOCKTYPE_CHALLENGE) {
 			return 1;

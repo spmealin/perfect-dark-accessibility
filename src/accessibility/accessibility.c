@@ -5,12 +5,15 @@
 #include "fs.h"
 #include "system.h"
 #include "accessibility/accessibility.h"
+#include "accessibility/accessibility_announcement.h"
 #include "accessibility/accessibility_log.h"
+#include "accessibility/accessibility_menu.h"
 #include "accessibility/accessibility_speech.h"
 
-static s32 g_AccessibilityEnabledConfig = 0;
-static s32 g_AccessibilityLoggingEnabledConfig = 0;
-static s32 g_AccessibilitySpeechEnabledConfig = 0;
+static s32 g_AccessibilityEnabledConfig = 1;
+static s32 g_AccessibilityLoggingEnabledConfig = 1;
+static s32 g_AccessibilitySpeechEnabledConfig = 1;
+static s32 g_AccessibilityMenuNarrationEnabledConfig = 1;
 static s32 g_AccessibilityInitialized = 0;
 static s32 g_AccessibilityEnabled = 0;
 static s32 g_AccessibilityShutdownComplete = 0;
@@ -36,10 +39,11 @@ void accessibilityInit(void)
 
 	if (g_AccessibilityLoggingEnabledConfig && accessibilityLogInit()) {
 		accessibilityLogEvent("lifecycle", "session_start",
-				"enabled=%d logging=%d speech=%d speech_test=%d path=%s",
+				"enabled=%d logging=%d speech=%d menu_narration=%d speech_test=%d path=%s",
 				g_AccessibilityEnabledConfig,
 				g_AccessibilityLoggingEnabledConfig,
 				g_AccessibilitySpeechEnabledConfig,
+				g_AccessibilityMenuNarrationEnabledConfig,
 				sysArgCheck("--accessibility-speech-test"),
 				fsFullPath(ACCESSIBILITY_LOG_PATH));
 	}
@@ -70,6 +74,8 @@ void accessibilityShutdown(void)
 	}
 
 	g_AccessibilityShutdownComplete = 1;
+	accessibilityMenuReset();
+	accessibilityAnnouncementReset();
 	accessibilitySpeechShutdown();
 
 	if (accessibilityLogIsOpen()) {
@@ -91,9 +97,15 @@ s32 accessibilityIsEnabled(void)
 	return g_AccessibilityEnabled;
 }
 
+s32 accessibilityIsMenuNarrationEnabled(void)
+{
+	return g_AccessibilityEnabled && g_AccessibilityMenuNarrationEnabledConfig;
+}
+
 PD_CONSTRUCTOR static void accessibilityConfigInit(void)
 {
 	configRegisterInt("Accessibility.Enabled", &g_AccessibilityEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.LoggingEnabled", &g_AccessibilityLoggingEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.SpeechEnabled", &g_AccessibilitySpeechEnabledConfig, 0, 1);
+	configRegisterInt("Accessibility.MenuNarration", &g_AccessibilityMenuNarrationEnabledConfig, 0, 1);
 }

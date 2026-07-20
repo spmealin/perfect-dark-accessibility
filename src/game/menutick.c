@@ -27,6 +27,7 @@
 #include "lib/snd.h"
 #include "data.h"
 #include "types.h"
+#include "accessibility/accessibility_menu.h"
 
 u8 g_FileState = 0;
 u8 var80062944 = 0;
@@ -335,6 +336,11 @@ void menuTick(void)
 				}
 
 				menuProcessInput();
+				accessibilityMenuObserve(g_MpPlayerNum,
+						g_Menus[g_MpPlayerNum].playernum,
+						g_MenuData.root,
+						g_Menus[g_MpPlayerNum].depth,
+						&g_Menus[g_MpPlayerNum]);
 				setCurrentPlayerNum(prevplayernum);
 			} else {
 				if (g_MenuData.root == MENUROOT_MPSETUP || g_MenuData.root == MENUROOT_4MBMAINMENU) {

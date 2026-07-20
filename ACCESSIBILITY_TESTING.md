@@ -42,6 +42,8 @@ Use a legally obtained supported ROM placed as described by `README.md`. Do not 
 
 For a normal startup smoke test:
 
+Launch every built Perfect Dark executable from the MSYS2 MinGW64 environment, including smoke tests, scripted interaction tests, and debugging runs. Launching `build/pd.x86_64.exe` from PowerShell, Command Prompt, or another normal command line can fail with missing-DLL errors because the MinGW runtime search environment is absent.
+
 1. Back up the relevant `pd.ini` and save data outside the repository if the test changes persistent settings.
 2. Record whether portable/save-directory behaviour or command-line flags differ from defaults.
 3. Start the exact executable built in the recorded configuration.
@@ -55,7 +57,7 @@ For a normal startup smoke test:
 
 ## Structured accessibility log
 
-Milestone 2 implements an opt-in `$S/accessibility.log` separate from `pd.log`. It is created only when both `Accessibility.Enabled=1` and `Accessibility.LoggingEnabled=1`. The current schema records lifecycle events; later milestones will add feature events.
+Milestone 2 implements `$S/accessibility.log` separately from `pd.log`. It is created only when both `Accessibility.Enabled=1` and `Accessibility.LoggingEnabled=1`; both now default to one for blind-user acceptance testing but remain configurable. The schema records lifecycle, speech, and menu events.
 
 A JSON Lines or equivalently parseable record could look like this, with the schema finalized in implementation:
 
@@ -74,7 +76,7 @@ Required design properties:
 - a visible setting and documentation for enable/disable/delete;
 - comprehensive feature-relevant diagnostics, including free-form text, profile names, precise coordinates, input events, environment/path details, and continuous state where useful.
 
-Privacy redaction and data minimization are not requirements for development logs. Never include ROM contents, extracted copyrighted assets, passwords, authentication tokens, or unrelated operating-system secrets. Logs stay disabled by default, local, ignored by Git, and never upload automatically. Tell testers that a shared log may contain comprehensive raw diagnostics.
+Privacy redaction and data minimization are not requirements for development logs. Never include ROM contents, extracted copyrighted assets, passwords, authentication tokens, or unrelated operating-system secrets. Logs default to enabled during blind-user acceptance testing, stay local, remain configurable, are ignored by Git, and never upload automatically. Tell testers that a shared log may contain comprehensive raw diagnostics.
 
 ## Speech backend test matrix
 
@@ -98,13 +100,14 @@ Pass criteria must name numerical latency/frame budgets after the technology pro
 
 ### Milestone 3 Windows proof (2026-07-19)
 
-The implemented proof is disabled by default. To run its one intentional diagnostic request, set:
+The backend and menu speech are enabled by default for acceptance testing. The separate fixed diagnostic request still requires `--accessibility-speech-test`. The effective defaults are:
 
 ```ini
 [Accessibility]
 Enabled=1
 LoggingEnabled=1
 SpeechEnabled=1
+MenuNarration=1
 ```
 
 Then launch `build/pd.x86_64.exe --accessibility-speech-test`. The flag never enables accessibility or speech by itself. The exact request is `Perfect Dark accessibility speech test.` With speech enabled but no flag, backend detection occurs without an output request. Development output must contain `Tolk.dll` and the architecture-matching NVDA controller beside the executable; notices are copied to `build/licenses/tolk/`.
@@ -127,6 +130,14 @@ Recorded environment and evidence:
 
 Tolk/NVDA API acceptance is machine-verifiable, but the implementation agent cannot independently attest what a person heard or saw on a braille display. Human-observed first-audio latency, audible interruption, braille output, a true no-screen-reader run, other readers, i686 runtime, and non-Windows compilation were not available and are not claimed. The missing-controller case does verify the backend's no-active-reader result without altering the user's installed NVDA. No Tolk call occurs in a gameplay/frame tick, so these call timings are transport evidence rather than a frame-time benchmark.
 
+### Milestone 4 implementation evidence (2026-07-19)
+
+The menu-narration implementation compiles for the default `ntsc-final` x86-64 Windows target. A source audit found resolvers for all currently defined focusable families and semantic-provider cases for all 12 focusable custom-rendered-list definitions (nine unique handlers; three definitions reuse an audited handler). `Tolk.dll` and `nvdaControllerClient64.dll` remain beside the executable.
+
+An isolated startup/shutdown smoke used `--savedir ./build/m4-smoke`, narration/logging enabled, and speech disabled. The executable was launched through an initialized MSYS2 MinGW64 environment and closed through its window's normal close event. It loaded the lawful local ROM, created the game window, wrote parseable accessibility lifecycle records, reset the menu observer, and exited with status zero. Accessibility session `1784499754` recorded `menu_narration=1`; no menu observations occurred because the automated smoke did not progress through the title sequence.
+
+The project owner subsequently performed blind-user acceptance testing and reported that the spoken-menu behavior was working perfectly after two requested refinements: dialog titles are spoken on entry/return but not for every option, and sliders are reported as percentages rather than raw engine units. On that acceptance result, the owner declared Milestone 4 complete. A focused semantic harness, exhaustive control-family matrix, performance measurements, other-region builds, and broader backend-failure combinations were not supplied as part of that user acceptance and remain useful regression follow-up rather than claims made by this milestone.
+
 ## Menu interaction scripts
 
 ### Script A: deterministic focus basics
@@ -135,21 +146,24 @@ Precondition: a documented profile/start state that reaches a known dialog; spee
 
 1. Open the dialog and listen for title/context followed by final initial focus.
 2. Move once in each supported direction and compare spoken focus to the actual semantic item.
+   Confirm the dialog title is not repeated for these within-dialog focus changes, but is spoken again after leaving and returning to the dialog.
 3. Navigate rapidly through at least five items; confirm stale items are replaced rather than read in a long tail.
 4. Invoke repeat; confirm current context is spoken even if deduplication would suppress it.
 5. Invoke cancel; confirm speech stops and game focus does not change.
 6. Open a child dialog, return, and confirm the restored/current focus.
 7. Attempt a disabled item and confirm availability is understandable without an incorrect activation claim.
 
-### Script B: values and types
+### Script B: complete focusable-control matrix
 
-Exercise one real example each of selectable action, checkbox, slider, list, dropdown, and scrollable content. For each, record label, role, value, changed-value timing, boundaries, cancel/back behaviour, and unsupported-state output. Include mouse focus parity as a regression even when the blind task uses keyboard/controller.
+Exercise one real example each of selectable action, checkbox, slider, closed/open dropdown, standard list, custom-rendered list, keyboard, focusable scrollable content, carousel, ranking, and player stats. For each, record label source, role, value, changed-value/subfocus timing, position/count, boundaries, disabled state, cancel/back behavior, repeat output, and semantic-provider failures. Confirm slider minimum, midpoint, and maximum are announced as percentages rather than raw engine units. Include mouse focus parity and controller/keyboard parity even when the blind task uses one input method.
 
-### Script C: main-menu blind task
+The implementation must also run a source audit that compares every current focusable `MENUITEMTYPE_*` and every focusable `MENUITEMFLAG_LIST_CUSTOMRENDER` handler with the semantic resolver/provider table. Unknown numbered or future types must fail the development audit and log safely at runtime; they must never receive guessed speech.
 
-Choose one stable destination visible in `src/game/mainmenu.c`, document the exact start state and profile assumptions, and ask the tester to reach it without live sighted direction. The observer may explain the test and emergency stop beforehand but must not coach individual moves. Record completion, wrong turns, repeated/cancelled announcements, recovery, time, and tester confidence.
+### Script C: New Agent to settings blind task
 
-Main-menu definitions can vary with game state (for example profile, mission, multiplayer, or unlock state), so reports must not assume one universal sequence.
+Use a temporary lawful save/config directory and start with no selected profile. Confirm the startup `Perfect Dark` custom list announces its actual rows, including `New Agent...`; create a uniquely named agent through the on-screen/physical keyboard; complete any save-location dialog without overwriting user data; reach `Perfect Menu`; swipe to Options; enter a chosen standard or Extended settings dialog; change one setting; verify its new value; and return to a known context. The observer may explain scope and emergency stop beforehand but must not coach individual moves.
+
+Record completion, wrong turns, missing/excessive/late output, rapid-navigation replacement, repeated/cancelled announcements, recovery, time, and tester confidence. Main-menu definitions vary with profile, mission, multiplayer, unlock, memory, platform, and region state, so the report must capture its actual start conditions rather than assume one universal sequence.
 
 ## Gameplay feature scripts
 

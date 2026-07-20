@@ -1152,6 +1152,31 @@ s32 dialogFindItem(struct menudialog *dialog, struct menuitem *item, s32 *rowind
 	return 0;
 }
 
+union menuitemdata *menuGetItemData(struct menudialog *dialog, struct menuitem *item)
+{
+	s32 rowindex;
+	s32 colindex;
+	s32 blockindex;
+
+	if (!dialog || !item) {
+		return NULL;
+	}
+
+	dialogFindItem(dialog, item, &rowindex, &colindex);
+
+	if (&dialog->definition->items[g_Menus[g_MpPlayerNum].rows[rowindex].itemindex] != item) {
+		return NULL;
+	}
+
+	blockindex = g_Menus[g_MpPlayerNum].rows[rowindex].blockindex;
+
+	if (blockindex < 0) {
+		return NULL;
+	}
+
+	return (union menuitemdata *)&g_Menus[g_MpPlayerNum].blocks[blockindex];
+}
+
 /**
  * If this returns true, the scrollable is rendered with less padding and
  * scrolling is disabled.

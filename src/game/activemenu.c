@@ -88,6 +88,30 @@ MenuItemHandlerResult amPickTargetMenuList(s32 operation, struct menuitem *item,
 	};
 
 	switch (operation) {
+	case MENUOP_GETACCESSIBILITYTEXT:
+		if (data->accessibility.part == MENUACCESSIBILITYPART_OPTION
+				&& data->accessibility.buffer && data->accessibility.bufferlen > 0) {
+			s32 numremaining = data->accessibility.index;
+			s32 chrindex = -1;
+			struct chrdata *botchr = g_MpAllChrPtrs[g_Vars.currentplayer->aibuddynums[g_AmMenus[g_AmIndex].screenindex - 2]];
+
+			do {
+				chrindex++;
+
+				if (chrindex >= g_MpNumChrs) {
+					return 0;
+				}
+
+				if (g_AmMenus[g_AmIndex].prevallbots || botchr != g_MpAllChrPtrs[chrindex]) {
+					numremaining--;
+				}
+			} while (numremaining >= 0);
+
+			snprintf(data->accessibility.buffer, data->accessibility.bufferlen,
+					"%s", g_MpAllChrConfigPtrs[chrindex]->name);
+			return 1;
+		}
+		break;
 	case MENUOP_GETOPTIONCOUNT:
 		if (g_AmMenus[g_AmIndex].prevallbots) {
 			// All bots

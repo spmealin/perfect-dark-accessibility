@@ -2077,6 +2077,19 @@ MenuItemHandlerResult filemgrFileToDeleteListMenuHandler(s32 operation, struct m
 		return 0;
 	}
 
+	if (operation == MENUOP_GETACCESSIBILITYTEXT
+			&& data->accessibility.part == MENUACCESSIBILITYPART_OPTION
+			&& data->accessibility.buffer && data->accessibility.bufferlen > 0) {
+		struct filelist *list = g_FileLists[g_Menus[g_MpPlayerNum].fm.listnum];
+
+		if (data->accessibility.index >= 0 && data->accessibility.index < list->numfiles) {
+			char name[32];
+			filemgrGetFileName(name, &list->files[data->accessibility.index]);
+			snprintf(data->accessibility.buffer, data->accessibility.bufferlen, "%s", name);
+			return 1;
+		}
+	}
+
 	if (operation == MENUOP_SET) {
 		struct filelistfile *file = &g_FileLists[g_Menus[g_MpPlayerNum].fm.listnum]->files[data->list.value];
 
@@ -2107,6 +2120,17 @@ MenuItemHandlerResult filemgrFileToCopyListMenuHandler(s32 operation, struct men
 
 	if (list == NULL) {
 		return 0;
+	}
+
+	if (operation == MENUOP_GETACCESSIBILITYTEXT
+			&& data->accessibility.part == MENUACCESSIBILITYPART_OPTION
+			&& data->accessibility.buffer && data->accessibility.bufferlen > 0) {
+		if (data->accessibility.index >= 0 && data->accessibility.index < list->numfiles) {
+			char name[32];
+			filemgrGetFileName(name, &list->files[data->accessibility.index]);
+			snprintf(data->accessibility.buffer, data->accessibility.bufferlen, "%s", name);
+			return 1;
+		}
 	}
 
 	if (operation == MENUOP_SET) {
@@ -2217,6 +2241,27 @@ MenuItemHandlerResult pakGameNoteListMenuHandler(s32 operation, struct menuitem 
 	}
 
 	switch (operation) {
+	case MENUOP_GETACCESSIBILITYTEXT:
+		if (data->accessibility.part == MENUACCESSIBILITYPART_OPTION
+				&& data->accessibility.buffer && data->accessibility.bufferlen > 0
+				&& data->accessibility.index >= 0 && data->accessibility.index < 16) {
+			s32 index = data->accessibility.index;
+			note = &g_EditingPak->notes[index];
+
+			if (g_EditingPak->notesinuse[index]) {
+				pakN64FontCodeToAscii(note->game_name, tmpname, 16);
+				pakN64FontCodeToAscii(note->ext_name, tmpext, 4);
+				tmpext[1] = '\0';
+				snprintf(data->accessibility.buffer, data->accessibility.bufferlen,
+						"Note %d, %s %s, %d pages", index + 1, tmpname, tmpext,
+						note->file_size / 256);
+			} else {
+				snprintf(data->accessibility.buffer, data->accessibility.bufferlen,
+						"Note %d, empty", index + 1);
+			}
+			return 1;
+		}
+		break;
 	case MENUOP_GETSELECTEDINDEX:
 		data->list.value = 0x0fffff;
 		break;
@@ -2542,6 +2587,26 @@ MenuItemHandlerResult filemgrChooseAgentListMenuHandler(s32 operation, struct me
 	}
 
 	switch (operation) {
+	case MENUOP_GETACCESSIBILITYTEXT:
+		if (data->accessibility.part == MENUACCESSIBILITYPART_OPTION
+				&& data->accessibility.buffer && data->accessibility.bufferlen > 0) {
+			s32 index = data->accessibility.index;
+
+			if (index == g_FileLists[0]->numfiles) {
+				snprintf(data->accessibility.buffer, data->accessibility.bufferlen,
+						"%s", langGet(L_OPTIONS_403));
+				return 1;
+			}
+
+			if (index >= 0 && index < g_FileLists[0]->numfiles) {
+				char filename[32];
+				filemgrGetFileName(filename, &g_FileLists[0]->files[index]);
+				snprintf(data->accessibility.buffer, data->accessibility.bufferlen,
+						"%s", filename);
+				return 1;
+			}
+		}
+		break;
 	case MENUOP_GETSELECTEDINDEX:
 		data->list.value = 0x0fffff;
 		break;

@@ -3379,6 +3379,19 @@ struct handlerdata_slider {
 	char *label;
 };
 
+enum menuaccessibilitypart {
+	MENUACCESSIBILITYPART_CONTROL = 0,
+	MENUACCESSIBILITYPART_OPTION = 1,
+	MENUACCESSIBILITYPART_SUMMARY = 2,
+};
+
+struct handlerdata_accessibility {
+	s32 part;
+	s32 index;
+	char *buffer;
+	u32 bufferlen;
+};
+
 struct menuitemrenderdata {
 	s32 x;
 	s32 y;
@@ -3414,6 +3427,7 @@ union handlerdata {
 	struct handlerdata_label label;
 	struct handlerdata_slider slider;
 	struct handlerdata_type19 type19;
+	struct handlerdata_accessibility accessibility;
 
 	struct handlerdata_dialog1 dialog1;
 	struct handlerdata_dialog2 dialog2;

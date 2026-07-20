@@ -1857,6 +1857,21 @@ MenuItemHandlerResult menuhandlerMissionList(s32 operation, struct menuitem *ite
 	union handlerdata spdc;
 
 	switch (operation) {
+	case MENUOP_GETACCESSIBILITYTEXT:
+		if (data->accessibility.part == MENUACCESSIBILITYPART_OPTION
+				&& data->accessibility.buffer && data->accessibility.bufferlen > 0) {
+			union handlerdata optiondata;
+			const char *optiontext;
+			memset(&optiondata, 0, sizeof(optiondata));
+			optiondata.list.value = data->accessibility.index;
+			optiontext = (const char *)menuhandlerMissionList(MENUOP_GETOPTIONTEXT, item, &optiondata);
+
+			if (optiontext) {
+				snprintf(data->accessibility.buffer, data->accessibility.bufferlen, "%s", optiontext);
+				return 1;
+			}
+		}
+		break;
 	case MENUOP_GETOPTIONCOUNT:
 		data->list.value = 0;
 

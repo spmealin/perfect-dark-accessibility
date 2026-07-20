@@ -38,6 +38,7 @@ void func0f0f1d6c(struct menudialogdef *dialogdef, struct menudialog *dialog, st
 void dialog0f0f1ef4(struct menudialog *dialog);
 void dialogCalculateContentSize(struct menudialogdef *dialogdef, struct menudialog *dialog, struct menu *menu);
 s32 dialogFindItem(struct menudialog *dialog, struct menuitem *item, s32 *rowindex, s32 *colindex);
+union menuitemdata *menuGetItemData(struct menudialog *dialog, struct menuitem *item);
 bool menuIsScrollableUnscrollable(struct menuitem *item);
 bool menuIsItemDisabled(struct menuitem *item, struct menudialog *dialog);
 bool menuIsItemFocusable(struct menuitem *item, struct menudialog *dialog, s32 arg2);

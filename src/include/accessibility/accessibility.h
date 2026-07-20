@@ -6,5 +6,6 @@
 void accessibilityInit(void);
 void accessibilityShutdown(void);
 s32 accessibilityIsEnabled(void);
+s32 accessibilityIsMenuNarrationEnabled(void);
 
 #endif

@@ -1742,6 +1742,7 @@
 #define MENUOP_GETCOLOUR           22
 #define MENUOP_CHECKHIDDEN         24
 #define MENUOP_25                  25
+#define MENUOP_GETACCESSIBILITYTEXT 26
 #define MENUOP_OPEN                100
 #define MENUOP_CLOSE               101
 #define MENUOP_TICK                102

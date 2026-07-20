@@ -102,6 +102,16 @@ MenuItemHandlerResult frWeaponListMenuHandler(s32 operation, struct menuitem *it
 	s32 y;
 
 	switch (operation) {
+	case MENUOP_GETACCESSIBILITYTEXT:
+		if (data->accessibility.part == MENUACCESSIBILITYPART_OPTION
+				&& data->accessibility.buffer && data->accessibility.bufferlen > 0
+				&& data->accessibility.index >= 0
+				&& data->accessibility.index < frGetNumWeaponsAvailable()) {
+			snprintf(data->accessibility.buffer, data->accessibility.bufferlen,
+					"%s", bgunGetName(frGetWeaponBySlot(data->accessibility.index)));
+			return 1;
+		}
+		break;
 	case MENUOP_GETOPTIONHEIGHT:
 		data->list.value = LINEHEIGHT;
 		break;

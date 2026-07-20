@@ -63,7 +63,7 @@ Confirmed flow:
 5. `menuResolveText` resolves a language ID, literal, or dynamic callback. `menuResolveDialogTitle` resolves dialog titles.
 6. `menuitemTick` dispatches behaviour by item type. Handlers use operations including `MENUOP_GETOPTIONTEXT`, `MENUOP_GETSELECTEDINDEX`, `MENUOP_GETSLIDER`, `MENUOP_GETSLIDERLABEL`, `MENUOP_GET`, `MENUOP_SET`, and `MENUOP_LISTITEMFOCUS`.
 
-This means focus identity is centralized but accessible names and values are type-dependent. The first menu proof should support a deliberately limited type set and log unsupported cases rather than guess.
+This means focus identity is centralized but accessible names and values are type-dependent. Milestone 4 observes the final active state once after `menuProcessInput`, resolves every currently used focusable control family by type, and logs unsupported future types rather than guessing. Custom-rendered rows expose text through one read-only generic semantic operation instead of screen-specific narration hooks.
 
 `src/game/mainmenu.c` defines the main menu and many dynamic handlers. A generic menu hook should narrate those definitions without adding calls to every individual menu.
 
@@ -204,18 +204,23 @@ Exact priority conflicts must be tuned with blind testers and recorded in tests.
 
 ### Configuration
 
-Milestones 2 and 3 implement these `pd.ini` keys, all defaulting to off:
+Milestones 2 and 3 implement these `pd.ini` keys. They now default to on for blind-user acceptance testing:
 
 ```ini
-Accessibility.Enabled=0
-Accessibility.LoggingEnabled=0
-Accessibility.SpeechEnabled=0
+Accessibility.Enabled=1
+Accessibility.LoggingEnabled=1
+Accessibility.SpeechEnabled=1
+```
+
+Milestone 4 adds another key, also enabled by default for acceptance testing:
+
+```ini
+Accessibility.MenuNarration=1
 ```
 
 Later features may add:
 
 ```ini
-Accessibility.MenuNarration=1
 Accessibility.HudNarration=1
 Accessibility.ObjectiveNarration=1
 Accessibility.StatusNarration=1
@@ -228,15 +233,19 @@ The implemented keys are constructor-registered bounded integers in the existing
 
 Milestone 2 writes `$S/accessibility.log` only when both accessibility and logging are explicitly enabled. It truncates the prior session, writes synchronous/flushed JSON Lines, and records schema, sequence, session, monotonic microseconds, complete build metadata, category, event, and a detailed message. Open/write/flush/close failures disable the logger nonfatally. The current logger is main-thread-only and records lifecycle events; later hooks will add feature context and queue decisions.
 
-The project owner has prioritized diagnostic completeness over privacy minimization during development. The logger may include resolved text, player/profile names, paths, command arguments, precise coordinates, input history, native handles, pointers, and any other feature-relevant state. Do not add redaction or field filtering. The log remains local, disabled by default, ignored by Git, and never uploaded automatically. Never include ROM contents, extracted copyrighted assets, passwords, authentication tokens, or unrelated operating-system secrets. Size limits, rotation, and public-distribution privacy policy are deferred until actual logging volume is measured.
+The project owner has prioritized diagnostic completeness over privacy minimization during development. The logger may include resolved text, player/profile names, paths, command arguments, precise coordinates, input history, native handles, pointers, and any other feature-relevant state. Do not add redaction or field filtering. The log defaults to enabled for blind-user acceptance testing, remains locally configurable, is ignored by Git, and is never uploaded automatically. Never include ROM contents, extracted copyrighted assets, passwords, authentication tokens, or unrelated operating-system secrets. Size limits, rotation, and public-distribution privacy policy are deferred until actual logging volume is measured.
 
 ## Feature architecture
 
 ### Menu narration
 
-Use two events: dialog activated and focus changed. Resolve the final pre-focused item before the first focus announcement. The menu adapter derives label, role, current value, disabled state, and position only from supported item types and handler operations. Dynamic callbacks must be evaluated in the same valid menu/player context as rendering.
+Milestone 4 uses one post-`menuProcessInput` observation for each menu slot, while the menu slot and current-player context are still valid. Comparing owned snapshots captures final initial focus, keyboard/controller/mouse focus, sibling swipes, push/pop, disabled-item correction, and value/subfocus changes without publishing intermediate transitions.
 
-Initial support should be limited to selectable actions, checkboxes, sliders, lists, and dropdowns. Unsupported item types emit one developer-log marker, not guessed speech. Briefing scrollables and objective panels need dedicated semantic readers because their useful unit is content, not focus alone.
+The menu adapter derives label, role, current value, availability, position/count, and internal subfocus for selectable actions, checkboxes, sliders, dropdowns, standard/custom lists, keyboards, scrollables, carousels, rankings, and player-stat tables. Dynamic callback results are copied immediately. Presentation-only labels, objectives panels, separators, models, meters, marquees, controller diagrams, and color swatches do not create synthetic focus announcements.
+
+Custom-rendered list rows and controls with render-only values implement one read-only `MENUOP_GETACCESSIBILITYTEXT` operation. The accessibility core switches on control type but never identifies a specific dialog to drive narration. Unknown/future focusable types are logged once per state change and never receive invented semantics.
+
+Dialog/focus/value output uses one replaceable menu announcement group: newer state interrupts stale state, unchanged frames are silent, repeat bypasses deduplication, and cancel does not change menu state. The dialog title is included only on entry or return to that dialog; focus and value changes within it speak only the current control. Sliders are reported as rounded percentages of their configured maximum. Milestone 4 speaks only menu slot zero while observing/logging every slot. Rich long-form briefing/objective navigation and final configurable actions remain later work.
 
 ### HUD and objective narration
 
@@ -262,24 +271,27 @@ This table records implemented and anticipated changes to established files so f
 | --- | --- | --- | --- | --- |
 | `CMakeLists.txt` | Register core sources and select exactly one native/null speech backend | Build platform/configuration only | `src/accessibility` is outside the game glob and platform backends must not compile together | Implemented through Milestone 3; Windows also builds/packages Tolk |
 | `port/src/main.c` | Initialize after `configInit`; shut down in `cleanup` | Lifecycle and logger availability | First UI may occur before a later tick; resources need ordered shutdown | Implemented in Milestone 2 with two calls |
-| `port/src/pdmain.c` | Call one accessibility logical tick at a stable point | Frame and per-player context | Coordinator needs one deterministic observation/queue pump point | Proposed; placement experiment required |
-| `src/game/menu.c` | Publish final initial focus and changed focus/dialog | Dialog definition, focused item, player/menu context | Focus transitions and dynamic context can be lost or repeated when inferred externally | Proposed |
-| `src/game/menuitem.c` | Expose supported role/value semantics through one adapter boundary | Item type, resolved value/list state | Values are dispatched by type and handler operations | Proposed only if menu adapter cannot query safely |
+| `port/src/pdmain.c` | Call one later accessibility logical tick if non-menu gameplay observers require it | Frame and per-player context | Menu narration has its own stable menu tick; later systems may need a broader coordinator point | Proposed later; not needed for Milestone 4 |
+| `src/game/menutick.c` | Observe the final active dialog/focus once immediately after `menuProcessInput` | Menu slot/player/root/depth and current menu/dialog state | Captures all focus paths after item state settles without hooks in every transition | Implemented in Milestone 4 with one call |
+| `src/game/menu.c` | Expose a read-only focused-item runtime-data lookup | Dialog/item to existing row/block data | Accessibility must not duplicate private row/block mapping | Implemented in Milestone 4 as `menuGetItemData` |
+| `src/game/menuitem.c` | Expose type-owned ranking/player-stats summaries only if existing APIs cannot be queried safely by the adapter | Current semantic row/stat labels and values | Compound presentation state is assembled inside type-specific render paths | Audit found no hook necessary; generic scroll/selection summaries are used |
+| `src/game/activemenu.c`, `filemgr.c`, `mainmenu.c`, `trainingmenus.c`, and `mplayer/setup.c` | Answer one read-only `MENUOP_GETACCESSIBILITYTEXT` query for focusable custom-rendered rows and carousels | Caller-owned UTF-8 buffer, requested part/index | Render callbacks otherwise expose pixels/borrowed scratch text, not stable semantics | Implemented in Milestone 4; reused handlers in `fmb.c` require no duplicate hook |
 | `src/game/hudmsg.c` | Publish after a message passes suppression and is queued | Text, type, flags, player, audio channel | Polling the HUD array loses admission order and reason | Proposed |
 | `src/game/objectives.c` | Publish inside the changed-status branch of `objectivesCheckAll` | Objective index, previous/new state | The existing HUD text can duplicate or omit useful objective identity | Proposed |
 | `src/game/chraction.c` | Optional later directional damage event after actual player damage | Victim player, magnitude band, direction/source category | Snapshot detects loss but not source/direction | Question; not needed for first status query |
 | `src/game/lv.c` | Publish or expose validated aimed-target changes after selection/filtering | Player and target prop semantic handle | Transient target order may be lost between polls | Question; first try stable tick observation |
 | `src/game/sight.c` | Expose sight-validity/friendliness helpers to adapter | Eligibility and relationship | Avoid duplicating sight rules | Question; prefer existing public APIs if sufficient |
-| `port/src/input.c` | Add configurable accessibility actions or a dispatch boundary | Repeat, status, scan, cancel, navigation commands | Current binding model represents game controls, not a separate action set | Proposed after menu narration proof |
+| `port/include/input.h` | Name provisional PC F5/F6 menu repeat/cancel keys | Development-only action identifiers | Milestone 4 needs recovery commands before the permanent binding UI exists | Implemented in Milestone 4; replacement by Milestone 5 required |
+| `port/src/input.c` | Add configurable accessibility actions or a dispatch boundary | Repeat, status, scan, cancel, navigation commands | Current binding model represents game controls, not a separate action set | Proposed for Milestone 5; not changed for provisional M4 keys |
 | `port/src/optionsmenu.c` | Add an accessibility settings entry/dialog | Existing registered values | Users need discoverable control without editing `pd.ini` | Proposed after stable config/API |
 
-`src/game/mainmenu.c`, `src/game/bondgun.c`, and `src/game/player.c` are confirmed semantic sources but should not need first-pass hooks: generic menu narration and snapshot/query APIs can consume them. Add them to the ledger only if implementation evidence proves otherwise.
+`src/game/bondgun.c` and `src/game/player.c` are confirmed future semantic sources but do not need Milestone 4 hooks. `src/game/mainmenu.c` has one read-only semantic-provider case for its custom-rendered mission list; it contains no speech policy.
 
 ## Known uncertainties and required experiments
 
 1. **Windows speech technology:** Milestone 3 implements pinned Tolk commit `e5149f0cb6ef9b941673017e0e7b7c409e485fbe` as a dynamically loaded shared library. NVDA 2026.1 runtime requests, Unicode conversion, cancellation, missing-dependency behavior, and clean unload passed; other readers and future compatibility remain unverified.
 2. **Threading:** determine whether native speech can be pumped without blocking and which calls must occur on the main thread or a COM-initialized worker.
-3. **Menu semantics:** create a type/handler matrix from real dialogs; verify dynamic label lifetime, multiline/control-code cleanup, disabled state, list position, and initial-focus timing.
+3. **Menu semantics:** Milestone 4 implements the stable post-input observer and current type/provider matrix. Compilation and lifecycle smoke evidence exist; callback lifetime, localization variants, compound-control usefulness, full input parity, first-focus timing, and the complete scripted interaction matrix still need runtime and blind-user verification.
 4. **Localization:** test all supported ROM configurations for string resolution and region-specific control codes; determine how new accessibility-only strings will be translated.
 5. **HUD duplication:** correlate subtitle splitting, HUD duplicate suppression, objective-generated HUD messages, audio channels, and cutscene transitions.
 6. **Multiple players:** define which local player's focus/status owns speech and how simultaneous events are identified or suppressed.

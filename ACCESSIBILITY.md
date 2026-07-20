@@ -4,7 +4,7 @@
 
 This work aims to make the Perfect Dark PC port meaningfully playable by blind and low-vision players, starting with nonvisual access to menus and essential game state and progressing through small, testable gameplay slices.
 
-The current branch contains the disabled-by-default Milestone 2 accessibility coordinator and opt-in diagnostic logger. It does **not** yet contain a screen-reader backend, spoken menus, navigation assistance, or accessible gameplay.
+The current branch contains the Milestone 2 accessibility coordinator/logger, the Milestone 3 Tolk/NVDA Windows speech backend, and the completed Milestone 4 menu-agnostic focus-narration slice. Accessibility, comprehensive logging, speech, and menu narration default to enabled for testing. Milestone 4 observes final menu focus, resolves all currently used focusable control families, exposes semantic text for custom-rendered rows such as `New Agent...`, replaces stale menu speech, and provides provisional F5 repeat/F6 cancel commands. Its MinGW64 build passed, and the project owner completed blind-user acceptance testing and accepted the spoken-menu behavior. Navigation assistance and accessible gameplay are not implemented.
 
 Perfect Dark is a fast first-person game whose original interface communicates heavily through graphics, spatial audio, motion, timing, and implicit world knowledge. A useful accessibility layer must expose the engine's own semantic state and provide ways to act on it. Merely reading every piece of on-screen text would leave core tasks inaccessible.
 
@@ -43,7 +43,7 @@ The first useful slice is startup through the main menus. Later slices cover HUD
 8. **Preserve game behaviour.** With accessibility disabled, hooks should be inert and game logic should remain unchanged.
 9. **Evidence over confidence.** Separate build, runtime, speech-output, task-completion, and independent-user evidence.
 10. **Blind testing early.** Short tests after each user-visible increment are more valuable than a large untested feature dump.
-11. **Diagnostic-first logging.** Keep logging opt-in and local, but record all feature-relevant state that can help explain accessibility behaviour during development.
+11. **Diagnostic-first logging.** Keep logging local and configurable, but enable comprehensive evidence by default during acceptance testing and record all feature-relevant state that can help explain accessibility behaviour.
 12. **Legal boundaries.** The project consumes a user-supplied supported ROM and never ships protected game content.
 
 ## Capability areas
@@ -114,4 +114,4 @@ A speech or non-speech indication that helps the player orient, follow a route, 
 
 **Playtest log**
 
-An opt-in, development-focused sequence of accessibility events and decisions used to correlate a tester's experience with detailed internal state. It is separate from the general engine log and may intentionally contain raw diagnostics.
+A development-focused sequence of accessibility events and decisions used to correlate a tester's experience with detailed internal state. It is enabled by default for the current acceptance-testing phase, remains configurable, is separate from the general engine log, and may intentionally contain raw diagnostics.

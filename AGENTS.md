@@ -29,7 +29,7 @@ Treat statements marked **Confirmed** as repository observations. Treat **Propos
 
 Use normal workspace tools and the default shell for repository inspection, searches, file manipulation, documentation, Git operations, and other non-build work. Do not launch MinGW64 merely to read or edit files.
 
-Use the MSYS2 MinGW64 environment only when configuring or building the game. The baseline Windows build is:
+Use the MSYS2 MinGW64 environment when configuring or building the game and whenever launching a built Perfect Dark executable. For interactive use, enter through `C:\msys64\mingw64.exe`. Noninteractive tooling may initialize the same environment with `MSYSTEM=MINGW64` and `CHERE_INVOKING=1`, then invoke `C:\msys64\usr\bin\bash.exe -lc`; the executable itself must still be started by that initialized shell. Never start `build/pd.x86_64.exe` directly from PowerShell, Command Prompt, or another normal command line, because the missing MinGW runtime search environment can produce missing-DLL errors. This runtime-launch rule applies to smoke tests, scripted tests, and debugging runs. The baseline Windows build is:
 
 ```sh
 cmake -G"Unix Makefiles" -Bbuild .
@@ -42,13 +42,13 @@ Documentation-only changes do not require a rebuild unless they alter build inpu
 
 ## Implementation rules
 
-- First prove the smallest end-to-end path: initialization, opt-in structured logging, one speech backend experiment, and clean shutdown.
+- First prove the smallest end-to-end path: initialization, structured logging, one speech backend experiment, and clean shutdown.
 - Default new accessibility features to off until their behaviour and failure mode are understood.
 - Never block the game loop on speech, logging, device enumeration, or assistive technology.
 - Give announcements priorities, deduplication keys, replacement groups, expiry times, and player context. Do not call a platform speech API directly from gameplay systems.
 - Prefer polling stable semantic state once per logical tick when that avoids several invasive hooks. Prefer a hook when polling would lose an event, source, or ordering.
 - Accessibility development logs should capture any feature-relevant state that may help implementation or diagnosis. Privacy redaction and data minimization are not requirements for these explicitly enabled local logs; resolved text, names, paths, arguments, positions, input, identifiers, and pointers may be recorded when useful.
-- Accessibility logs must be disabled by default, explicitly enabled, stored separately from the general `pd.log`, ignored by Git, and never uploaded automatically. Never log ROM contents, extracted copyrighted assets, passwords, authentication tokens, or unrelated operating-system secrets.
+- During blind-user acceptance testing, accessibility, comprehensive logging, speech, and menu narration default to enabled. Each remains configurable in `pd.ini`. Store accessibility logs separately from the general `pd.log`, ignore them in Git, and never upload them automatically. Never log ROM contents, extracted copyrighted assets, passwords, authentication tokens, or unrelated operating-system secrets.
 - Update the upstream hook ledger in `ACCESSIBILITY_ARCHITECTURE.md` whenever an established source file gains or loses an accessibility call.
 - Document new configuration keys, default values, shortcuts, announcement rules, and backend limitations in the same change that introduces them.
 - Use existing localized strings where they express the correct semantic value. Any new user-facing text needs a localization plan; do not hide English literals in hooks.
