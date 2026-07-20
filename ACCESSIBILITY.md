@@ -10,9 +10,10 @@ The current branch contains the Milestone 2 accessibility coordinator/logger, th
 
 `Accessibility.InteractableBeacons` defaults to `1` for project-owner blind-user acceptance testing. It remains configurable in `pd.ini`. Enabling the setting does not start a sound automatically; use F5 and F6 during Carrington Institute gameplay.
 
-- F5 independently toggles the nearest interactable-object beacon.
-- F6 independently toggles the nearest door beacon.
-- Neither, either, or both categories can be active. When both are active, their pulses are staggered and each follows its own nearest eligible prop.
+- F5 independently toggles automatic nearby interactable-object beacons.
+- F6 independently toggles automatic nearby door beacons.
+- Each enabled category tracks up to its three nearest eligible props. The combined target set plays through one global round-robin timeline, interleaving objects and doors so two cues never begin simultaneously.
+- The pulse gap is 750 ms divided by the scheduled target count, with a current minimum of 300 ms. Each category refreshes twice per second, and a 150-unit membership margin prevents borderline targets from repeatedly entering and leaving the rotation.
 - While a menu is open, F5 retains its menu-narration repeat action and F6 retains its speech-cancel action; gameplay beacons are reset and do not process those presses.
 - Interactable objects use a positioned `SFX_MENU_FOCUS` pulse; doors use positioned `SFX_MENU_SUBFOCUS`.
 - The implementation is limited to single-player Carrington Institute training, a 1,200-unit radius, and the two named categories.

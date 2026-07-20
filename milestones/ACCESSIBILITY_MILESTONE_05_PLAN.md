@@ -86,7 +86,7 @@ Read F5/F6 through the existing input abstraction. These bindings are provisiona
 
 The commands must do nothing to gameplay controls beyond observing these just-pressed keys. They must not press Use, turn the player, aim, alter camera orientation, or consume unrelated input.
 
-### Snapshot, rather than live nearest-target churn
+### Periodic nearest-target refresh with stable handoff
 
 On scan:
 
@@ -96,11 +96,11 @@ On scan:
 4. Collapse linked door pieces to one canonical logical door.
 5. Compute exact three-dimensional distance and player-relative bearing for eligible canonical results.
 6. Sort by ascending distance, then category, then stable prop index/identity as a deterministic tie-breaker.
-7. Store a bounded snapshot and select the nearest valid result separately for each enabled category.
+7. Store a bounded snapshot and retain up to three valid results separately for each enabled category.
 
-Do not reselect the nearest prop every frame. Each category's chosen prop remains chosen while the player approaches it. A category toggle rebuilds the shared snapshot and selects the nearest member of every enabled category. This makes the commands predictable and prevents moving objects or tiny distance changes from thrashing targets.
+Do not rebuild the target set every frame. While either category is enabled, rebuild the shared bounded snapshot every 30 logical ticks. Retain up to three targets per enabled category; keep existing members unless they disappear or an unscheduled candidate is at least 150 units nearer than the farthest retained member. This lets cues follow the player through CI while preventing moving objects or tiny distance changes from thrashing schedule membership.
 
-Before every pulse, validate that category's saved target. If it is invalid, stop its channel and advance to the next still-valid result of the same category. If none remains, keep the player's category preference active but silent and log the empty state; toggling that category off and on obtains a fresh ordering and discovers changed props.
+Interleave retained object and door targets on one global round-robin timeline. Calculate the slot gap as the 45-tick base interval divided by target count, clamped to the current 18-tick minimum. Before every pulse, validate the scheduled identity, stop the prior accessibility cue, transfer the tracked sound slot, and only then start the new positioned cue. If no valid targets remain, keep the player's category preference active but silent; periodic refresh must automatically discover later eligible props without requiring another toggle.
 
 ### Range and room policy
 
@@ -161,12 +161,12 @@ Keep cadence and distances in named constants. Do not pulse while `lvupdate60 ==
 
 ### Channel lifecycle
 
-At most two accessibility beacon channels may exist at a time: one interactable-object channel and one door channel. Their cadence is offset by half a pulse interval when both categories are enabled so the distinct cues do not begin simultaneously.
+At most one accessibility beacon channel may play at a time. The global scheduler stops the prior pulse and transfers its tracked slot before attaching the next cue, including when the category changes. Object and door targets are interleaved so their distinct cues never begin simultaneously.
 
 Stop and clear the current channel when:
 
 - the user toggles that category off;
-- that category's selected target changes;
+- the scheduler advances to another target or category;
 - the target becomes invalid;
 - a menu opens, the game pauses, a cutscene begins, the player dies, or stage/player scope changes;
 - accessibility or beacon configuration becomes disabled;
@@ -266,7 +266,7 @@ Pointer values and raw internal identifiers are welcome in these diagnostics bec
 
 Record selected snapshot index/identity/category, sound ID, requested position/prop, category-owned channel/owner/handle if available, volume and pan calculation/result, pulse due/actual tick, create result, stop reason, invalidation reason, replacement selection, empty state, and call duration.
 
-Do not log an unchanged full prop scan every frame. The scan is command-triggered; between commands log pulses, target validation changes, state transitions, and summarized periodic health only if needed. This preserves comprehensive causal evidence without turning normal frame polling into redundant gigabytes.
+Do not log an unchanged full prop audit every frame. Toggle-triggered scans record every candidate; twice-per-second automatic refreshes record scan summaries and retain/handoff/acquire/clear decisions without repeating every unchanged candidate. Between refreshes, log pulses, target validation changes, state transitions, and periodic health. This preserves comprehensive causal evidence without turning normal polling into redundant gigabytes.
 
 ## Implementation sequence
 
@@ -325,7 +325,7 @@ Exit: the acceptance criteria pass and the roadmap status is updated honestly.
 - F5 from object-inactive selects the nearest eligible object; a second F5 stops only that beacon.
 - F6 from door-inactive selects the nearest eligible door; a second F6 stops only that beacon.
 - Exercise all four states: neither, object only, door only, and both. Toggling one category never changes the other's requested active state.
-- With both active, the two category pulses are staggered and independently positioned.
+- With both active, object and door targets are interleaved, independently positioned, and never start simultaneously.
 - An empty category scan gives one concise non-spatial failure indication only if already supported, leaves that requested category active but silent, and logs every exclusion; toggling it off and on retries.
 - Rapid F5/F6 presses do not leak channels, dereference stale props, or leave more than one pulse per category active.
 - Rescan after moving produces a fresh correctly ordered snapshot.
@@ -365,7 +365,7 @@ Exit: the acceptance criteria pass and the roadmap status is updated honestly.
 - Returning to gameplay does not automatically resume an old target; a new command is required.
 - Prop destruction/deactivation between pulses does not crash or play at stale coordinates.
 - Failed sound-channel allocation is logged and nonfatal.
-- A long enabled session does not accumulate channels or continuously rescan props.
+- A long enabled session does not accumulate channels; bounded refresh scans run only at the documented twice-per-second cadence.
 
 ### Blind-user acceptance script
 
@@ -407,7 +407,7 @@ Do not add the ROM, generated executable, logs, save data, or copied build outpu
 | Category cues are too similar | Blind-test them early; record evidence and revise only the mapping if necessary. |
 | Stereo pan cannot resolve front/rear | Require the player-turn triangulation test and document the limitation for later supplemental cues. |
 | Pulse floods or masks gameplay | One channel per category, 0.75-second provisional cadence with a half-cadence category offset, immediate stop, no concurrent copies within a category, tune from evidence. |
-| Feature consumes scarce sound channels | Dedicated owner, hard maximum of two category channels, one-shot lifecycle, allocation-failure handling, and long-session channel audit. |
+| Feature consumes scarce sound channels | Dedicated owner, one globally transferred channel, one-shot lifecycle, allocation-failure handling, and long-session channel audit. |
 | Provisional keys collide or exclude controller users | Keep scope explicit and replace them in Milestone 6's discoverable binding UI. |
 | A lightweight implementer broadens the feature | Treat exactly two categories, CI-only scope, and non-goals as hard handoff constraints. |
 
@@ -433,7 +433,7 @@ Do not add the ROM, generated executable, logs, save data, or copied build outpu
 - [x] `Accessibility.InteractableBeacons` registered, default enabled for acceptance testing, with runtime initially silent until F5/F6.
 - [x] Interactable objects use positioned `SFX_MENU_FOCUS` pulses.
 - [x] Doors use positioned `SFX_MENU_SUBFOCUS` pulses.
-- [x] One-channel-per-category cadence, staggered dual-category pulses, and all planned stop/reset paths implemented.
+- [x] Global round-robin cadence, single-channel transfer, and all planned stop/reset paths implemented.
 - [x] Comprehensive command, scan, candidate, ordering, pulse, and lifecycle logs implemented.
 - [x] MinGW64 build passes using the required commands.
 - [ ] Enabled, disabled, dependency-failure, empty-result, state-transition, and long-session runtime checks pass.
@@ -447,6 +447,6 @@ After this work is accepted, Milestone 6 adds narrated, persistent accessibility
 
 ## Implementation result (2026-07-19)
 
-The engineering implementation is present and the default `ntsc-final` x86-64 MinGW64 build succeeds. The new core module is `src/accessibility/accessibility_beacon.c`; `port/src/pdmain.c` supplies one post-`lvTick` coordinator call and a pre-`lvStop` reset. No `propobj.c` or `propsnd.c` hook was required because existing read-only state and the public prop-sound API were sufficient. A dedicated sound type in `src/include/constants.h` isolates stop operations from gameplay sounds. A later performance hardening pass made each category reclaim its exact tracked channel when ownership is still safe and added 30-second process-memory/audio-channel telemetry for long-session acceptance. Blind-user testing confirmed the laptop and office-door beacons and reported that the prior choppiness was gone after hardening; a five-minute telemetry run showed bounded audio-channel use, zero allocation failures, and no sustained linear memory-growth pattern.
+The engineering implementation is present and the default `ntsc-final` x86-64 MinGW64 build succeeds. The new core module is `src/accessibility/accessibility_beacon.c`; `port/src/pdmain.c` supplies one post-`lvTick` coordinator call and a pre-`lvStop` reset. No `propobj.c` or `propsnd.c` hook was required because existing read-only state and the public prop-sound API were sufficient. A dedicated sound type in `src/include/constants.h` isolates stop operations from gameplay sounds. A later performance hardening pass made each category reclaim its exact tracked channel when ownership is still safe and added 30-second process-memory/audio-channel telemetry for long-session acceptance. Blind-user testing confirmed the laptop and office-door beacons and reported that the prior choppiness was gone after hardening; a five-minute telemetry run showed bounded audio-channel use, zero allocation failures, and no sustained linear memory-growth pattern. Subsequent usability passes added twice-per-second automatic target refresh followed by a global multi-target round-robin scheduler. Current CI policy retains three targets per category with a 150-unit membership margin and a 300 ms minimum gap; the scheduler architecture keeps the cap and density policy replaceable for future enemy tracking.
 
 Runtime and blind-user checklist items intentionally remain open. Before acceptance, verify `Accessibility.InteractableBeacons=1` in both the effective configuration and session-start log, launch only through the MinGW64 environment, run the verification matrix, and retain the accessibility session ID and relevant logs.

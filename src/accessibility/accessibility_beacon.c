@@ -29,6 +29,12 @@
 #define ACCESSIBILITY_BEACON_FADE_DISTANCE 1200.0f
 #define ACCESSIBILITY_BEACON_SILENT_DISTANCE 1400.0f
 #define ACCESSIBILITY_BEACON_PULSE_TICKS TICKS(45)
+#define ACCESSIBILITY_BEACON_REFRESH_TICKS TICKS(30)
+#define ACCESSIBILITY_BEACON_SWITCH_MARGIN 150.0f
+#define ACCESSIBILITY_BEACON_MIN_SLOT_TICKS TICKS(18)
+#define ACCESSIBILITY_BEACON_MAX_TARGETS_PER_CATEGORY 3
+#define ACCESSIBILITY_BEACON_MAX_SCHEDULE_TARGETS \
+	(ACCESSIBILITY_BEACON_MAX_TARGETS_PER_CATEGORY * 2)
 #define ACCESSIBILITY_BEACON_TELEMETRY_TICKS TICKS(60 * 30)
 #define ACCESSIBILITY_BEACON_MAX_DOOR_SIBLINGS 32
 
@@ -53,7 +59,11 @@ static struct accessibilitybeaconresult g_AccessibilityBeaconResults[ACCESSIBILI
 static s32 g_AccessibilityBeaconResultCount;
 static s32 g_AccessibilityBeaconSelectedIndex[3] = { -1, -1, -1 };
 static s32 g_AccessibilityBeaconCategoryActive[3];
-static s32 g_AccessibilityBeaconNextPulse60[3];
+static s32 g_AccessibilityBeaconNextRefresh60;
+static s32 g_AccessibilityBeaconSchedule[ACCESSIBILITY_BEACON_MAX_SCHEDULE_TARGETS];
+static s32 g_AccessibilityBeaconScheduleCount;
+static s32 g_AccessibilityBeaconScheduleCursor;
+static s32 g_AccessibilityBeaconNextScheduledPulse60;
 static s32 g_AccessibilityBeaconChannel[3] = { -1, -1, -1 };
 static u64 g_AccessibilityBeaconScanCount;
 static u64 g_AccessibilityBeaconPulseCount;
@@ -122,7 +132,7 @@ static void accessibilityBeaconLogTelemetry(const char *reason)
 	}
 
 	accessibilityLogEvent("beacon", "telemetry",
-			"reason=%s tick=%d scans=%llu pulses=%llu memory_available=%d working_set_bytes=%llu working_set_delta=%lld private_bytes=%llu private_delta=%lld snd_states=%d prop_channels_in_use=%d prop_channels_total=%d prop_channels_stopped=%d beacon_channels=%d object_channel=%d object_owned=%d door_channel=%d door_owned=%d",
+			"reason=%s tick=%d scans=%llu pulses=%llu memory_available=%d working_set_bytes=%llu working_set_delta=%lld private_bytes=%llu private_delta=%lld snd_states=%d prop_channels_in_use=%d prop_channels_total=%d prop_channels_stopped=%d beacon_channels=%d schedule_targets=%d schedule_cursor=%d next_schedule_tick=%d object_channel=%d object_owned=%d door_channel=%d door_owned=%d",
 			reason, g_Vars.lvframe60,
 			(unsigned long long)g_AccessibilityBeaconScanCount,
 			(unsigned long long)g_AccessibilityBeaconPulseCount,
@@ -131,6 +141,9 @@ static void accessibilityBeaconLogTelemetry(const char *reason)
 			(unsigned long long)privatebytes,
 			(long long)privatebytes - (long long)g_AccessibilityBeaconPrivateBaseline,
 			g_SndNumPlaying, inuse, channels, stopped, beaconowned,
+			g_AccessibilityBeaconScheduleCount,
+			g_AccessibilityBeaconScheduleCursor,
+			g_AccessibilityBeaconNextScheduledPulse60,
 			g_AccessibilityBeaconChannel[ACCESSIBILITY_BEACON_CATEGORY_OBJECT],
 			accessibilityBeaconChannelOwned(
 				g_AccessibilityBeaconChannel[ACCESSIBILITY_BEACON_CATEGORY_OBJECT]),
@@ -458,7 +471,7 @@ static void accessibilityBeaconLogProp(struct prop *prop, s32 propnum, const cha
 			distance, bearing, vertical, citag);
 }
 
-static s32 accessibilityBeaconScan(void)
+static s32 accessibilityBeaconScan(s32 detailed)
 {
 	struct prop *playerprop = g_Vars.currentplayer->prop;
 	struct prop *prop = g_Vars.activeprops;
@@ -473,8 +486,9 @@ static s32 accessibilityBeaconScan(void)
 	memset(g_AccessibilityBeaconResults, 0, sizeof(g_AccessibilityBeaconResults));
 
 	accessibilityLogEvent("beacon", "scan_start",
-			"scan=%llu stage=%d player=%d player_prop=%p player_propnum=%d position=%.3f,%.3f,%.3f theta=%.3f rooms=%d,%d,%d,%d,%d,%d,%d,%d radius=%.1f capacity=%d",
+			"scan=%llu mode=%s stage=%d player=%d player_prop=%p player_propnum=%d position=%.3f,%.3f,%.3f theta=%.3f rooms=%d,%d,%d,%d,%d,%d,%d,%d radius=%.1f capacity=%d",
 			(unsigned long long)g_AccessibilityBeaconScanCount,
+			detailed ? "toggle" : "automatic_refresh",
 			g_Vars.stagenum, g_Vars.currentplayernum, (void *)playerprop,
 			accessibilityBeaconPropNum(playerprop), playerprop->pos.x, playerprop->pos.y,
 			playerprop->pos.z, g_Vars.currentplayer->vv_theta,
@@ -540,8 +554,10 @@ static s32 accessibilityBeaconScan(void)
 			duplicate = accessibilityBeaconFindCanonical(result.category, canonicalpropnum);
 
 			if (duplicate >= 0) {
-				accessibilityBeaconLogProp(prop, propnum, "excluded", "duplicate_canonical_door",
-						canonicalpropnum, siblingcount, distance, bearing, vertical, citag);
+				if (detailed) {
+					accessibilityBeaconLogProp(prop, propnum, "excluded", "duplicate_canonical_door",
+							canonicalpropnum, siblingcount, distance, bearing, vertical, citag);
+				}
 				prop = prop->next;
 				continue;
 			}
@@ -555,11 +571,15 @@ static s32 accessibilityBeaconScan(void)
 			result.vertical = vertical;
 			eligiblecount++;
 			accessibilityBeaconStoreResult(&result);
-			accessibilityBeaconLogProp(prop, propnum, "included", reason,
-					canonicalpropnum, siblingcount, distance, bearing, vertical, citag);
+			if (detailed) {
+				accessibilityBeaconLogProp(prop, propnum, "included", reason,
+						canonicalpropnum, siblingcount, distance, bearing, vertical, citag);
+			}
 		} else {
-			accessibilityBeaconLogProp(prop, propnum, "excluded", reason,
-					canonicalpropnum, siblingcount, distance, bearing, vertical, citag);
+			if (detailed) {
+				accessibilityBeaconLogProp(prop, propnum, "excluded", reason,
+						canonicalpropnum, siblingcount, distance, bearing, vertical, citag);
+			}
 		}
 
 		prop = prop->next;
@@ -575,7 +595,7 @@ static s32 accessibilityBeaconScan(void)
 	qsort(g_AccessibilityBeaconResults, g_AccessibilityBeaconResultCount,
 			sizeof(g_AccessibilityBeaconResults[0]), accessibilityBeaconResultCompare);
 
-	for (traversed = 0; traversed < g_AccessibilityBeaconResultCount; traversed++) {
+	for (traversed = 0; detailed && traversed < g_AccessibilityBeaconResultCount; traversed++) {
 		struct accessibilitybeaconresult *item = &g_AccessibilityBeaconResults[traversed];
 
 		accessibilityLogEvent("beacon", "scan_result",
@@ -587,8 +607,9 @@ static s32 accessibilityBeaconScan(void)
 	}
 
 	accessibilityLogEvent("beacon", "scan_complete",
-			"scan=%llu traversed=%d eligible=%d stored=%d truncated=%d",
-			(unsigned long long)g_AccessibilityBeaconScanCount, considered,
+			"scan=%llu mode=%s traversed=%d eligible=%d stored=%d truncated=%d",
+			(unsigned long long)g_AccessibilityBeaconScanCount,
+			detailed ? "toggle" : "automatic_refresh", considered,
 			eligiblecount, g_AccessibilityBeaconResultCount,
 			eligiblecount > g_AccessibilityBeaconResultCount);
 
@@ -707,7 +728,6 @@ static void accessibilityBeaconClearSelection(s32 category, const char *reason)
 
 	accessibilityBeaconStopSound(category, selected, reason);
 	g_AccessibilityBeaconSelectedIndex[category] = -1;
-	g_AccessibilityBeaconNextPulse60[category] = 0;
 }
 
 static void accessibilityBeaconDeactivateCategory(s32 category, const char *reason)
@@ -735,6 +755,12 @@ static void accessibilityBeaconDeactivateAll(const char *reason, s32 clearresult
 	if (clearresults) {
 		g_AccessibilityBeaconResultCount = 0;
 		memset(g_AccessibilityBeaconResults, 0, sizeof(g_AccessibilityBeaconResults));
+		memset(g_AccessibilityBeaconSchedule, -1,
+				sizeof(g_AccessibilityBeaconSchedule));
+		g_AccessibilityBeaconScheduleCount = 0;
+		g_AccessibilityBeaconScheduleCursor = 0;
+		g_AccessibilityBeaconNextScheduledPulse60 = 0;
+		g_AccessibilityBeaconNextRefresh60 = 0;
 		accessibilityBeaconResetTelemetry();
 	}
 }
@@ -760,7 +786,9 @@ static s32 accessibilityBeaconSelect(s32 category, s32 index, const char *reason
 		previous = &g_AccessibilityBeaconResults[g_AccessibilityBeaconSelectedIndex[category]];
 	}
 
-	accessibilityBeaconStopSound(category, previous, "selection_changed");
+	if (previous) {
+		accessibilityBeaconStopSound(category, previous, "selection_changed");
+	}
 
 	if (!accessibilityBeaconValidateResult(selected, &validreason)) {
 		accessibilityLogEvent("beacon", "selection_rejected",
@@ -771,7 +799,6 @@ static s32 accessibilityBeaconSelect(s32 category, s32 index, const char *reason
 	}
 
 	g_AccessibilityBeaconSelectedIndex[category] = index;
-	g_AccessibilityBeaconNextPulse60[category] = g_Vars.lvframe60;
 	accessibilityLogEvent("beacon", "selection",
 			"index=%d count=%d category=%s propnum=%d canonical_propnum=%d entity=%p distance=%.3f bearing=%.3f vertical=%.3f sound=%d reason=%s",
 			index, g_AccessibilityBeaconResultCount,
@@ -782,60 +809,282 @@ static s32 accessibilityBeaconSelect(s32 category, s32 index, const char *reason
 	return true;
 }
 
-static s32 accessibilityBeaconSelectNextValid(s32 category, s32 start, const char *reason)
+static s32 accessibilityBeaconFindResultIdentity(
+		const struct accessibilitybeaconresult *identity)
 {
-	s32 offset;
+	s32 i;
 
-	for (offset = 0; offset < g_AccessibilityBeaconResultCount; offset++) {
-		s32 index = (start + offset) % g_AccessibilityBeaconResultCount;
-		const char *validreason;
-		struct accessibilitybeaconresult *result = &g_AccessibilityBeaconResults[index];
+	if (!identity) {
+		return -1;
+	}
 
-		if (result->category != category) {
+	for (i = 0; i < g_AccessibilityBeaconResultCount; i++) {
+		struct accessibilitybeaconresult *result = &g_AccessibilityBeaconResults[i];
+
+		if (result->category == identity->category
+				&& result->canonicalpropnum == identity->canonicalpropnum
+				&& result->entity == identity->entity) {
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+static s32 accessibilityBeaconScheduleContains(s32 *indices, s32 count, s32 index)
+{
+	s32 i;
+
+	for (i = 0; i < count; i++) {
+		if (indices[i] == index) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static s32 accessibilityBeaconScheduleSlotTicks(void)
+{
+	s32 ticks;
+
+	if (g_AccessibilityBeaconScheduleCount <= 0) {
+		return ACCESSIBILITY_BEACON_PULSE_TICKS;
+	}
+
+	ticks = ACCESSIBILITY_BEACON_PULSE_TICKS / g_AccessibilityBeaconScheduleCount;
+
+	if (ticks < ACCESSIBILITY_BEACON_MIN_SLOT_TICKS) {
+		ticks = ACCESSIBILITY_BEACON_MIN_SLOT_TICKS;
+	}
+
+	return ticks;
+}
+
+static void accessibilityBeaconBuildSchedule(
+		struct accessibilitybeaconresult *previous, s32 previouscount,
+		struct accessibilitybeaconresult *nexttarget, s32 preservenext,
+		const char *reason)
+{
+	s32 chosen[3][ACCESSIBILITY_BEACON_MAX_TARGETS_PER_CATEGORY];
+	s32 chosencount[3] = { 0, 0, 0 };
+	s32 category;
+	s32 rank;
+	s32 i;
+	s32 j;
+	s32 changed = false;
+
+	memset(chosen, -1, sizeof(chosen));
+	memset(g_AccessibilityBeaconSchedule, -1, sizeof(g_AccessibilityBeaconSchedule));
+	g_AccessibilityBeaconScheduleCount = 0;
+
+	for (category = ACCESSIBILITY_BEACON_CATEGORY_OBJECT;
+			category <= ACCESSIBILITY_BEACON_CATEGORY_DOOR; category++) {
+		if (!g_AccessibilityBeaconCategoryActive[category]) {
 			continue;
 		}
 
-		if (accessibilityBeaconValidateResult(result, &validreason)) {
-			return accessibilityBeaconSelect(category, index, reason);
+		for (i = 0; i < previouscount
+				&& chosencount[category] < ACCESSIBILITY_BEACON_MAX_TARGETS_PER_CATEGORY; i++) {
+			s32 index;
+
+			if (previous[i].category != category) {
+				continue;
+			}
+
+			index = accessibilityBeaconFindResultIdentity(&previous[i]);
+
+			if (index >= 0 && !accessibilityBeaconScheduleContains(
+					chosen[category], chosencount[category], index)) {
+				chosen[category][chosencount[category]++] = index;
+			}
 		}
 
-		accessibilityLogEvent("beacon", "selection_skip",
-				"index=%d category=%s propnum=%d reason=%s", index,
-				accessibilityBeaconCategoryName(category), result->propnum, validreason);
+		for (i = 0; i < g_AccessibilityBeaconResultCount
+				&& chosencount[category] < ACCESSIBILITY_BEACON_MAX_TARGETS_PER_CATEGORY; i++) {
+			if (g_AccessibilityBeaconResults[i].category == category
+					&& !accessibilityBeaconScheduleContains(
+						chosen[category], chosencount[category], i)) {
+				chosen[category][chosencount[category]++] = i;
+			}
+		}
+
+		for (i = 0; i < g_AccessibilityBeaconResultCount; i++) {
+			s32 farthest = -1;
+
+			if (g_AccessibilityBeaconResults[i].category != category
+					|| accessibilityBeaconScheduleContains(
+						chosen[category], chosencount[category], i)) {
+				continue;
+			}
+
+			for (j = 0; j < chosencount[category]; j++) {
+				if (farthest < 0
+						|| g_AccessibilityBeaconResults[chosen[category][j]].distance
+								> g_AccessibilityBeaconResults[chosen[category][farthest]].distance) {
+					farthest = j;
+				}
+			}
+
+			if (farthest >= 0
+					&& g_AccessibilityBeaconResults[i].distance
+							+ ACCESSIBILITY_BEACON_SWITCH_MARGIN
+						< g_AccessibilityBeaconResults[chosen[category][farthest]].distance) {
+				chosen[category][farthest] = i;
+			}
+		}
+
+		for (i = 0; i < chosencount[category]; i++) {
+			for (j = i + 1; j < chosencount[category]; j++) {
+				if (g_AccessibilityBeaconResults[chosen[category][j]].distance
+						< g_AccessibilityBeaconResults[chosen[category][i]].distance) {
+					s32 temp = chosen[category][i];
+					chosen[category][i] = chosen[category][j];
+					chosen[category][j] = temp;
+				}
+			}
+		}
 	}
 
-	accessibilityBeaconClearSelection(category, "no_valid_results");
-	accessibilityLogEvent("beacon", "empty",
-			"category=%s reason=%s", accessibilityBeaconCategoryName(category), reason);
-	return false;
+	for (rank = 0; rank < ACCESSIBILITY_BEACON_MAX_TARGETS_PER_CATEGORY; rank++) {
+		for (category = ACCESSIBILITY_BEACON_CATEGORY_OBJECT;
+				category <= ACCESSIBILITY_BEACON_CATEGORY_DOOR; category++) {
+			if (rank < chosencount[category]) {
+				g_AccessibilityBeaconSchedule[g_AccessibilityBeaconScheduleCount++]
+						= chosen[category][rank];
+			}
+		}
+	}
+
+	if (preservenext && nexttarget) {
+		g_AccessibilityBeaconScheduleCursor = 0;
+
+		for (i = 0; i < g_AccessibilityBeaconScheduleCount; i++) {
+			struct accessibilitybeaconresult *result
+					= &g_AccessibilityBeaconResults[g_AccessibilityBeaconSchedule[i]];
+
+			if (result->category == nexttarget->category
+					&& result->canonicalpropnum == nexttarget->canonicalpropnum
+					&& result->entity == nexttarget->entity) {
+				g_AccessibilityBeaconScheduleCursor = i;
+				break;
+			}
+		}
+	} else {
+		g_AccessibilityBeaconScheduleCursor = 0;
+	}
+
+	if (previouscount != g_AccessibilityBeaconScheduleCount) {
+		changed = true;
+	} else {
+		for (i = 0; i < previouscount; i++) {
+			struct accessibilitybeaconresult *result
+					= &g_AccessibilityBeaconResults[g_AccessibilityBeaconSchedule[i]];
+
+			if (previous[i].category != result->category
+					|| previous[i].canonicalpropnum != result->canonicalpropnum
+					|| previous[i].entity != result->entity) {
+				changed = true;
+				break;
+			}
+		}
+	}
+
+	accessibilityLogEvent("beacon", "schedule",
+			"reason=%s changed=%d targets=%d cursor=%d slot_ticks=%d base_ticks=%d min_slot_ticks=%d per_category_cap=%d",
+			reason, changed, g_AccessibilityBeaconScheduleCount,
+			g_AccessibilityBeaconScheduleCursor, accessibilityBeaconScheduleSlotTicks(),
+			ACCESSIBILITY_BEACON_PULSE_TICKS, ACCESSIBILITY_BEACON_MIN_SLOT_TICKS,
+			ACCESSIBILITY_BEACON_MAX_TARGETS_PER_CATEGORY);
+
+	if (changed) {
+		for (i = 0; i < g_AccessibilityBeaconScheduleCount; i++) {
+			struct accessibilitybeaconresult *result
+					= &g_AccessibilityBeaconResults[g_AccessibilityBeaconSchedule[i]];
+
+			accessibilityLogEvent("beacon", "schedule_target",
+					"slot=%d category=%s propnum=%d canonical_propnum=%d distance=%.3f entity=%p",
+					i, accessibilityBeaconCategoryName(result->category),
+					result->propnum, result->canonicalpropnum,
+					result->distance, result->entity);
+		}
+	}
+}
+
+static void accessibilityBeaconRefreshActive(void)
+{
+	struct accessibilitybeaconresult previous[ACCESSIBILITY_BEACON_MAX_SCHEDULE_TARGETS];
+	struct accessibilitybeaconresult playing[3];
+	struct accessibilitybeaconresult nexttarget;
+	s32 playingvalid[3] = { false, false, false };
+	s32 previouscount = 0;
+	s32 nextvalid = false;
+	s32 category;
+	s32 i;
+
+	for (category = ACCESSIBILITY_BEACON_CATEGORY_OBJECT;
+			category <= ACCESSIBILITY_BEACON_CATEGORY_DOOR; category++) {
+		s32 index = g_AccessibilityBeaconSelectedIndex[category];
+
+		if (index >= 0 && index < g_AccessibilityBeaconResultCount) {
+			playing[category] = g_AccessibilityBeaconResults[index];
+			playingvalid[category] = true;
+		}
+	}
+
+	for (i = 0; i < g_AccessibilityBeaconScheduleCount; i++) {
+		s32 index = g_AccessibilityBeaconSchedule[i];
+
+		if (index >= 0 && index < g_AccessibilityBeaconResultCount) {
+			previous[previouscount++] = g_AccessibilityBeaconResults[index];
+		}
+	}
+
+	if (g_AccessibilityBeaconScheduleCount > 0
+			&& g_AccessibilityBeaconScheduleCursor >= 0
+			&& g_AccessibilityBeaconScheduleCursor < g_AccessibilityBeaconScheduleCount) {
+		nexttarget = g_AccessibilityBeaconResults[
+				g_AccessibilityBeaconSchedule[g_AccessibilityBeaconScheduleCursor]];
+		nextvalid = true;
+	}
+
+	accessibilityBeaconScan(false);
+
+	for (category = ACCESSIBILITY_BEACON_CATEGORY_OBJECT;
+			category <= ACCESSIBILITY_BEACON_CATEGORY_DOOR; category++) {
+		if (playingvalid[category]) {
+			s32 index = accessibilityBeaconFindResultIdentity(&playing[category]);
+
+			if (index >= 0 && g_AccessibilityBeaconCategoryActive[category]) {
+				g_AccessibilityBeaconSelectedIndex[category] = index;
+			} else {
+				accessibilityBeaconStopSound(category, &playing[category],
+						"automatic_target_removed");
+			}
+		}
+	}
+
+	accessibilityBeaconBuildSchedule(previous, previouscount,
+			nextvalid ? &nexttarget : NULL, nextvalid, "automatic_refresh");
+
+	if (g_AccessibilityBeaconScheduleCount > 0
+			&& g_AccessibilityBeaconNextScheduledPulse60 == 0) {
+		g_AccessibilityBeaconNextScheduledPulse60 = g_Vars.lvframe60;
+	}
+
+	g_AccessibilityBeaconNextRefresh60
+			= g_Vars.lvframe60 + ACCESSIBILITY_BEACON_REFRESH_TICKS;
 }
 
 static void accessibilityBeaconRescanActive(const char *reason)
 {
-	s32 category;
-
-	for (category = ACCESSIBILITY_BEACON_CATEGORY_OBJECT;
-			category <= ACCESSIBILITY_BEACON_CATEGORY_DOOR; category++) {
-		if (g_AccessibilityBeaconCategoryActive[category]) {
-			accessibilityBeaconClearSelection(category, "rescan");
-		}
-	}
-
-	accessibilityBeaconScan();
-
-	for (category = ACCESSIBILITY_BEACON_CATEGORY_OBJECT;
-			category <= ACCESSIBILITY_BEACON_CATEGORY_DOOR; category++) {
-		if (g_AccessibilityBeaconCategoryActive[category]) {
-			accessibilityBeaconSelectNextValid(category, 0, reason);
-		}
-	}
-
-	if (g_AccessibilityBeaconCategoryActive[ACCESSIBILITY_BEACON_CATEGORY_OBJECT]
-			&& g_AccessibilityBeaconCategoryActive[ACCESSIBILITY_BEACON_CATEGORY_DOOR]
-			&& g_AccessibilityBeaconSelectedIndex[ACCESSIBILITY_BEACON_CATEGORY_DOOR] >= 0) {
-		g_AccessibilityBeaconNextPulse60[ACCESSIBILITY_BEACON_CATEGORY_DOOR]
-				= g_Vars.lvframe60 + ACCESSIBILITY_BEACON_PULSE_TICKS / 2;
-	}
+	accessibilityBeaconClearSelection(ACCESSIBILITY_BEACON_CATEGORY_OBJECT, "rescan");
+	accessibilityBeaconClearSelection(ACCESSIBILITY_BEACON_CATEGORY_DOOR, "rescan");
+	accessibilityBeaconScan(true);
+	accessibilityBeaconBuildSchedule(NULL, 0, NULL, false, reason);
+	g_AccessibilityBeaconNextScheduledPulse60 = g_Vars.lvframe60;
+	g_AccessibilityBeaconNextRefresh60
+			= g_Vars.lvframe60 + ACCESSIBILITY_BEACON_REFRESH_TICKS;
 }
 
 static void accessibilityBeaconPulse(s32 category,
@@ -875,14 +1124,12 @@ static void accessibilityBeaconPulse(s32 category,
 
 	g_AccessibilityBeaconChannel[category] = channel;
 	g_AccessibilityBeaconPulseCount++;
-	g_AccessibilityBeaconNextPulse60[category]
-			= g_Vars.lvframe60 + ACCESSIBILITY_BEACON_PULSE_TICKS;
 
 	if (accessibilityBeaconChannelIndexValid(channel)) {
 		accessibilityLogEvent("beacon", "pulse",
 				"pulse=%llu tick=%d next_tick=%d index=%d category=%s sound=%d channel=%d previous_channel=%d reused=%d prop=%p propnum=%d position=%.3f,%.3f,%.3f distance=%.3f bearing=%.3f vertical=%.3f volume=%d pan=%d ranges=%.1f,%.1f,%.1f result=created",
 				(unsigned long long)g_AccessibilityBeaconPulseCount,
-				g_Vars.lvframe60, g_AccessibilityBeaconNextPulse60[category],
+				g_Vars.lvframe60, g_AccessibilityBeaconNextScheduledPulse60,
 				g_AccessibilityBeaconSelectedIndex[category],
 				accessibilityBeaconCategoryName(selected->category), sound, channel,
 				previouschannel, reused,
@@ -900,6 +1147,86 @@ static void accessibilityBeaconPulse(s32 category,
 				previouschannel, reused,
 				(void *)prop, selected->propnum);
 	}
+}
+
+static void accessibilityBeaconPlayScheduledPulse(void)
+{
+	s32 attempts = g_AccessibilityBeaconScheduleCount;
+
+	while (attempts-- > 0 && g_AccessibilityBeaconScheduleCount > 0) {
+		s32 slot = g_AccessibilityBeaconScheduleCursor;
+		s32 index = g_AccessibilityBeaconSchedule[slot];
+		struct accessibilitybeaconresult *selected;
+		struct prop *prop;
+		const char *validreason;
+		s32 category;
+		s32 reusablechannel = -1;
+		s32 slot_ticks = accessibilityBeaconScheduleSlotTicks();
+
+		g_AccessibilityBeaconScheduleCursor
+				= (g_AccessibilityBeaconScheduleCursor + 1)
+						% g_AccessibilityBeaconScheduleCount;
+
+		if (index < 0 || index >= g_AccessibilityBeaconResultCount) {
+			accessibilityLogEvent("beacon", "schedule_skip",
+					"slot=%d index=%d reason=result_index_invalid", slot, index);
+			continue;
+		}
+
+		selected = &g_AccessibilityBeaconResults[index];
+		category = selected->category;
+		prop = accessibilityBeaconValidateResult(selected, &validreason);
+
+		if (!prop || !g_AccessibilityBeaconCategoryActive[category]) {
+			accessibilityLogEvent("beacon", "schedule_skip",
+					"slot=%d index=%d category=%s propnum=%d reason=%s",
+					slot, index, accessibilityBeaconCategoryName(category),
+					selected->propnum,
+					prop ? "category_inactive" : validreason);
+			g_AccessibilityBeaconNextRefresh60 = g_Vars.lvframe60;
+			continue;
+		}
+
+		if (accessibilityBeaconChannelIndexValid(
+				g_AccessibilityBeaconChannel[ACCESSIBILITY_BEACON_CATEGORY_OBJECT])) {
+			reusablechannel
+					= g_AccessibilityBeaconChannel[ACCESSIBILITY_BEACON_CATEGORY_OBJECT];
+		} else if (accessibilityBeaconChannelIndexValid(
+				g_AccessibilityBeaconChannel[ACCESSIBILITY_BEACON_CATEGORY_DOOR])) {
+			reusablechannel
+					= g_AccessibilityBeaconChannel[ACCESSIBILITY_BEACON_CATEGORY_DOOR];
+		}
+
+		accessibilityBeaconClearSelection(
+				ACCESSIBILITY_BEACON_CATEGORY_OBJECT, "round_robin_advance");
+		accessibilityBeaconClearSelection(
+				ACCESSIBILITY_BEACON_CATEGORY_DOOR, "round_robin_advance");
+
+		if (accessibilityBeaconChannelIndexValid(reusablechannel)
+				&& ((g_PsChannels[reusablechannel].flags & PSFLAG_FREE)
+					|| g_PsChannels[reusablechannel].type == PSTYPE_ACCESSIBILITY_BEACON)) {
+			g_AccessibilityBeaconChannel[category] = reusablechannel;
+		}
+
+		if (!accessibilityBeaconSelect(category, index, "round_robin")) {
+			continue;
+		}
+
+		g_AccessibilityBeaconNextScheduledPulse60
+				= g_Vars.lvframe60 + slot_ticks;
+		accessibilityBeaconPulse(category, selected, prop);
+		accessibilityLogEvent("beacon", "schedule_pulse",
+				"slot=%d next_cursor=%d targets=%d slot_ticks=%d category=%s propnum=%d channel=%d next_tick=%d",
+				slot, g_AccessibilityBeaconScheduleCursor,
+				g_AccessibilityBeaconScheduleCount, slot_ticks,
+				accessibilityBeaconCategoryName(category), selected->propnum,
+				g_AccessibilityBeaconChannel[category],
+				g_AccessibilityBeaconNextScheduledPulse60);
+		return;
+	}
+
+	g_AccessibilityBeaconNextScheduledPulse60
+			= g_Vars.lvframe60 + ACCESSIBILITY_BEACON_MIN_SLOT_TICKS;
 }
 
 static const char *accessibilityBeaconScopeReason(void)
@@ -945,7 +1272,6 @@ void accessibilityBeaconTick(void)
 	s32 objectrequested = false;
 	s32 doorrequested = false;
 	s32 toggled = false;
-	s32 category;
 
 	if (scopereason) {
 		if (accessibilityBeaconAnyActive() || g_AccessibilityBeaconResultCount) {
@@ -1007,48 +1333,25 @@ void accessibilityBeaconTick(void)
 		} else {
 			g_AccessibilityBeaconResultCount = 0;
 			memset(g_AccessibilityBeaconResults, 0, sizeof(g_AccessibilityBeaconResults));
+			memset(g_AccessibilityBeaconSchedule, -1,
+					sizeof(g_AccessibilityBeaconSchedule));
+			g_AccessibilityBeaconScheduleCount = 0;
+			g_AccessibilityBeaconScheduleCursor = 0;
+			g_AccessibilityBeaconNextScheduledPulse60 = 0;
+			g_AccessibilityBeaconNextRefresh60 = 0;
 			accessibilityBeaconResetTelemetry();
 		}
 	}
 
-	for (category = ACCESSIBILITY_BEACON_CATEGORY_OBJECT;
-			category <= ACCESSIBILITY_BEACON_CATEGORY_DOOR; category++) {
-		if (g_AccessibilityBeaconCategoryActive[category]
-				&& g_AccessibilityBeaconSelectedIndex[category] >= 0) {
-			struct accessibilitybeaconresult *selected;
-			struct prop *prop;
-			const char *validreason;
-			s32 selectedindex = g_AccessibilityBeaconSelectedIndex[category];
+	if (accessibilityBeaconAnyActive() && g_Vars.lvupdate60 > 0
+			&& g_Vars.lvframe60 >= g_AccessibilityBeaconNextRefresh60) {
+		accessibilityBeaconRefreshActive();
+	}
 
-			if (selectedindex >= g_AccessibilityBeaconResultCount) {
-				accessibilityBeaconClearSelection(category, "selection_index_invalid");
-				continue;
-			}
-
-			selected = &g_AccessibilityBeaconResults[selectedindex];
-			prop = accessibilityBeaconValidateResult(selected, &validreason);
-
-			if (!prop) {
-				s32 next = (selectedindex + 1)
-						% g_AccessibilityBeaconResultCount;
-
-				accessibilityLogEvent("beacon", "target_invalidated",
-						"index=%d propnum=%d category=%s reason=%s",
-						selectedindex, selected->propnum,
-						accessibilityBeaconCategoryName(selected->category), validreason);
-				accessibilityBeaconSelectNextValid(category, next, "target_invalidated");
-				continue;
-			}
-
-			if (g_Vars.lvupdate60 > 0
-					&& g_Vars.lvframe60 >= g_AccessibilityBeaconNextPulse60[category]) {
-				accessibilityBeaconPulse(category, selected, prop);
-
-				if (g_AccessibilityBeaconChannel[category] < 0) {
-					accessibilityBeaconDeactivateCategory(category, "channel_allocation_failed");
-				}
-			}
-		}
+	if (accessibilityBeaconAnyActive() && g_Vars.lvupdate60 > 0
+			&& g_AccessibilityBeaconScheduleCount > 0
+			&& g_Vars.lvframe60 >= g_AccessibilityBeaconNextScheduledPulse60) {
+		accessibilityBeaconPlayScheduledPulse();
 	}
 
 	if (accessibilityBeaconAnyActive() && g_Vars.lvupdate60 > 0
@@ -1063,15 +1366,21 @@ void accessibilityBeaconReset(const char *reason)
 	accessibilityBeaconDeactivateAll(reason ? reason : "reset", true);
 
 	accessibilityLogEvent("beacon", "reset",
-			"reason=%s scans=%llu pulses=%llu enabled=%d radius=%.1f cadence_ticks=%d object_sound=%d door_sound=%d",
+			"reason=%s scans=%llu pulses=%llu enabled=%d radius=%.1f base_cadence_ticks=%d refresh_ticks=%d min_slot_ticks=%d per_category_cap=%d object_sound=%d door_sound=%d",
 			reason ? reason : "reset",
 			(unsigned long long)g_AccessibilityBeaconScanCount,
 			(unsigned long long)g_AccessibilityBeaconPulseCount,
 			accessibilityIsInteractableBeaconsEnabled(),
 			ACCESSIBILITY_BEACON_SCAN_DISTANCE, ACCESSIBILITY_BEACON_PULSE_TICKS,
+			ACCESSIBILITY_BEACON_REFRESH_TICKS, ACCESSIBILITY_BEACON_MIN_SLOT_TICKS,
+			ACCESSIBILITY_BEACON_MAX_TARGETS_PER_CATEGORY,
 			SFX_MENU_FOCUS, SFX_MENU_SUBFOCUS);
 
 	g_AccessibilityBeaconScanCount = 0;
 	g_AccessibilityBeaconPulseCount = 0;
+	g_AccessibilityBeaconScheduleCount = 0;
+	g_AccessibilityBeaconScheduleCursor = 0;
+	g_AccessibilityBeaconNextScheduledPulse60 = 0;
+	g_AccessibilityBeaconNextRefresh60 = 0;
 	accessibilityBeaconResetTelemetry();
 }
