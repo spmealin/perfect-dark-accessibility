@@ -17,6 +17,7 @@
 #ifdef PLATFORM_WIN32
 
 #include <windows.h>
+#include <psapi.h>
 
 // on win32 we use waitable timers instead of nanosleep
 typedef HANDLE WINAPI (*CREATEWAITABLETIMEREXAFN)(LPSECURITY_ATTRIBUTES, LPCSTR, DWORD, DWORD);
@@ -155,6 +156,41 @@ u64 sysGetMicroseconds(void)
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 	return ((u64)tv.tv_sec * USEC_IN_SEC + (u64)tv.tv_usec) - startTick;
+}
+
+s32 sysGetProcessMemoryUsage(u64 *workingSetBytes, u64 *privateBytes)
+{
+#ifdef PLATFORM_WIN32
+	PROCESS_MEMORY_COUNTERS_EX counters;
+
+	memset(&counters, 0, sizeof(counters));
+	counters.cb = sizeof(counters);
+
+	if (!GetProcessMemoryInfo(GetCurrentProcess(),
+			(PROCESS_MEMORY_COUNTERS *)&counters, sizeof(counters))) {
+		return 0;
+	}
+
+	if (workingSetBytes) {
+		*workingSetBytes = counters.WorkingSetSize;
+	}
+
+	if (privateBytes) {
+		*privateBytes = counters.PrivateUsage;
+	}
+
+	return 1;
+#else
+	if (workingSetBytes) {
+		*workingSetBytes = 0;
+	}
+
+	if (privateBytes) {
+		*privateBytes = 0;
+	}
+
+	return 0;
+#endif
 }
 
 s32 sysLogIsOpen(void)

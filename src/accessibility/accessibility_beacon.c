@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "platform.h"
+#include "system.h"
 #include "constants.h"
 #include "bss.h"
 #include "data.h"
@@ -28,6 +29,7 @@
 #define ACCESSIBILITY_BEACON_FADE_DISTANCE 1200.0f
 #define ACCESSIBILITY_BEACON_SILENT_DISTANCE 1400.0f
 #define ACCESSIBILITY_BEACON_PULSE_TICKS TICKS(45)
+#define ACCESSIBILITY_BEACON_TELEMETRY_TICKS TICKS(60 * 30)
 #define ACCESSIBILITY_BEACON_MAX_DOOR_SIBLINGS 32
 
 enum accessibilitybeaconcategory {
@@ -55,6 +57,90 @@ static s32 g_AccessibilityBeaconNextPulse60[3];
 static s32 g_AccessibilityBeaconChannel[3] = { -1, -1, -1 };
 static u64 g_AccessibilityBeaconScanCount;
 static u64 g_AccessibilityBeaconPulseCount;
+static s32 g_AccessibilityBeaconNextTelemetry60;
+static s32 g_AccessibilityBeaconMemoryBaselineValid;
+static u64 g_AccessibilityBeaconWorkingSetBaseline;
+static u64 g_AccessibilityBeaconPrivateBaseline;
+
+static s32 accessibilityBeaconChannelCount(void)
+{
+	return IS4MB() ? 30 : 40;
+}
+
+static s32 accessibilityBeaconChannelIndexValid(s32 channel)
+{
+	return g_PsChannels && channel >= 0
+			&& channel < accessibilityBeaconChannelCount();
+}
+
+static s32 accessibilityBeaconChannelOwned(s32 channel)
+{
+	return accessibilityBeaconChannelIndexValid(channel)
+			&& (g_PsChannels[channel].flags & PSFLAG_FREE) == 0
+			&& g_PsChannels[channel].type == PSTYPE_ACCESSIBILITY_BEACON;
+}
+
+static void accessibilityBeaconResetTelemetry(void)
+{
+	g_AccessibilityBeaconNextTelemetry60 = 0;
+	g_AccessibilityBeaconMemoryBaselineValid = false;
+	g_AccessibilityBeaconWorkingSetBaseline = 0;
+	g_AccessibilityBeaconPrivateBaseline = 0;
+}
+
+static void accessibilityBeaconLogTelemetry(const char *reason)
+{
+	u64 workingset = 0;
+	u64 privatebytes = 0;
+	s32 memoryavailable;
+	s32 channels = accessibilityBeaconChannelCount();
+	s32 inuse = 0;
+	s32 beaconowned = 0;
+	s32 stopped = 0;
+	s32 i;
+
+	for (i = 0; g_PsChannels && i < channels; i++) {
+		if ((g_PsChannels[i].flags & PSFLAG_FREE) == 0) {
+			inuse++;
+
+			if (g_PsChannels[i].type == PSTYPE_ACCESSIBILITY_BEACON) {
+				beaconowned++;
+			}
+
+			if (g_PsChannels[i].flags2 & PSFLAG2_STOPPED) {
+				stopped++;
+			}
+		}
+	}
+
+	memoryavailable = sysGetProcessMemoryUsage(&workingset, &privatebytes);
+
+	if (memoryavailable && !g_AccessibilityBeaconMemoryBaselineValid) {
+		g_AccessibilityBeaconMemoryBaselineValid = true;
+		g_AccessibilityBeaconWorkingSetBaseline = workingset;
+		g_AccessibilityBeaconPrivateBaseline = privatebytes;
+	}
+
+	accessibilityLogEvent("beacon", "telemetry",
+			"reason=%s tick=%d scans=%llu pulses=%llu memory_available=%d working_set_bytes=%llu working_set_delta=%lld private_bytes=%llu private_delta=%lld snd_states=%d prop_channels_in_use=%d prop_channels_total=%d prop_channels_stopped=%d beacon_channels=%d object_channel=%d object_owned=%d door_channel=%d door_owned=%d",
+			reason, g_Vars.lvframe60,
+			(unsigned long long)g_AccessibilityBeaconScanCount,
+			(unsigned long long)g_AccessibilityBeaconPulseCount,
+			memoryavailable, (unsigned long long)workingset,
+			(long long)workingset - (long long)g_AccessibilityBeaconWorkingSetBaseline,
+			(unsigned long long)privatebytes,
+			(long long)privatebytes - (long long)g_AccessibilityBeaconPrivateBaseline,
+			g_SndNumPlaying, inuse, channels, stopped, beaconowned,
+			g_AccessibilityBeaconChannel[ACCESSIBILITY_BEACON_CATEGORY_OBJECT],
+			accessibilityBeaconChannelOwned(
+				g_AccessibilityBeaconChannel[ACCESSIBILITY_BEACON_CATEGORY_OBJECT]),
+			g_AccessibilityBeaconChannel[ACCESSIBILITY_BEACON_CATEGORY_DOOR],
+			accessibilityBeaconChannelOwned(
+				g_AccessibilityBeaconChannel[ACCESSIBILITY_BEACON_CATEGORY_DOOR]));
+
+	g_AccessibilityBeaconNextTelemetry60
+			= g_Vars.lvframe60 + ACCESSIBILITY_BEACON_TELEMETRY_TICKS;
+}
 
 static const char *accessibilityBeaconCategoryName(s32 category)
 {
@@ -580,6 +666,8 @@ static void accessibilityBeaconStopSound(s32 category,
 		struct accessibilitybeaconresult *result, const char *reason)
 {
 	struct prop *prop = NULL;
+	s32 channel = g_AccessibilityBeaconChannel[category];
+	s32 owned = accessibilityBeaconChannelOwned(channel);
 
 	if (result && result->propnum >= 0 && result->propnum < g_Vars.maxprops && g_Vars.props) {
 		prop = &g_Vars.props[result->propnum];
@@ -589,14 +677,18 @@ static void accessibilityBeaconStopSound(s32 category,
 		}
 	}
 
+	if (owned && (!prop || g_PsChannels[channel].prop != prop)) {
+		psStopChannel(channel);
+	}
+
 	if (prop && g_PsChannels) {
 		psStopSound(prop, PSTYPE_ACCESSIBILITY_BEACON, 0);
 	}
 
-	if (g_AccessibilityBeaconChannel[category] >= 0) {
+	if (channel >= 0) {
 		accessibilityLogEvent("beacon", "sound_stop",
-				"channel=%d prop=%p propnum=%d category=%s reason=%s",
-				g_AccessibilityBeaconChannel[category], (void *)prop,
+				"channel=%d owned=%d prop=%p propnum=%d category=%s reason=%s",
+				channel, owned, (void *)prop,
 				result ? result->propnum : -1,
 				accessibilityBeaconCategoryName(category), reason);
 	}
@@ -643,6 +735,7 @@ static void accessibilityBeaconDeactivateAll(const char *reason, s32 clearresult
 	if (clearresults) {
 		g_AccessibilityBeaconResultCount = 0;
 		memset(g_AccessibilityBeaconResults, 0, sizeof(g_AccessibilityBeaconResults));
+		accessibilityBeaconResetTelemetry();
 	}
 }
 
@@ -749,26 +842,50 @@ static void accessibilityBeaconPulse(s32 category,
 		struct accessibilitybeaconresult *selected, struct prop *prop)
 {
 	s16 sound = accessibilityBeaconCategorySound(selected->category);
-	s16 channel;
+	s16 previouschannel = g_AccessibilityBeaconChannel[category];
+	s16 channel = -1;
+	s32 reused = false;
 
-	psStopSound(prop, PSTYPE_ACCESSIBILITY_BEACON, 0);
-	channel = psCreate(NULL, prop, sound, -1, AL_VOL_FULL, 0,
+	if (accessibilityBeaconChannelIndexValid(previouschannel)
+			&& ((g_PsChannels[previouschannel].flags & PSFLAG_FREE)
+				|| g_PsChannels[previouschannel].type == PSTYPE_ACCESSIBILITY_BEACON)
+			&& ((g_PsChannels[previouschannel].flags & PSFLAG_FREE) == 0
+				|| g_SndNumPlaying <= 12)) {
+		if ((g_PsChannels[previouschannel].flags & PSFLAG_FREE) == 0) {
+			psStopChannel(previouschannel);
+		}
+
+		channel = psCreate(&g_PsChannels[previouschannel], prop, sound, -1,
+				AL_VOL_FULL, 0, PSFLAG2_MPPAUSABLE,
+				PSTYPE_ACCESSIBILITY_BEACON, NULL, -1.0f,
+				NULL, -1, ACCESSIBILITY_BEACON_FULL_DISTANCE,
+				ACCESSIBILITY_BEACON_FADE_DISTANCE,
+				ACCESSIBILITY_BEACON_SILENT_DISTANCE);
+		reused = channel == previouschannel;
+	}
+
+	if (channel < 0) {
+		/* Stop an untracked legacy pulse on this prop before claiming a slot. */
+		psStopSound(prop, PSTYPE_ACCESSIBILITY_BEACON, 0);
+		channel = psCreate(NULL, prop, sound, -1, AL_VOL_FULL, 0,
 			PSFLAG2_MPPAUSABLE, PSTYPE_ACCESSIBILITY_BEACON, NULL, -1.0f,
 			NULL, -1, ACCESSIBILITY_BEACON_FULL_DISTANCE,
 			ACCESSIBILITY_BEACON_FADE_DISTANCE, ACCESSIBILITY_BEACON_SILENT_DISTANCE);
+	}
 
 	g_AccessibilityBeaconChannel[category] = channel;
 	g_AccessibilityBeaconPulseCount++;
 	g_AccessibilityBeaconNextPulse60[category]
 			= g_Vars.lvframe60 + ACCESSIBILITY_BEACON_PULSE_TICKS;
 
-	if (channel >= 0 && channel < 40 && g_PsChannels) {
+	if (accessibilityBeaconChannelIndexValid(channel)) {
 		accessibilityLogEvent("beacon", "pulse",
-				"pulse=%llu tick=%d next_tick=%d index=%d category=%s sound=%d channel=%d prop=%p propnum=%d position=%.3f,%.3f,%.3f distance=%.3f bearing=%.3f vertical=%.3f volume=%d pan=%d ranges=%.1f,%.1f,%.1f result=created",
+				"pulse=%llu tick=%d next_tick=%d index=%d category=%s sound=%d channel=%d previous_channel=%d reused=%d prop=%p propnum=%d position=%.3f,%.3f,%.3f distance=%.3f bearing=%.3f vertical=%.3f volume=%d pan=%d ranges=%.1f,%.1f,%.1f result=created",
 				(unsigned long long)g_AccessibilityBeaconPulseCount,
 				g_Vars.lvframe60, g_AccessibilityBeaconNextPulse60[category],
 				g_AccessibilityBeaconSelectedIndex[category],
 				accessibilityBeaconCategoryName(selected->category), sound, channel,
+				previouschannel, reused,
 				(void *)prop, selected->propnum, prop->pos.x, prop->pos.y, prop->pos.z,
 				selected->distance, selected->bearing, selected->vertical,
 				g_PsChannels[channel].currentvol, g_PsChannels[channel].currentpan,
@@ -776,10 +893,11 @@ static void accessibilityBeaconPulse(s32 category,
 				ACCESSIBILITY_BEACON_SILENT_DISTANCE);
 	} else {
 		accessibilityLogEvent("beacon", "pulse",
-				"pulse=%llu tick=%d index=%d category=%s sound=%d channel=%d prop=%p propnum=%d result=channel_allocation_failed",
+				"pulse=%llu tick=%d index=%d category=%s sound=%d channel=%d previous_channel=%d reused=%d prop=%p propnum=%d result=channel_allocation_failed",
 				(unsigned long long)g_AccessibilityBeaconPulseCount,
 				g_Vars.lvframe60, g_AccessibilityBeaconSelectedIndex[category],
 				accessibilityBeaconCategoryName(selected->category), sound, channel,
+				previouschannel, reused,
 				(void *)prop, selected->propnum);
 	}
 }
@@ -889,6 +1007,7 @@ void accessibilityBeaconTick(void)
 		} else {
 			g_AccessibilityBeaconResultCount = 0;
 			memset(g_AccessibilityBeaconResults, 0, sizeof(g_AccessibilityBeaconResults));
+			accessibilityBeaconResetTelemetry();
 		}
 	}
 
@@ -931,6 +1050,12 @@ void accessibilityBeaconTick(void)
 			}
 		}
 	}
+
+	if (accessibilityBeaconAnyActive() && g_Vars.lvupdate60 > 0
+			&& (g_AccessibilityBeaconNextTelemetry60 == 0
+				|| g_Vars.lvframe60 >= g_AccessibilityBeaconNextTelemetry60)) {
+		accessibilityBeaconLogTelemetry(toggled ? "category_toggle" : "periodic");
+	}
 }
 
 void accessibilityBeaconReset(const char *reason)
@@ -948,4 +1073,5 @@ void accessibilityBeaconReset(const char *reason)
 
 	g_AccessibilityBeaconScanCount = 0;
 	g_AccessibilityBeaconPulseCount = 0;
+	accessibilityBeaconResetTelemetry();
 }

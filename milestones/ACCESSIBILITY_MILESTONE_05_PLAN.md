@@ -437,7 +437,7 @@ Do not add the ROM, generated executable, logs, save data, or copied build outpu
 - [x] Comprehensive command, scan, candidate, ordering, pulse, and lifecycle logs implemented.
 - [x] MinGW64 build passes using the required commands.
 - [ ] Enabled, disabled, dependency-failure, empty-result, state-transition, and long-session runtime checks pass.
-- [ ] Blind tester distinguishes both categories and finds the named CI object and door without live sighted direction.
+- [x] Blind tester distinguishes both categories and finds the CI laptop and office door without live sighted direction.
 - [ ] Known spatial limitations and any tuned constants are recorded.
 - [ ] Roadmap status updated to “engineering complete, accessibility validation pending” or “complete” based on actual evidence.
 
@@ -447,6 +447,6 @@ After this work is accepted, Milestone 6 adds narrated, persistent accessibility
 
 ## Implementation result (2026-07-19)
 
-The engineering implementation is present and the default `ntsc-final` x86-64 MinGW64 build succeeds. The new core module is `src/accessibility/accessibility_beacon.c`; `port/src/pdmain.c` supplies one post-`lvTick` coordinator call and a pre-`lvStop` reset. No `propobj.c` or `propsnd.c` hook was required because existing read-only state and the public prop-sound API were sufficient. A dedicated sound type in `src/include/constants.h` isolates stop operations from gameplay sounds.
+The engineering implementation is present and the default `ntsc-final` x86-64 MinGW64 build succeeds. The new core module is `src/accessibility/accessibility_beacon.c`; `port/src/pdmain.c` supplies one post-`lvTick` coordinator call and a pre-`lvStop` reset. No `propobj.c` or `propsnd.c` hook was required because existing read-only state and the public prop-sound API were sufficient. A dedicated sound type in `src/include/constants.h` isolates stop operations from gameplay sounds. A later performance hardening pass made each category reclaim its exact tracked channel when ownership is still safe and added 30-second process-memory/audio-channel telemetry for long-session acceptance. Blind-user testing confirmed the laptop and office-door beacons and reported that the prior choppiness was gone after hardening; a five-minute telemetry run showed bounded audio-channel use, zero allocation failures, and no sustained linear memory-growth pattern.
 
 Runtime and blind-user checklist items intentionally remain open. Before acceptance, verify `Accessibility.InteractableBeacons=1` in both the effective configuration and session-start log, launch only through the MinGW64 environment, run the verification matrix, and retain the accessibility session ID and relevant logs.

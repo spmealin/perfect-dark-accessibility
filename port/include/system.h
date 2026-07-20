@@ -21,6 +21,7 @@ const char *sysArgGetString(const char *arg);
 s32 sysArgGetInt(const char *arg, s32 defval);
 
 u64 sysGetMicroseconds(void);
+s32 sysGetProcessMemoryUsage(u64 *workingSetBytes, u64 *privateBytes);
 
 void sysFatalError(const char *fmt, ...) __attribute__((noreturn));
 
