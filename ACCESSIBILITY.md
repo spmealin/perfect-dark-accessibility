@@ -4,7 +4,20 @@
 
 This work aims to make the Perfect Dark PC port meaningfully playable by blind and low-vision players, starting with nonvisual access to menus and essential game state and progressing through small, testable gameplay slices.
 
-The current branch contains the Milestone 2 accessibility coordinator/logger, the Milestone 3 Tolk/NVDA Windows speech backend, and the completed Milestone 4 menu-agnostic focus-narration slice. Accessibility, comprehensive logging, speech, and menu narration default to enabled for testing. Milestone 4 observes final menu focus, resolves all currently used focusable control families, exposes semantic text for custom-rendered rows such as `New Agent...`, replaces stale menu speech, and provides provisional F5 repeat/F6 cancel commands. Its MinGW64 build passed, and the project owner completed blind-user acceptance testing and accepted the spoken-menu behavior. Navigation assistance and accessible gameplay are not implemented.
+The current branch contains the Milestone 2 accessibility coordinator/logger, the Milestone 3 Tolk/NVDA Windows speech backend, the completed Milestone 4 menu-agnostic focus-narration slice, and an engineering-complete Milestone 5 Carrington Institute beacon prototype awaiting runtime and blind-user acceptance. Accessibility, comprehensive logging, speech, and menu narration default to enabled for testing. Milestone 4 observes final menu focus, resolves all currently used focusable control families, exposes semantic text for custom-rendered rows such as `New Agent...`, replaces stale menu speech, and provides provisional F5 repeat/F6 cancel commands. Its MinGW64 build passed, and the project owner completed blind-user acceptance testing and accepted the spoken-menu behavior. The Milestone 5 prototype can spatially beacon nearby CI interactable objects and doors; broader gameplay accessibility and navigation are not implemented.
+
+### Carrington Institute beacon prototype
+
+`Accessibility.InteractableBeacons` defaults to `1` for project-owner blind-user acceptance testing. It remains configurable in `pd.ini`. Enabling the setting does not start a sound automatically; use F5 and F6 during Carrington Institute gameplay.
+
+- F5 independently toggles the nearest interactable-object beacon.
+- F6 independently toggles the nearest door beacon.
+- Neither, either, or both categories can be active. When both are active, their pulses are staggered and each follows its own nearest eligible prop.
+- While a menu is open, F5 retains its menu-narration repeat action and F6 retains its speech-cancel action; gameplay beacons are reset and do not process those presses.
+- Interactable objects use a positioned `SFX_MENU_FOCUS` pulse; doors use positioned `SFX_MENU_SUBFOCUS`.
+- The implementation is limited to single-player Carrington Institute training, a 1,200-unit radius, and the two named categories.
+- Menus, pause, cutscenes, death, unsupported player counts, stage changes, invalid props, and audio allocation failures stop the beacon.
+- The current stereo positional system primarily conveys left/right and distance. Front/rear and vertical usefulness require runtime and blind-user evidence and are not yet claimed.
 
 Perfect Dark is a fast first-person game whose original interface communicates heavily through graphics, spatial audio, motion, timing, and implicit world knowledge. A useful accessibility layer must expose the engine's own semantic state and provide ways to act on it. Merely reading every piece of on-screen text would leave core tasks inaccessible.
 

@@ -49,17 +49,29 @@ This roadmap orders work by user task and evidence. Milestones are not promises 
 - **Risks and unknowns:** Dynamic callback lifetimes, custom-rendered rows, compound controls, localization/control codes, multiple local players, and provisional input collisions need measured evidence.
 - **Explicit non-goals:** Structural support for all current focusable control families is not a claim that every menu or briefing has been blind-user validated. Rich briefing/objective reading and permanent configurable actions remain later milestones.
 
-## Milestone 5 — Discoverable accessibility settings
+## Milestone 5 — Carrington Institute interactable beacons
+
+- **Status:** Engineering implementation and the MinGW64 `ntsc-final` x86-64 build are complete. In-game runtime verification, cue tuning, and blind-user acceptance are pending.
+- **Detailed plan:** `milestones/ACCESSIBILITY_MILESTONE_05_PLAN.md` is the authoritative implementation handoff.
+- **Goal:** Let a blind player deliberately select and spatially locate two useful classes of nearby Carrington Institute props: interactable objects and doors.
+- **User-visible result:** F5 independently toggles a positioned beacon on the nearest eligible interactable object and F6 does the same for the nearest eligible door, allowing neither, either, or both categories to run. Interactable objects use `SFX_MENU_FOCUS`; doors use `SFX_MENU_SUBFOCUS`. When both are active their pulses are staggered. No new audio asset is required.
+- **Systems:** Accessibility gameplay coordinator, read-only prop eligibility, active-prop traversal, door sibling canonicalization, player-relative ordering, `propsnd` positional audio, provisional PC actions, configuration, and structured logging.
+- **Acceptance:** In Carrington Institute training, results are stable, range-limited, and limited to the two named categories; cues remain attached to their props; open/closed/locked/destroyed/deactivated state updates safely; menu/pause/cutscene/death transitions silence the beacon; a blind tester can distinguish the categories and independently locate a designated laptop or terminal and a designated door.
+- **Logging/evidence:** Record every scan and per-category toggle, player pose/rooms, every considered prop and raw identity, inclusion/exclusion reason, canonical door group, exact distance/bearing/order, each category's selected target, sound/channel/pulse lifecycle, invalidation, and timing.
+- **Risks and unknowns:** Interaction checks currently mix actionability with on-screen/facing constraints; closed doors require different knowledge checks than ordinary objects; prop lifetimes and linked doors need safe handling; existing stereo panning may require turning to resolve front from rear; the two existing cues must be validated for real-world distinguishability.
+- **Explicit non-goals:** No procedural or external audio, HRTF, global radar, automatic movement/interaction, other stages, other prop categories, permanent bindings/options UI, or claim of a generalized scanner.
+
+## Milestone 6 — Discoverable accessibility settings
 
 - **Goal:** Expose stable accessibility configuration in the existing PC options UI and define collision-free input actions.
-- **User-visible result:** Users can enable/disable speech, categories, verbosity, logging, repeat, and cancel without hand-editing `pd.ini`.
+- **User-visible result:** Users can enable/disable speech, categories, verbosity, logging, repeat, cancel, and the proven beacon actions without hand-editing `pd.ini`.
 - **Systems:** `port/src/optionsmenu.c`, config registry, input binding model, menu narration.
 - **Acceptance:** Settings are themselves narrated, persist across restart, have safe defaults, and remain operable when a backend is unavailable; reset/default behaviour is documented; input conflicts are detected or avoided.
 - **Logging/evidence:** Record setting category, old/new values, originating input/action, configuration path, and any raw detail useful for diagnosing persistence or conflicts.
 - **Risks and unknowns:** The present binding model targets game controls and may need a separate accessibility action set; settings may be needed before a profile loads.
-- **Explicit non-goals:** Do not add scanner/navigation bindings until those behaviours exist.
+- **Explicit non-goals:** Do not add bindings for unimplemented scanner categories or navigation behaviours.
 
-## Milestone 6 — HUD, subtitles, briefings, and objectives
+## Milestone 7 — HUD, subtitles, briefings, and objectives
 
 - **Goal:** Make mission text and objective changes available without duplicate or stale speech.
 - **User-visible result:** Accepted HUD messages and eligible subtitles are announced; briefings/current objectives can be read deliberately; objective state changes take priority.
@@ -69,7 +81,7 @@ This roadmap orders work by user task and evidence. Milestones are not promises 
 - **Risks and unknowns:** Voice audio, subtitle timing, splitting, and control codes can differ by region/version.
 - **Explicit non-goals:** Do not promise audio description of uncaptioned cinematic action or all mission text coverage.
 
-## Milestone 7 — Player status and inventory queries
+## Milestone 8 — Player status and inventory queries
 
 - **Goal:** Provide calm, accurate access to health, shield, equipped weapon/function, ammo, and inventory.
 - **User-visible result:** On-demand status is concise; important health/ammo thresholds are optional and non-repetitive; weapon changes are announced.
@@ -79,7 +91,7 @@ This roadmap orders work by user task and evidence. Milestones are not promises 
 - **Risks and unknowns:** Health changes arise outside gun damage, dual-wield ammo semantics are complex, and polling and event hooks must not conflict.
 - **Explicit non-goals:** No automatic tactical advice, aim changes, or inventory selection on the user's behalf.
 
-## Milestone 8 — Targeting feedback
+## Milestone 9 — Targeting feedback
 
 - **Goal:** Tell a player when a valid aimed target changes and provide truthful relationship/distance cues.
 - **User-visible result:** Optional speech/earcons identify acquired/lost targets and a repeat command describes the current known target.
@@ -89,17 +101,17 @@ This roadmap orders work by user task and evidence. Milestones are not promises 
 - **Risks and unknowns:** Target state may leak information, fluctuate per frame, or have sight/weapon-specific rules.
 - **Explicit non-goals:** No aim automation, snap-to-target, enemy radar, or hit guarantee.
 
-## Milestone 9 — Interaction scanner
+## Milestone 10 — Broader interaction scanner
 
-- **Goal:** Let a player deliberately discover nearby actionable objects without narrating the whole scene.
-- **User-visible result:** A scan summarizes eligible doors, pickups, terminals, characters, and mission objects by direction/distance; results can be stepped or repeated.
-- **Systems:** prop/object types, interaction eligibility, rooms/visibility, localized object names, spatial formatter, action bindings.
+- **Goal:** Generalize the Carrington Institute beacon proof into a deliberate, knowledge-safe query for a broader set of nearby actionable things.
+- **User-visible result:** A scan summarizes eligible doors, pickups, terminals, characters, and mission objects by direction/distance; results can be stepped or repeated, while positioned beacons remain available for supported categories.
+- **Systems:** Milestone 5 beacon core, prop/object types, generalized interaction eligibility, rooms/visibility, localized object names, spatial formatter, and permanent action bindings.
 - **Acceptance:** In a controlled area, results are stable, ordered, range-limited, knowledge-safe, and actionable; opened/collected/destroyed state updates; overlapping objects and empty scans recover cleanly; a blind tester locates and activates chosen objects.
 - **Logging/evidence:** Query origin and position, all considered props with semantic/raw IDs and pointers, eligibility/filter reasons, exact ordering/distance, selected result, and movement context.
 - **Risks and unknowns:** Engine object names may be absent or visual-only, while visibility, knowledge, and actionability can differ.
 - **Explicit non-goals:** No global enemy radar, hidden-object disclosure, or automatic interaction.
 
-## Milestone 10 — Navigation prototype
+## Milestone 11 — Navigation prototype
 
 - **Goal:** Evaluate nonvisual orientation and route guidance in one bounded Carrington Institute/training route.
 - **User-visible result:** Heading/landmark queries and optional cues support following a short route, detecting deviation, and recovering.
@@ -109,7 +121,7 @@ This roadmap orders work by user task and evidence. Milestones are not promises 
 - **Risks and unknowns:** Source navigation data may not map to human routes; vertical transitions and dynamic doors may invalidate cues.
 - **Explicit non-goals:** Do not generalize beyond the named route or move/steer the player automatically.
 
-## Milestone 11 — One end-to-end playable segment
+## Milestone 12 — One end-to-end playable segment
 
 - **Goal:** Combine menus, briefing/objectives, status, targeting, scanner, and navigation for one explicitly named training or campaign segment.
 - **User-visible result:** A blind player can start, understand the goal, perform required interactions/combat, recognize success/failure, and return to a known menu state.
@@ -119,7 +131,7 @@ This roadmap orders work by user task and evidence. Milestones are not promises 
 - **Risks and unknowns:** Segment-specific scripts and state can conceal brittle assumptions; success may depend on tester game familiarity.
 - **Explicit non-goals:** One segment does not prove campaign coverage; avoid one-off hard-coded narration that cannot become a maintained semantic rule.
 
-## Milestone 12 — Broader coverage and release readiness
+## Milestone 13 — Broader coverage and release readiness
 
 - **Goal:** Expand proven patterns, harden compatibility, document coverage, and establish sustainable upstream maintenance.
 - **User-visible result:** A published matrix accurately identifies accessible menus/modes/stages, limitations, setup, shortcuts, privacy, and troubleshooting.

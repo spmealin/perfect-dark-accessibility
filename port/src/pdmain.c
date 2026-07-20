@@ -73,6 +73,7 @@
 #include "data.h"
 #include "types.h"
 #include "system.h"
+#include "accessibility/accessibility_beacon.h"
 
 extern u8 *g_MempHeap;
 extern u32 g_MempHeapSize;
@@ -510,6 +511,7 @@ void mainLoop(void)
 			}
 		}
 
+		accessibilityBeaconReset("stage_stop");
 		lvStop();
 		mempDisablePool(MEMPOOL_STAGE);
 		mempDisablePool(MEMPOOL_7);
@@ -543,6 +545,7 @@ void mainTick(void)
 			gDPSetTile(gdl++, G_IM_FMT_RGBA, G_IM_SIZ_4b, 0, 0x0100, 6, 0, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOLOD);
 
 			lvTick();
+			accessibilityBeaconTick();
 			playermgrShuffle();
 
 			if (g_StageNum < STAGE_TITLE) {

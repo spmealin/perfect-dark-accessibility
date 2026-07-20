@@ -40,6 +40,8 @@ The project supports multiple ROM configurations, so region-sensitive changes sh
 
 Use a legally obtained supported ROM placed as described by `README.md`. Do not include its location or fingerprint in reports.
 
+For project-owner blind-user acceptance builds, every implemented accessibility feature must default to enabled. A feature may default off during its initial engineering investigation, but it must be switched on before acceptance handoff. Inspect the effective `pd.ini` beside the executable and the accessibility session-start record rather than assuming a compiled default took effect. The tester must not have to discover or manually enable the feature being accepted.
+
 For a normal startup smoke test:
 
 Launch every built Perfect Dark executable from the MSYS2 MinGW64 environment, including smoke tests, scripted interaction tests, and debugging runs. Launching `build/pd.x86_64.exe` from PowerShell, Command Prompt, or another normal command line can fail with missing-DLL errors because the MinGW runtime search environment is absent.
@@ -137,6 +139,18 @@ The menu-narration implementation compiles for the default `ntsc-final` x86-64 W
 An isolated startup/shutdown smoke used `--savedir ./build/m4-smoke`, narration/logging enabled, and speech disabled. The executable was launched through an initialized MSYS2 MinGW64 environment and closed through its window's normal close event. It loaded the lawful local ROM, created the game window, wrote parseable accessibility lifecycle records, reset the menu observer, and exited with status zero. Accessibility session `1784499754` recorded `menu_narration=1`; no menu observations occurred because the automated smoke did not progress through the title sequence.
 
 The project owner subsequently performed blind-user acceptance testing and reported that the spoken-menu behavior was working perfectly after two requested refinements: dialog titles are spoken on entry/return but not for every option, and sliders are reported as percentages rather than raw engine units. On that acceptance result, the owner declared Milestone 4 complete. A focused semantic harness, exhaustive control-family matrix, performance measurements, other-region builds, and broader backend-failure combinations were not supplied as part of that user acceptance and remain useful regression follow-up rather than claims made by this milestone.
+
+### Milestone 5 engineering evidence (2026-07-19)
+
+The Carrington Institute interactable-beacon implementation compiles for the default `ntsc-final` x86-64 Windows target. Configuration used the Unix Makefiles generator and the documented MinGW64 toolchain; `cmake --build build -j4 -- -O` completed and produced `build/pd.x86_64.exe`. The build emitted existing project and vendored-Tolk warnings but no warning from `accessibility_beacon.c`.
+
+Source review confirms that the implementation is inert unless both top-level accessibility and `Accessibility.InteractableBeacons=1` are effective. In unobscured gameplay, F5 independently toggles the nearest interactable-object beacon and F6 independently toggles the nearest door beacon; neither, either, or both categories can be active. The same keys retain their existing repeat/cancel meanings in menus. The scan is restricted to single-player `STAGE_CITRAINING`, active props, a 1,200-unit radius, and the current/directly-adjacent room boundary. Interactable objects require a CI tag or established terminal/interactable flag; doors are canonicalized through sibling links. It does not call `propFindForInteract`, `objTestForInteract`, `doorTestForInteract`, `propobjInteract`, or `propdoorInteract`, so scanning cannot select or activate the game's interaction target.
+
+The two categories use existing positioned one-shot sounds: `SFX_MENU_FOCUS` for interactable objects and `SFX_MENU_SUBFOCUS` for doors. Both are owned by the new `PSTYPE_ACCESSIBILITY_BEACON`; the runtime tracks one target and channel per category and offsets door pulse timing when both categories are enabled. A stage-stop hook clears both before prop/audio teardown. Candidate, ordering, selection, door state, sound channel, volume/pan, pulse, invalidation, command, and lifecycle details are written through the existing accessibility logger when logging is enabled.
+
+No executable runtime, audible localization, empty-scan, real CI candidate-set, transition, long-session, or blind-user task evidence has been collected for Milestone 5 yet. Do not describe the beacon as runtime-verified or accessibility-complete until the matrix in `milestones/ACCESSIBILITY_MILESTONE_05_PLAN.md` is exercised.
+
+The project owner's first enabled runtime pass subsequently confirmed that the laptop beacon sounded, proving the command, scan, pulse scheduling, and positioned object-audio path. No office-door beacon was available. The comprehensive log identified the nearby unlocked, healthy door between rooms 14 and 16 as prop 9 and showed it was rejected solely because its setup flags included `OBJFLAG_DEACTIVATED`. The game's `doorTestForInteract` does not reject doors on that flag; it checks `OBJFLAG_CANNOT_ACTIVATE` and `maxfrac`. The beacon predicate was corrected to keep `OBJFLAG_DEACTIVATED` object-only. Door audio and blind-user localization remain pending a rebuilt retest.
 
 ## Menu interaction scripts
 

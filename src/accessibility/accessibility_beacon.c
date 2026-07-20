@@ -1,0 +1,951 @@
+#include <ultra64.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include "platform.h"
+#include "constants.h"
+#include "bss.h"
+#include "data.h"
+#include "game/atan2f.h"
+#include "game/bg.h"
+#include "game/lv.h"
+#include "game/propobj.h"
+#include "game/propsnd.h"
+#include "lib/collision.h"
+#include "lib/vars.h"
+#include "accessibility/accessibility.h"
+#include "accessibility/accessibility_beacon.h"
+#include "accessibility/accessibility_log.h"
+#ifndef PLATFORM_N64
+#include "input.h"
+#endif
+
+#define ACCESSIBILITY_BEACON_CAPACITY 64
+#define ACCESSIBILITY_BEACON_SCAN_DISTANCE 1200.0f
+#define ACCESSIBILITY_BEACON_SCAN_DISTANCE_SQ \
+	(ACCESSIBILITY_BEACON_SCAN_DISTANCE * ACCESSIBILITY_BEACON_SCAN_DISTANCE)
+#define ACCESSIBILITY_BEACON_FULL_DISTANCE 200.0f
+#define ACCESSIBILITY_BEACON_FADE_DISTANCE 1200.0f
+#define ACCESSIBILITY_BEACON_SILENT_DISTANCE 1400.0f
+#define ACCESSIBILITY_BEACON_PULSE_TICKS TICKS(45)
+#define ACCESSIBILITY_BEACON_MAX_DOOR_SIBLINGS 32
+
+enum accessibilitybeaconcategory {
+	ACCESSIBILITY_BEACON_CATEGORY_NONE = 0,
+	ACCESSIBILITY_BEACON_CATEGORY_OBJECT = 1,
+	ACCESSIBILITY_BEACON_CATEGORY_DOOR = 2,
+};
+
+struct accessibilitybeaconresult {
+	s32 category;
+	s32 propnum;
+	s32 canonicalpropnum;
+	void *entity;
+	u32 citag;
+	f32 distance;
+	f32 bearing;
+	f32 vertical;
+};
+
+static struct accessibilitybeaconresult g_AccessibilityBeaconResults[ACCESSIBILITY_BEACON_CAPACITY];
+static s32 g_AccessibilityBeaconResultCount;
+static s32 g_AccessibilityBeaconSelectedIndex[3] = { -1, -1, -1 };
+static s32 g_AccessibilityBeaconCategoryActive[3];
+static s32 g_AccessibilityBeaconNextPulse60[3];
+static s32 g_AccessibilityBeaconChannel[3] = { -1, -1, -1 };
+static u64 g_AccessibilityBeaconScanCount;
+static u64 g_AccessibilityBeaconPulseCount;
+
+static const char *accessibilityBeaconCategoryName(s32 category)
+{
+	switch (category) {
+	case ACCESSIBILITY_BEACON_CATEGORY_OBJECT:
+		return "interactable_object";
+	case ACCESSIBILITY_BEACON_CATEGORY_DOOR:
+		return "door";
+	default:
+		return "none";
+	}
+}
+
+static s16 accessibilityBeaconCategorySound(s32 category)
+{
+	return category == ACCESSIBILITY_BEACON_CATEGORY_DOOR
+		? SFX_MENU_SUBFOCUS : SFX_MENU_FOCUS;
+}
+
+static s32 accessibilityBeaconPropNum(const struct prop *prop)
+{
+	uintptr_t address;
+	uintptr_t first;
+	uintptr_t end;
+
+	if (!prop || !g_Vars.props || g_Vars.maxprops <= 0) {
+		return -1;
+	}
+
+	address = (uintptr_t)prop;
+	first = (uintptr_t)g_Vars.props;
+	end = first + sizeof(struct prop) * (uintptr_t)g_Vars.maxprops;
+
+	if (address < first || address >= end || (address - first) % sizeof(struct prop) != 0) {
+		return -1;
+	}
+
+	return (s32)((address - first) / sizeof(struct prop));
+}
+
+static s32 accessibilityBeaconRoomValid(RoomNum room)
+{
+	return room > 0 && room < g_Vars.roomcount;
+}
+
+static s32 accessibilityBeaconRoomsRelated(RoomNum *playerrooms, RoomNum *targetrooms)
+{
+	s32 i;
+	s32 j;
+
+	if (!playerrooms || !targetrooms) {
+		return false;
+	}
+
+	for (i = 0; i < 8 && playerrooms[i] != -1; i++) {
+		if (!accessibilityBeaconRoomValid(playerrooms[i])) {
+			continue;
+		}
+
+		for (j = 0; j < 8 && targetrooms[j] != -1; j++) {
+			if (!accessibilityBeaconRoomValid(targetrooms[j])) {
+				continue;
+			}
+
+			if (playerrooms[i] == targetrooms[j]
+					|| bgRoomsAreNeighbours(playerrooms[i], targetrooms[j])) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+static s32 accessibilityBeaconObjectEligible(struct prop *prop, u32 *citag, const char **reason)
+{
+	struct defaultobj *obj;
+	u32 tag;
+
+	if (!prop || (prop->type != PROPTYPE_OBJ && prop->type != PROPTYPE_WEAPON)) {
+		*reason = "not_object_category";
+		return false;
+	}
+
+	obj = prop->obj;
+
+	if (!obj || obj->prop != prop) {
+		*reason = "invalid_object_backlink";
+		return false;
+	}
+
+	if (!prop->active || (obj->hidden & (OBJHFLAG_DELETING | OBJHFLAG_GONE))) {
+		*reason = "object_inactive_or_hidden";
+		return false;
+	}
+
+	if (!objIsHealthy(obj)) {
+		*reason = "object_destroyed";
+		return false;
+	}
+
+	if (obj->flags & (OBJFLAG_CANNOT_ACTIVATE | OBJFLAG_DEACTIVATED)) {
+		*reason = "object_activation_disabled";
+		return false;
+	}
+
+	tag = propobjGetCiTagId(prop);
+
+	if (!tag && !(obj->flags3 & (OBJFLAG3_HTMTERMINAL | OBJFLAG3_INTERACTABLE))) {
+		*reason = "object_not_deliberately_interactable";
+		return false;
+	}
+
+	*citag = tag;
+	*reason = tag ? "ci_tag" : "interaction_flag";
+	return true;
+}
+
+static s32 accessibilityBeaconDoorEligible(struct prop *prop, const char **reason)
+{
+	struct doorobj *door;
+
+	if (!prop || prop->type != PROPTYPE_DOOR) {
+		*reason = "not_door_category";
+		return false;
+	}
+
+	door = prop->door;
+
+	if (!door || door->base.prop != prop) {
+		*reason = "invalid_door_backlink";
+		return false;
+	}
+
+	if (!prop->active || (door->base.hidden & (OBJHFLAG_DELETING | OBJHFLAG_GONE))) {
+		*reason = "door_inactive_or_hidden";
+		return false;
+	}
+
+	if (!objIsHealthy(&door->base)) {
+		*reason = "door_destroyed";
+		return false;
+	}
+
+	/*
+	 * Door setup data commonly carries OBJFLAG_DEACTIVATED even though the
+	 * normal door interaction path still permits it. Match doorTestForInteract's
+	 * persistent state checks here rather than applying the object-only flag.
+	 */
+	if ((door->base.flags & OBJFLAG_CANNOT_ACTIVATE) || door->maxfrac <= 0.0f) {
+		*reason = "door_activation_disabled";
+		return false;
+	}
+
+	*reason = "usable_door";
+	return true;
+}
+
+static struct prop *accessibilityBeaconCanonicalDoor(struct prop *prop, s32 *siblingcount)
+{
+	struct doorobj *door = prop->door;
+	struct doorobj *sibling;
+	struct prop *bestprop = prop;
+	s32 bestnum = accessibilityBeaconPropNum(prop);
+	s32 count = 1;
+	s32 guard = 0;
+
+	if (!door) {
+		*siblingcount = 0;
+		return prop;
+	}
+
+	sibling = door->sibling;
+
+	while (sibling && sibling != door && guard++ < ACCESSIBILITY_BEACON_MAX_DOOR_SIBLINGS) {
+		struct prop *siblingprop = sibling->base.prop;
+		s32 siblingnum = accessibilityBeaconPropNum(siblingprop);
+
+		count++;
+
+		if (siblingnum >= 0 && (bestnum < 0 || siblingnum < bestnum)) {
+			bestnum = siblingnum;
+			bestprop = siblingprop;
+		}
+
+		sibling = sibling->sibling;
+	}
+
+	*siblingcount = count;
+	return bestprop;
+}
+
+static f32 accessibilityBeaconCalculateSpatial(struct prop *prop, struct prop *playerprop,
+		f32 *bearing, f32 *vertical)
+{
+	f32 x = prop->pos.x - playerprop->pos.x;
+	f32 y = prop->pos.y - playerprop->pos.y;
+	f32 z = prop->pos.z - playerprop->pos.z;
+	f32 absolute = atan2f(x, z) * (180.0f / M_PI);
+	f32 forward = 360.0f - g_Vars.currentplayer->vv_theta;
+	f32 relative = absolute - forward;
+
+	while (relative > 180.0f) {
+		relative -= 360.0f;
+	}
+
+	while (relative < -180.0f) {
+		relative += 360.0f;
+	}
+
+	*bearing = relative;
+	*vertical = y;
+	return sqrtf(x * x + y * y + z * z);
+}
+
+static s32 accessibilityBeaconResultCompare(const void *avalue, const void *bvalue)
+{
+	const struct accessibilitybeaconresult *a = avalue;
+	const struct accessibilitybeaconresult *b = bvalue;
+
+	if (a->distance < b->distance) {
+		return -1;
+	}
+
+	if (a->distance > b->distance) {
+		return 1;
+	}
+
+	if (a->category != b->category) {
+		return a->category < b->category ? -1 : 1;
+	}
+
+	if (a->canonicalpropnum != b->canonicalpropnum) {
+		return a->canonicalpropnum < b->canonicalpropnum ? -1 : 1;
+	}
+
+	return 0;
+}
+
+static s32 accessibilityBeaconFindCanonical(s32 category, s32 canonicalpropnum)
+{
+	s32 i;
+
+	for (i = 0; i < g_AccessibilityBeaconResultCount; i++) {
+		if (g_AccessibilityBeaconResults[i].category == category
+				&& g_AccessibilityBeaconResults[i].canonicalpropnum == canonicalpropnum) {
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+static void accessibilityBeaconStoreResult(struct accessibilitybeaconresult *result)
+{
+	s32 i;
+	s32 farthest = -1;
+
+	if (g_AccessibilityBeaconResultCount < ACCESSIBILITY_BEACON_CAPACITY) {
+		g_AccessibilityBeaconResults[g_AccessibilityBeaconResultCount++] = *result;
+		return;
+	}
+
+	for (i = 0; i < g_AccessibilityBeaconResultCount; i++) {
+		if (farthest < 0
+				|| g_AccessibilityBeaconResults[i].distance
+					> g_AccessibilityBeaconResults[farthest].distance) {
+			farthest = i;
+		}
+	}
+
+	if (farthest >= 0 && result->distance < g_AccessibilityBeaconResults[farthest].distance) {
+		g_AccessibilityBeaconResults[farthest] = *result;
+	}
+}
+
+static void accessibilityBeaconLogProp(struct prop *prop, s32 propnum, const char *decision,
+		const char *reason, s32 canonicalpropnum, s32 siblingcount,
+		f32 distance, f32 bearing, f32 vertical, u32 citag)
+{
+	struct defaultobj *obj = NULL;
+	struct doorobj *door = NULL;
+	s32 unlocked = -1;
+
+	if (prop && (prop->type == PROPTYPE_OBJ || prop->type == PROPTYPE_WEAPON
+			|| prop->type == PROPTYPE_DOOR)) {
+		obj = prop->obj;
+	}
+
+	if (prop && prop->type == PROPTYPE_DOOR && prop->door) {
+		door = prop->door;
+
+		if (g_Vars.currentplayer && g_Vars.currentplayer->prop) {
+			unlocked = doorIsUnlocked(g_Vars.currentplayer->prop, prop);
+		}
+	}
+
+	accessibilityLogEvent("beacon", "candidate",
+			"scan=%llu prop=%p propnum=%d type=%d active=%d prop_flags=0x%02x entity=%p model=%d obj_type=%d obj_flags=0x%08x obj_flags2=0x%08x obj_flags3=0x%08x hidden=0x%08x damage=%d maxdamage=%d door_mode=%d door_frac=%.3f door_maxfrac=%.3f door_flags=0x%04x door_keyflags=0x%08x door_unlocked=%d rooms=%d,%d,%d,%d,%d,%d,%d,%d decision=%s reason=%s canonical_propnum=%d sibling_count=%d distance=%.3f bearing=%.3f vertical=%.3f ci_tag=0x%02x",
+			(unsigned long long)g_AccessibilityBeaconScanCount,
+			(void *)prop, propnum, prop ? prop->type : -1, prop ? prop->active : 0,
+			prop ? prop->flags : 0, (void *)obj,
+			obj ? obj->modelnum : -1, obj ? obj->type : -1,
+			obj ? obj->flags : 0, obj ? obj->flags2 : 0,
+			obj ? obj->flags3 : 0, obj ? obj->hidden : 0,
+			obj ? obj->damage : -1, obj ? obj->maxdamage : -1,
+			door ? door->mode : -1, door ? door->frac : -1.0f,
+			door ? door->maxfrac : -1.0f, door ? door->doorflags : 0,
+			door ? door->keyflags : 0, unlocked,
+			prop ? prop->rooms[0] : -1, prop ? prop->rooms[1] : -1,
+			prop ? prop->rooms[2] : -1, prop ? prop->rooms[3] : -1,
+			prop ? prop->rooms[4] : -1, prop ? prop->rooms[5] : -1,
+			prop ? prop->rooms[6] : -1, prop ? prop->rooms[7] : -1,
+			decision, reason, canonicalpropnum, siblingcount,
+			distance, bearing, vertical, citag);
+}
+
+static s32 accessibilityBeaconScan(void)
+{
+	struct prop *playerprop = g_Vars.currentplayer->prop;
+	struct prop *prop = g_Vars.activeprops;
+	s32 traversed = 0;
+	s32 considered;
+	s32 eligiblecount = 0;
+
+	g_AccessibilityBeaconScanCount++;
+	g_AccessibilityBeaconResultCount = 0;
+	g_AccessibilityBeaconSelectedIndex[ACCESSIBILITY_BEACON_CATEGORY_OBJECT] = -1;
+	g_AccessibilityBeaconSelectedIndex[ACCESSIBILITY_BEACON_CATEGORY_DOOR] = -1;
+	memset(g_AccessibilityBeaconResults, 0, sizeof(g_AccessibilityBeaconResults));
+
+	accessibilityLogEvent("beacon", "scan_start",
+			"scan=%llu stage=%d player=%d player_prop=%p player_propnum=%d position=%.3f,%.3f,%.3f theta=%.3f rooms=%d,%d,%d,%d,%d,%d,%d,%d radius=%.1f capacity=%d",
+			(unsigned long long)g_AccessibilityBeaconScanCount,
+			g_Vars.stagenum, g_Vars.currentplayernum, (void *)playerprop,
+			accessibilityBeaconPropNum(playerprop), playerprop->pos.x, playerprop->pos.y,
+			playerprop->pos.z, g_Vars.currentplayer->vv_theta,
+			playerprop->rooms[0], playerprop->rooms[1], playerprop->rooms[2], playerprop->rooms[3],
+			playerprop->rooms[4], playerprop->rooms[5], playerprop->rooms[6], playerprop->rooms[7],
+			ACCESSIBILITY_BEACON_SCAN_DISTANCE, ACCESSIBILITY_BEACON_CAPACITY);
+
+	while (prop && prop != g_Vars.pausedprops && traversed <= g_Vars.maxprops) {
+		struct prop *candidate = prop;
+		struct accessibilitybeaconresult result;
+		const char *reason = "unsupported_prop_type";
+		s32 propnum = accessibilityBeaconPropNum(prop);
+		s32 siblingcount = 0;
+		s32 canonicalpropnum = propnum;
+		s32 eligible = false;
+		s32 duplicate;
+		u32 citag = 0;
+		f32 distance = -1.0f;
+		f32 bearing = 0.0f;
+		f32 vertical = 0.0f;
+
+		traversed++;
+		memset(&result, 0, sizeof(result));
+
+		if (prop->type == PROPTYPE_DOOR) {
+			eligible = accessibilityBeaconDoorEligible(prop, &reason);
+
+			if (eligible) {
+				candidate = accessibilityBeaconCanonicalDoor(prop, &siblingcount);
+				canonicalpropnum = accessibilityBeaconPropNum(candidate);
+
+				if (!accessibilityBeaconDoorEligible(candidate, &reason)) {
+					candidate = prop;
+					canonicalpropnum = propnum;
+				}
+			}
+
+			result.category = ACCESSIBILITY_BEACON_CATEGORY_DOOR;
+		} else if (prop->type == PROPTYPE_OBJ || prop->type == PROPTYPE_WEAPON) {
+			eligible = accessibilityBeaconObjectEligible(prop, &citag, &reason);
+			result.category = ACCESSIBILITY_BEACON_CATEGORY_OBJECT;
+		}
+
+		if (eligible) {
+			distance = accessibilityBeaconCalculateSpatial(candidate, playerprop, &bearing, &vertical);
+
+			if (distance * distance > ACCESSIBILITY_BEACON_SCAN_DISTANCE_SQ) {
+				eligible = false;
+				reason = "outside_scan_radius";
+			} else if (!accessibilityBeaconRoomsRelated(playerprop->rooms, candidate->rooms)) {
+				eligible = false;
+				reason = "outside_room_boundary";
+			} else if (result.category == ACCESSIBILITY_BEACON_CATEGORY_OBJECT
+					&& (candidate->obj->flags2 & OBJFLAG2_INTERACTCHECKLOS)
+					&& !cdTestLos06(&playerprop->pos, playerprop->rooms,
+						&candidate->pos, candidate->rooms, CDTYPE_BG)) {
+				eligible = false;
+				reason = "line_of_sight_blocked";
+			}
+		}
+
+		if (eligible) {
+			duplicate = accessibilityBeaconFindCanonical(result.category, canonicalpropnum);
+
+			if (duplicate >= 0) {
+				accessibilityBeaconLogProp(prop, propnum, "excluded", "duplicate_canonical_door",
+						canonicalpropnum, siblingcount, distance, bearing, vertical, citag);
+				prop = prop->next;
+				continue;
+			}
+
+			result.propnum = accessibilityBeaconPropNum(candidate);
+			result.canonicalpropnum = canonicalpropnum;
+			result.entity = candidate->obj;
+			result.citag = citag;
+			result.distance = distance;
+			result.bearing = bearing;
+			result.vertical = vertical;
+			eligiblecount++;
+			accessibilityBeaconStoreResult(&result);
+			accessibilityBeaconLogProp(prop, propnum, "included", reason,
+					canonicalpropnum, siblingcount, distance, bearing, vertical, citag);
+		} else {
+			accessibilityBeaconLogProp(prop, propnum, "excluded", reason,
+					canonicalpropnum, siblingcount, distance, bearing, vertical, citag);
+		}
+
+		prop = prop->next;
+	}
+
+	if (traversed > g_Vars.maxprops) {
+		accessibilityLogEvent("beacon", "scan_guard",
+				"scan=%llu traversed=%d maxprops=%d reason=active_list_did_not_terminate",
+				(unsigned long long)g_AccessibilityBeaconScanCount, traversed, g_Vars.maxprops);
+	}
+
+	considered = traversed;
+	qsort(g_AccessibilityBeaconResults, g_AccessibilityBeaconResultCount,
+			sizeof(g_AccessibilityBeaconResults[0]), accessibilityBeaconResultCompare);
+
+	for (traversed = 0; traversed < g_AccessibilityBeaconResultCount; traversed++) {
+		struct accessibilitybeaconresult *item = &g_AccessibilityBeaconResults[traversed];
+
+		accessibilityLogEvent("beacon", "scan_result",
+				"scan=%llu index=%d category=%s propnum=%d canonical_propnum=%d entity=%p distance=%.3f bearing=%.3f vertical=%.3f ci_tag=0x%02x",
+				(unsigned long long)g_AccessibilityBeaconScanCount, traversed,
+				accessibilityBeaconCategoryName(item->category), item->propnum,
+				item->canonicalpropnum, item->entity, item->distance,
+				item->bearing, item->vertical, item->citag);
+	}
+
+	accessibilityLogEvent("beacon", "scan_complete",
+			"scan=%llu traversed=%d eligible=%d stored=%d truncated=%d",
+			(unsigned long long)g_AccessibilityBeaconScanCount, considered,
+			eligiblecount, g_AccessibilityBeaconResultCount,
+			eligiblecount > g_AccessibilityBeaconResultCount);
+
+	return g_AccessibilityBeaconResultCount;
+}
+
+static struct prop *accessibilityBeaconValidateResult(struct accessibilitybeaconresult *result,
+		const char **reason)
+{
+	struct prop *prop;
+	struct prop *playerprop = g_Vars.currentplayer->prop;
+	u32 citag = 0;
+	f32 bearing;
+	f32 vertical;
+	f32 distance;
+
+	if (result->propnum < 0 || result->propnum >= g_Vars.maxprops || !g_Vars.props) {
+		*reason = "prop_index_invalid";
+		return NULL;
+	}
+
+	prop = &g_Vars.props[result->propnum];
+
+	if (prop->obj != result->entity) {
+		*reason = "entity_identity_changed";
+		return NULL;
+	}
+
+	if (result->category == ACCESSIBILITY_BEACON_CATEGORY_OBJECT) {
+		if (!accessibilityBeaconObjectEligible(prop, &citag, reason)) {
+			return NULL;
+		}
+	} else if (result->category == ACCESSIBILITY_BEACON_CATEGORY_DOOR) {
+		if (!accessibilityBeaconDoorEligible(prop, reason)) {
+			return NULL;
+		}
+	} else {
+		*reason = "category_invalid";
+		return NULL;
+	}
+
+	distance = accessibilityBeaconCalculateSpatial(prop, playerprop, &bearing, &vertical);
+
+	if (distance * distance > ACCESSIBILITY_BEACON_SCAN_DISTANCE_SQ) {
+		*reason = "moved_outside_scan_radius";
+		return NULL;
+	}
+
+	if (!accessibilityBeaconRoomsRelated(playerprop->rooms, prop->rooms)) {
+		*reason = "moved_outside_room_boundary";
+		return NULL;
+	}
+
+	if (result->category == ACCESSIBILITY_BEACON_CATEGORY_OBJECT
+			&& (prop->obj->flags2 & OBJFLAG2_INTERACTCHECKLOS)
+			&& !cdTestLos06(&playerprop->pos, playerprop->rooms, &prop->pos, prop->rooms, CDTYPE_BG)) {
+		*reason = "line_of_sight_became_blocked";
+		return NULL;
+	}
+
+	result->distance = distance;
+	result->bearing = bearing;
+	result->vertical = vertical;
+	*reason = "valid";
+	return prop;
+}
+
+static s32 accessibilityBeaconAnyActive(void)
+{
+	return g_AccessibilityBeaconCategoryActive[ACCESSIBILITY_BEACON_CATEGORY_OBJECT]
+			|| g_AccessibilityBeaconCategoryActive[ACCESSIBILITY_BEACON_CATEGORY_DOOR];
+}
+
+static void accessibilityBeaconStopSound(s32 category,
+		struct accessibilitybeaconresult *result, const char *reason)
+{
+	struct prop *prop = NULL;
+
+	if (result && result->propnum >= 0 && result->propnum < g_Vars.maxprops && g_Vars.props) {
+		prop = &g_Vars.props[result->propnum];
+
+		if (prop->obj != result->entity) {
+			prop = NULL;
+		}
+	}
+
+	if (prop && g_PsChannels) {
+		psStopSound(prop, PSTYPE_ACCESSIBILITY_BEACON, 0);
+	}
+
+	if (g_AccessibilityBeaconChannel[category] >= 0) {
+		accessibilityLogEvent("beacon", "sound_stop",
+				"channel=%d prop=%p propnum=%d category=%s reason=%s",
+				g_AccessibilityBeaconChannel[category], (void *)prop,
+				result ? result->propnum : -1,
+				accessibilityBeaconCategoryName(category), reason);
+	}
+
+	g_AccessibilityBeaconChannel[category] = -1;
+}
+
+static void accessibilityBeaconClearSelection(s32 category, const char *reason)
+{
+	struct accessibilitybeaconresult *selected = NULL;
+	s32 index = g_AccessibilityBeaconSelectedIndex[category];
+
+	if (index >= 0 && index < g_AccessibilityBeaconResultCount) {
+		selected = &g_AccessibilityBeaconResults[index];
+	}
+
+	accessibilityBeaconStopSound(category, selected, reason);
+	g_AccessibilityBeaconSelectedIndex[category] = -1;
+	g_AccessibilityBeaconNextPulse60[category] = 0;
+}
+
+static void accessibilityBeaconDeactivateCategory(s32 category, const char *reason)
+{
+	s32 wasactive = g_AccessibilityBeaconCategoryActive[category];
+	s32 selected = g_AccessibilityBeaconSelectedIndex[category];
+
+	accessibilityBeaconClearSelection(category, reason);
+
+	if (wasactive || selected >= 0) {
+		accessibilityLogEvent("beacon", "deactivate",
+				"category=%s reason=%s selected=%d results=%d",
+				accessibilityBeaconCategoryName(category), reason, selected,
+				g_AccessibilityBeaconResultCount);
+	}
+
+	g_AccessibilityBeaconCategoryActive[category] = false;
+}
+
+static void accessibilityBeaconDeactivateAll(const char *reason, s32 clearresults)
+{
+	accessibilityBeaconDeactivateCategory(ACCESSIBILITY_BEACON_CATEGORY_OBJECT, reason);
+	accessibilityBeaconDeactivateCategory(ACCESSIBILITY_BEACON_CATEGORY_DOOR, reason);
+
+	if (clearresults) {
+		g_AccessibilityBeaconResultCount = 0;
+		memset(g_AccessibilityBeaconResults, 0, sizeof(g_AccessibilityBeaconResults));
+	}
+}
+
+static s32 accessibilityBeaconSelect(s32 category, s32 index, const char *reason)
+{
+	struct accessibilitybeaconresult *previous = NULL;
+	struct accessibilitybeaconresult *selected;
+	const char *validreason;
+
+	if (index < 0 || index >= g_AccessibilityBeaconResultCount) {
+		return false;
+	}
+
+	selected = &g_AccessibilityBeaconResults[index];
+
+	if (selected->category != category) {
+		return false;
+	}
+
+	if (g_AccessibilityBeaconSelectedIndex[category] >= 0
+			&& g_AccessibilityBeaconSelectedIndex[category] < g_AccessibilityBeaconResultCount) {
+		previous = &g_AccessibilityBeaconResults[g_AccessibilityBeaconSelectedIndex[category]];
+	}
+
+	accessibilityBeaconStopSound(category, previous, "selection_changed");
+
+	if (!accessibilityBeaconValidateResult(selected, &validreason)) {
+		accessibilityLogEvent("beacon", "selection_rejected",
+				"index=%d category=%s propnum=%d reason=%s",
+				index, accessibilityBeaconCategoryName(selected->category),
+				selected->propnum, validreason);
+		return false;
+	}
+
+	g_AccessibilityBeaconSelectedIndex[category] = index;
+	g_AccessibilityBeaconNextPulse60[category] = g_Vars.lvframe60;
+	accessibilityLogEvent("beacon", "selection",
+			"index=%d count=%d category=%s propnum=%d canonical_propnum=%d entity=%p distance=%.3f bearing=%.3f vertical=%.3f sound=%d reason=%s",
+			index, g_AccessibilityBeaconResultCount,
+			accessibilityBeaconCategoryName(selected->category), selected->propnum,
+			selected->canonicalpropnum, selected->entity, selected->distance,
+			selected->bearing, selected->vertical,
+			accessibilityBeaconCategorySound(selected->category), reason);
+	return true;
+}
+
+static s32 accessibilityBeaconSelectNextValid(s32 category, s32 start, const char *reason)
+{
+	s32 offset;
+
+	for (offset = 0; offset < g_AccessibilityBeaconResultCount; offset++) {
+		s32 index = (start + offset) % g_AccessibilityBeaconResultCount;
+		const char *validreason;
+		struct accessibilitybeaconresult *result = &g_AccessibilityBeaconResults[index];
+
+		if (result->category != category) {
+			continue;
+		}
+
+		if (accessibilityBeaconValidateResult(result, &validreason)) {
+			return accessibilityBeaconSelect(category, index, reason);
+		}
+
+		accessibilityLogEvent("beacon", "selection_skip",
+				"index=%d category=%s propnum=%d reason=%s", index,
+				accessibilityBeaconCategoryName(category), result->propnum, validreason);
+	}
+
+	accessibilityBeaconClearSelection(category, "no_valid_results");
+	accessibilityLogEvent("beacon", "empty",
+			"category=%s reason=%s", accessibilityBeaconCategoryName(category), reason);
+	return false;
+}
+
+static void accessibilityBeaconRescanActive(const char *reason)
+{
+	s32 category;
+
+	for (category = ACCESSIBILITY_BEACON_CATEGORY_OBJECT;
+			category <= ACCESSIBILITY_BEACON_CATEGORY_DOOR; category++) {
+		if (g_AccessibilityBeaconCategoryActive[category]) {
+			accessibilityBeaconClearSelection(category, "rescan");
+		}
+	}
+
+	accessibilityBeaconScan();
+
+	for (category = ACCESSIBILITY_BEACON_CATEGORY_OBJECT;
+			category <= ACCESSIBILITY_BEACON_CATEGORY_DOOR; category++) {
+		if (g_AccessibilityBeaconCategoryActive[category]) {
+			accessibilityBeaconSelectNextValid(category, 0, reason);
+		}
+	}
+
+	if (g_AccessibilityBeaconCategoryActive[ACCESSIBILITY_BEACON_CATEGORY_OBJECT]
+			&& g_AccessibilityBeaconCategoryActive[ACCESSIBILITY_BEACON_CATEGORY_DOOR]
+			&& g_AccessibilityBeaconSelectedIndex[ACCESSIBILITY_BEACON_CATEGORY_DOOR] >= 0) {
+		g_AccessibilityBeaconNextPulse60[ACCESSIBILITY_BEACON_CATEGORY_DOOR]
+				= g_Vars.lvframe60 + ACCESSIBILITY_BEACON_PULSE_TICKS / 2;
+	}
+}
+
+static void accessibilityBeaconPulse(s32 category,
+		struct accessibilitybeaconresult *selected, struct prop *prop)
+{
+	s16 sound = accessibilityBeaconCategorySound(selected->category);
+	s16 channel;
+
+	psStopSound(prop, PSTYPE_ACCESSIBILITY_BEACON, 0);
+	channel = psCreate(NULL, prop, sound, -1, AL_VOL_FULL, 0,
+			PSFLAG2_MPPAUSABLE, PSTYPE_ACCESSIBILITY_BEACON, NULL, -1.0f,
+			NULL, -1, ACCESSIBILITY_BEACON_FULL_DISTANCE,
+			ACCESSIBILITY_BEACON_FADE_DISTANCE, ACCESSIBILITY_BEACON_SILENT_DISTANCE);
+
+	g_AccessibilityBeaconChannel[category] = channel;
+	g_AccessibilityBeaconPulseCount++;
+	g_AccessibilityBeaconNextPulse60[category]
+			= g_Vars.lvframe60 + ACCESSIBILITY_BEACON_PULSE_TICKS;
+
+	if (channel >= 0 && channel < 40 && g_PsChannels) {
+		accessibilityLogEvent("beacon", "pulse",
+				"pulse=%llu tick=%d next_tick=%d index=%d category=%s sound=%d channel=%d prop=%p propnum=%d position=%.3f,%.3f,%.3f distance=%.3f bearing=%.3f vertical=%.3f volume=%d pan=%d ranges=%.1f,%.1f,%.1f result=created",
+				(unsigned long long)g_AccessibilityBeaconPulseCount,
+				g_Vars.lvframe60, g_AccessibilityBeaconNextPulse60[category],
+				g_AccessibilityBeaconSelectedIndex[category],
+				accessibilityBeaconCategoryName(selected->category), sound, channel,
+				(void *)prop, selected->propnum, prop->pos.x, prop->pos.y, prop->pos.z,
+				selected->distance, selected->bearing, selected->vertical,
+				g_PsChannels[channel].currentvol, g_PsChannels[channel].currentpan,
+				ACCESSIBILITY_BEACON_FULL_DISTANCE, ACCESSIBILITY_BEACON_FADE_DISTANCE,
+				ACCESSIBILITY_BEACON_SILENT_DISTANCE);
+	} else {
+		accessibilityLogEvent("beacon", "pulse",
+				"pulse=%llu tick=%d index=%d category=%s sound=%d channel=%d prop=%p propnum=%d result=channel_allocation_failed",
+				(unsigned long long)g_AccessibilityBeaconPulseCount,
+				g_Vars.lvframe60, g_AccessibilityBeaconSelectedIndex[category],
+				accessibilityBeaconCategoryName(selected->category), sound, channel,
+				(void *)prop, selected->propnum);
+	}
+}
+
+static const char *accessibilityBeaconScopeReason(void)
+{
+	if (!accessibilityIsInteractableBeaconsEnabled()) {
+		return "feature_disabled";
+	}
+
+	if (g_Vars.stagenum != STAGE_CITRAINING) {
+		return "outside_ci_training";
+	}
+
+	if (PLAYERCOUNT() != 1) {
+		return "unsupported_player_count";
+	}
+
+	if (!g_Vars.currentplayer || !g_Vars.currentplayer->prop) {
+		return "player_unavailable";
+	}
+
+	if (g_MenuData.count > 0) {
+		return "menu_open";
+	}
+
+	if (lvIsPaused()) {
+		return "paused";
+	}
+
+	if (g_Vars.in_cutscene) {
+		return "cutscene";
+	}
+
+	if (g_Vars.currentplayer->isdead) {
+		return "player_dead";
+	}
+
+	return NULL;
+}
+
+void accessibilityBeaconTick(void)
+{
+	const char *scopereason = accessibilityBeaconScopeReason();
+	s32 objectrequested = false;
+	s32 doorrequested = false;
+	s32 toggled = false;
+	s32 category;
+
+	if (scopereason) {
+		if (accessibilityBeaconAnyActive() || g_AccessibilityBeaconResultCount) {
+			accessibilityBeaconDeactivateAll(scopereason, true);
+		}
+		return;
+	}
+
+#ifndef PLATFORM_N64
+	objectrequested = inputKeyJustPressed(VK_F5);
+	doorrequested = inputKeyJustPressed(VK_F6);
+#endif
+
+	if (objectrequested) {
+		accessibilityLogEvent("beacon", "command",
+				"action=toggle key=F5 category=interactable_object active=%d results=%d selected=%d tick=%d",
+				g_AccessibilityBeaconCategoryActive[ACCESSIBILITY_BEACON_CATEGORY_OBJECT],
+				g_AccessibilityBeaconResultCount,
+				g_AccessibilityBeaconSelectedIndex[ACCESSIBILITY_BEACON_CATEGORY_OBJECT],
+				g_Vars.lvframe60);
+
+		if (g_AccessibilityBeaconCategoryActive[ACCESSIBILITY_BEACON_CATEGORY_OBJECT]) {
+			accessibilityBeaconDeactivateCategory(
+					ACCESSIBILITY_BEACON_CATEGORY_OBJECT, "user_toggle");
+		} else {
+			g_AccessibilityBeaconCategoryActive[ACCESSIBILITY_BEACON_CATEGORY_OBJECT] = true;
+		}
+
+		toggled = true;
+	}
+
+	if (doorrequested) {
+		accessibilityLogEvent("beacon", "command",
+				"action=toggle key=F6 category=door active=%d results=%d selected=%d tick=%d",
+				g_AccessibilityBeaconCategoryActive[ACCESSIBILITY_BEACON_CATEGORY_DOOR],
+				g_AccessibilityBeaconResultCount,
+				g_AccessibilityBeaconSelectedIndex[ACCESSIBILITY_BEACON_CATEGORY_DOOR],
+				g_Vars.lvframe60);
+
+		if (g_AccessibilityBeaconCategoryActive[ACCESSIBILITY_BEACON_CATEGORY_DOOR]) {
+			accessibilityBeaconDeactivateCategory(
+					ACCESSIBILITY_BEACON_CATEGORY_DOOR, "user_toggle");
+		} else {
+			g_AccessibilityBeaconCategoryActive[ACCESSIBILITY_BEACON_CATEGORY_DOOR] = true;
+		}
+
+		toggled = true;
+	}
+
+	if (toggled) {
+		accessibilityLogEvent("beacon", "category_state",
+				"object_active=%d door_active=%d tick=%d",
+				g_AccessibilityBeaconCategoryActive[ACCESSIBILITY_BEACON_CATEGORY_OBJECT],
+				g_AccessibilityBeaconCategoryActive[ACCESSIBILITY_BEACON_CATEGORY_DOOR],
+				g_Vars.lvframe60);
+
+		if (accessibilityBeaconAnyActive()) {
+			accessibilityBeaconRescanActive("category_toggle");
+		} else {
+			g_AccessibilityBeaconResultCount = 0;
+			memset(g_AccessibilityBeaconResults, 0, sizeof(g_AccessibilityBeaconResults));
+		}
+	}
+
+	for (category = ACCESSIBILITY_BEACON_CATEGORY_OBJECT;
+			category <= ACCESSIBILITY_BEACON_CATEGORY_DOOR; category++) {
+		if (g_AccessibilityBeaconCategoryActive[category]
+				&& g_AccessibilityBeaconSelectedIndex[category] >= 0) {
+			struct accessibilitybeaconresult *selected;
+			struct prop *prop;
+			const char *validreason;
+			s32 selectedindex = g_AccessibilityBeaconSelectedIndex[category];
+
+			if (selectedindex >= g_AccessibilityBeaconResultCount) {
+				accessibilityBeaconClearSelection(category, "selection_index_invalid");
+				continue;
+			}
+
+			selected = &g_AccessibilityBeaconResults[selectedindex];
+			prop = accessibilityBeaconValidateResult(selected, &validreason);
+
+			if (!prop) {
+				s32 next = (selectedindex + 1)
+						% g_AccessibilityBeaconResultCount;
+
+				accessibilityLogEvent("beacon", "target_invalidated",
+						"index=%d propnum=%d category=%s reason=%s",
+						selectedindex, selected->propnum,
+						accessibilityBeaconCategoryName(selected->category), validreason);
+				accessibilityBeaconSelectNextValid(category, next, "target_invalidated");
+				continue;
+			}
+
+			if (g_Vars.lvupdate60 > 0
+					&& g_Vars.lvframe60 >= g_AccessibilityBeaconNextPulse60[category]) {
+				accessibilityBeaconPulse(category, selected, prop);
+
+				if (g_AccessibilityBeaconChannel[category] < 0) {
+					accessibilityBeaconDeactivateCategory(category, "channel_allocation_failed");
+				}
+			}
+		}
+	}
+}
+
+void accessibilityBeaconReset(const char *reason)
+{
+	accessibilityBeaconDeactivateAll(reason ? reason : "reset", true);
+
+	accessibilityLogEvent("beacon", "reset",
+			"reason=%s scans=%llu pulses=%llu enabled=%d radius=%.1f cadence_ticks=%d object_sound=%d door_sound=%d",
+			reason ? reason : "reset",
+			(unsigned long long)g_AccessibilityBeaconScanCount,
+			(unsigned long long)g_AccessibilityBeaconPulseCount,
+			accessibilityIsInteractableBeaconsEnabled(),
+			ACCESSIBILITY_BEACON_SCAN_DISTANCE, ACCESSIBILITY_BEACON_PULSE_TICKS,
+			SFX_MENU_FOCUS, SFX_MENU_SUBFOCUS);
+
+	g_AccessibilityBeaconScanCount = 0;
+	g_AccessibilityBeaconPulseCount = 0;
+}

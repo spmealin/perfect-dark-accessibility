@@ -29,13 +29,13 @@ The architecture supports every focusable control family found in the current so
 1. **Observe final state, not individual input events.** Add one call after `menuProcessInput()` for each menu player. This sees the final dialog, final pre-focus, mouse focus, directional focus, automatic disabled-item skips, sibling swipes, push/pop, and value changes without hooks in every transition function.
 2. **Keep narration menu-agnostic.** The core may switch on menu item type, but it must not compare against `g_FilemgrFileSelectMenuDialog`, `g_CiOptionsViaPcMenuDialog`, or any other dialog/item address to choose spoken text or behavior.
 3. **Support all current focusable control families.** Selectable, list, scrollable, slider, checkbox, dropdown, keyboard, ranking, player stats, and carousel all receive a defined semantic resolver. Numbered/unknown types are audited and fail safely if later introduced.
-4. **Do not announce presentation items as focus controls.** Labels, objectives panels, separators, models, meters, marquees, controller diagrams, color boxes, and the known nonfocusable numbered types contribute no independent focus event. The dialog title supplies basic context. Long-form objectives and richer briefing reading remain Milestone 6.
+4. **Do not announce presentation items as focus controls.** Labels, objectives panels, separators, models, meters, marquees, controller diagrams, color boxes, and the known nonfocusable numbered types contribute no independent focus event. The dialog title supplies basic context. Long-form objectives and richer briefing reading remain Milestone 7 after the roadmap reprioritization.
 5. **Extend custom controls through one generic semantic operation.** Custom-rendered list rows and controls whose visible value is otherwise available only to rendering implement `MENUOP_GETACCESSIBILITYTEXT`. The accessibility module never recreates a screen's business rules or reads pixels.
 6. **Copy callback text immediately.** Menu text callbacks frequently return language buffers, globals, or mutable scratch storage. Every title, label, option, group, and value must be copied into accessibility-owned UTF-8 storage before a second callback or backend call.
 7. **Use replacement, not an unbounded speech queue.** Dialog/focus/value announcements are one replaceable `menu` group. A newer menu state interrupts stale speech. The current normalized snapshot remains available for repeat.
 8. **Keep native speech out of the menu engine.** `src/game/menutick.c` publishes a semantic observation only. Resolution, comparison, announcement composition, logging, and speech policy live under `src/accessibility`.
 9. **Add one independently configurable feature setting.** Register `Accessibility.MenuNarration`. It has no effect unless `Accessibility.Enabled=1`; speech still separately requires `Accessibility.SpeechEnabled=1`. The original implementation defaulted it off, but the project owner changed all four accessibility defaults to on when blind-user acceptance testing began.
-10. **Use provisional PC development commands.** While a menu is open and menu narration is enabled, F5 repeats the current dialog/focus snapshot and F6 cancels speech. They do not activate, close, or move a game menu. Milestone 5 replaces these with discoverable, configurable, conflict-checked accessibility actions. Do not add a controller chord in Milestone 4.
+10. **Use provisional PC development commands.** While a menu is open and menu narration is enabled, F5 repeats the current dialog/focus snapshot and F6 cancels speech. They do not activate, close, or move a game menu. Milestone 6 replaces these with discoverable, configurable, conflict-checked accessibility actions after the roadmap reprioritization. Do not add a controller chord in Milestone 4.
 11. **Route speech to one owner initially.** Maintain observation state for every menu slot and log all slots, but speak only menu slot 0 in Milestone 4. This avoids simultaneous local-player chatter. Multi-player ownership policy remains an explicit later decision.
 12. **Log all feature-relevant detail.** Logging remains opt-in and local, but there is no privacy-minimization requirement for development diagnostics. Record raw pointers, identifiers, full resolved text, input/source data, state, decisions, and timings when useful. Never record ROM contents, extracted assets, passwords, tokens, or unrelated operating-system secrets.
 
@@ -67,8 +67,8 @@ Milestone 4 is engineering-complete only when all of the following are true:
 - Do not hard-code the New Agent route, the main menu, an options dialog, item coordinates, or a sequence of input presses.
 - Do not speak every visible label, separator, model, meter, color swatch, controller diagram, or marquee merely because it is rendered.
 - Do not implement HUD, subtitle, objective-change, status, targeting, scanner, navigation, or gameplay narration.
-- Do not implement rich long-document navigation, heading structure, or objective review; Milestone 6 owns those. Milestone 4 only exposes the current focusable scrollable control and its scroll state.
-- Do not create the final accessibility options UI or permanent binding system; Milestone 5 owns discoverability and conflict handling.
+- Do not implement rich long-document navigation, heading structure, or objective review; Milestone 7 owns those after the roadmap reprioritization. Milestone 4 only exposes the current focusable scrollable control and its scroll state.
+- Do not create the final accessibility options UI or permanent binding system; Milestone 6 owns discoverability and conflict handling after the roadmap reprioritization.
 - Do not add a background thread. Tolk remains main-thread-only and asynchronous internally.
 - Do not add an unbounded FIFO or wait for speech completion before menu input proceeds.
 - Do not change how the game chooses focus, enables controls, activates handlers, edits names, saves profiles, or navigates dialogs.
@@ -344,7 +344,7 @@ Do not modify keyboard behavior to make narration easier. Observe the post-tick 
 - On focus: announce a normalized bounded content introduction plus scroll position. Retain the full normalized text in the repeat snapshot when allocation succeeds.
 - On scroll: announce the new percentage or beginning/end state and a bounded current-content segment if it can be derived without render-coordinate scraping.
 - If `menuIsScrollableUnscrollable` is true, the engine treats it as nonfocusable; do not create synthetic focus.
-- This provides control-level operation only. Milestone 6 will add deliberate full briefing/objective reading and richer navigation.
+- This provides control-level operation only. Milestone 7 will add deliberate full briefing/objective reading and richer navigation after the roadmap reprioritization.
 
 ### Carousel
 
@@ -752,7 +752,7 @@ Remaining limitations:
 Git status and untracked runtime data check:
 ```
 
-The next milestone after this implementation is Milestone 5, discoverable accessibility settings and permanent collision-aware input actions. Do not begin that UI or binding work as part of Milestone 4.
+At the time this plan was executed, discoverable accessibility settings were the intended next milestone. The roadmap was later reprioritized: Carrington Institute interactable beacons are now Milestone 5, and discoverable settings/permanent collision-aware actions are Milestone 6. Neither belongs in the completed Milestone 4 implementation.
 
 ## Execution result (2026-07-19)
 
