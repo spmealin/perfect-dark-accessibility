@@ -216,10 +216,11 @@ Accessibility.LoggingEnabled=1
 Accessibility.SpeechEnabled=1
 ```
 
-Milestone 4 adds another key, also enabled by default for acceptance testing:
+Implemented feature keys are also enabled by default for acceptance testing:
 
 ```ini
 Accessibility.MenuNarration=1
+Accessibility.HudMessages=1
 Accessibility.InteractableBeacons=1
 Accessibility.TargetingFeedback=1
 ```
@@ -227,7 +228,6 @@ Accessibility.TargetingFeedback=1
 Later features may add:
 
 ```ini
-Accessibility.HudNarration=1
 Accessibility.ObjectiveNarration=1
 Accessibility.StatusNarration=1
 Accessibility.Verbosity=1
@@ -291,7 +291,7 @@ This table records implemented and anticipated changes to established files so f
 | `src/game/menu.c` | Expose a read-only focused-item runtime-data lookup | Dialog/item to existing row/block data | Accessibility must not duplicate private row/block mapping | Implemented in Milestone 4 as `menuGetItemData` |
 | `src/game/menuitem.c` | Expose type-owned ranking/player-stats summaries only if existing APIs cannot be queried safely by the adapter | Current semantic row/stat labels and values | Compound presentation state is assembled inside type-specific render paths | Audit found no hook necessary; generic scroll/selection summaries are used |
 | `src/game/activemenu.c`, `filemgr.c`, `mainmenu.c`, `trainingmenus.c`, and `mplayer/setup.c` | Answer one read-only `MENUOP_GETACCESSIBILITYTEXT` query for focusable custom-rendered rows, carousels, and optional dialog summaries | Caller-owned UTF-8 buffer, requested part/index | Render callbacks and non-focusable panels otherwise expose pixels/borrowed scratch text, not stable semantics | Implemented in Milestone 4; `trainingmenus.c` supplies firing-range weapon-information, post-session scoring, visible proficiency-star completion, device-training information, and holo-training description summaries; reused handlers in `fmb.c` require no duplicate hook |
-| `src/game/hudmsg.c` | Publish after a message passes suppression and is queued | Text, type, flags, player, audio channel | Polling the HUD array loses admission order and reason | Proposed |
+| `src/game/hudmsg.c` | Publish after a message passes suppression and is queued | Resolved text, type, flags, player, audio channel, message ID | Polling the HUD array loses admission order and reason | Implemented for generic HUD-message narration; types 6 and 11 are logged but explicitly excluded as subtitles |
 | `src/game/objectives.c` | Publish inside the changed-status branch of `objectivesCheckAll` | Objective index, previous/new state | The existing HUD text can duplicate or omit useful objective identity | Proposed |
 | `src/game/chraction.c` | Optional later directional damage event after actual player damage | Victim player, magnitude band, direction/source category | Snapshot detects loss but not source/direction | Question; not needed for first status query |
 | `src/game/lv.c` | Capture projected target bounds and the existing query-ray hit coordinate before prop rendering, then observe after player sight/HUD rendering | Finite projected bounds, final filtered `lookingatprop`, exact query hit, native sight state, and player viewport | PC prop rendering converts float model matrices in place before sight/HUD state is final, so one hook cannot safely obtain both states | Implemented for the Milestone 9 firing-range slice with two narrow calls in `lvRender`; query hit is accepted only when its prop survives final filtering |

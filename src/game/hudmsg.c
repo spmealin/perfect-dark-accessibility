@@ -22,6 +22,7 @@
 #include "lib/vi.h"
 #include "data.h"
 #include "types.h"
+#include "accessibility/accessibility_hud.h"
 #include "string.h"
 
 u32 g_NextHudMessageId;
@@ -1109,6 +1110,9 @@ void hudmsgCreateFromArgs(char *text, s32 type, s32 conf00, s32 conf01, s32 conf
 				msg->showduration = TICKS(g_HudmsgTypes[type].duration);
 				msg->channelnum = arg14;
 			}
+
+			accessibilityHudMessageAccepted(msg->text, msg->type, msg->flags,
+					msg->playernum, msg->channelnum, msg->id);
 		}
 
 		g_ScaleX = 1;

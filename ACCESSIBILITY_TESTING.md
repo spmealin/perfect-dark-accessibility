@@ -110,6 +110,7 @@ Enabled=1
 LoggingEnabled=1
 SpeechEnabled=1
 MenuNarration=1
+HudMessages=1
 ```
 
 Then launch `build/pd.x86_64.exe --accessibility-speech-test`. The flag never enables accessibility or speech by itself. The exact request is `Perfect Dark accessibility speech test.` With speech enabled but no flag, backend detection occurs without an output request. Development output must contain `Tolk.dll` and the architecture-matching NVDA controller beside the executable; notices are copied to `build/licenses/tolk/`.
@@ -213,7 +214,9 @@ Record completion, wrong turns, missing/excessive/late output, rapid-navigation 
 
 ### HUD/objectives
 
-Trigger one accepted ordinary HUD message, subtitle/dialogue, suppressed duplicate, objective completion, objective failure if safely reproducible, briefing review, and pause objective review. Confirm correct player context, ordering, no objective double-speech, and usable recovery after an interruption.
+With `Accessibility.HudMessages=1`, start Carrington Institute holo-training session 1 and confirm its instructional HUD messages speak automatically in displayed order without interaction. Trigger another accepted ordinary HUD message elsewhere to verify the common hook is not training-specific. Confirm an in-game subtitle/dialogue and a cutscene subtitle are not spoken by this HUD feature, while `hud/message_accepted` and `hud/speech_suppressed reason=subtitle` retain their metadata. Trigger a suppressed duplicate and confirm there is no second admission or speech request. Check multiline/control whitespace is spoken as one normalized sentence, and confirm menu focus speech can interrupt queued HUD speech without preventing a later HUD message. Repeat with `HudMessages=0` and confirm accepted messages are logged with `reason=feature_disabled` but not spoken.
+
+For the remaining Milestone 7 work, trigger objective completion, objective failure if safely reproducible, briefing review, and pause objective review. Confirm correct player context, ordering, no objective double-speech, and usable recovery after an interruption.
 
 ### Status
 

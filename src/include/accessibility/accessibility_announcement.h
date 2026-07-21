@@ -12,6 +12,8 @@ enum accessibility_announcement_reason {
 
 s32 accessibilityAnnouncementReplaceMenu(const char *text,
 		enum accessibility_announcement_reason reason);
+s32 accessibilityAnnouncementQueueHud(const char *text, s32 type, u32 flags,
+		s32 playernum, s32 channelnum, u32 id);
 void accessibilityAnnouncementCancel(void);
 void accessibilityAnnouncementReset(void);
 

@@ -81,6 +81,8 @@ This roadmap orders work by user task and evidence. Milestones are not promises 
 - **Risks and unknowns:** Voice audio, subtitle timing, splitting, and control codes can differ by region/version.
 - **Explicit non-goals:** Do not promise audio description of uncaptioned cinematic action or all mission text coverage.
 
+Implementation status: the generic HUD-admission slice is implemented behind `Accessibility.HudMessages=1`. It queues every successfully admitted non-subtitle HUD message for non-interrupting speech and excludes the explicit in-game/cutscene subtitle types. Subtitle narration, briefing/objective queries, priority objective events, full queue expiry/replacement policy, and Milestone 7 acceptance remain pending.
+
 ## Milestone 8 — Player status and inventory queries
 
 - **Goal:** Provide calm, accurate access to health, shield, equipped weapon/function, ammo, and inventory.

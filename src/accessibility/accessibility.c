@@ -16,6 +16,7 @@ static s32 g_AccessibilityEnabledConfig = 1;
 static s32 g_AccessibilityLoggingEnabledConfig = 1;
 static s32 g_AccessibilitySpeechEnabledConfig = 1;
 static s32 g_AccessibilityMenuNarrationEnabledConfig = 1;
+static s32 g_AccessibilityHudMessagesEnabledConfig = 1;
 static s32 g_AccessibilityInteractableBeaconsEnabledConfig = 1;
 static s32 g_AccessibilityTargetingFeedbackEnabledConfig = 1;
 static s32 g_AccessibilityInitialized = 0;
@@ -39,19 +40,21 @@ void accessibilityInit(void)
 		return;
 	}
 
-	sysLogPrintf(LOG_NOTE, "accessibility: enabled (logging %s, speech %s, interactable beacons %s, targeting feedback %s)",
+	sysLogPrintf(LOG_NOTE, "accessibility: enabled (logging %s, speech %s, HUD messages %s, interactable beacons %s, targeting feedback %s)",
 			g_AccessibilityLoggingEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilitySpeechEnabledConfig ? "enabled" : "disabled",
+			g_AccessibilityHudMessagesEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityInteractableBeaconsEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityTargetingFeedbackEnabledConfig ? "enabled" : "disabled");
 
 	if (g_AccessibilityLoggingEnabledConfig && accessibilityLogInit()) {
 		accessibilityLogEvent("lifecycle", "session_start",
-				"enabled=%d logging=%d speech=%d menu_narration=%d interactable_beacons=%d targeting_feedback=%d speech_test=%d path=%s",
+				"enabled=%d logging=%d speech=%d menu_narration=%d hud_messages=%d interactable_beacons=%d targeting_feedback=%d speech_test=%d path=%s",
 				g_AccessibilityEnabledConfig,
 				g_AccessibilityLoggingEnabledConfig,
 				g_AccessibilitySpeechEnabledConfig,
 				g_AccessibilityMenuNarrationEnabledConfig,
+				g_AccessibilityHudMessagesEnabledConfig,
 				g_AccessibilityInteractableBeaconsEnabledConfig,
 				g_AccessibilityTargetingFeedbackEnabledConfig,
 				sysArgCheck("--accessibility-speech-test"),
@@ -114,6 +117,11 @@ s32 accessibilityIsMenuNarrationEnabled(void)
 	return g_AccessibilityEnabled && g_AccessibilityMenuNarrationEnabledConfig;
 }
 
+s32 accessibilityIsHudMessagesEnabled(void)
+{
+	return g_AccessibilityEnabled && g_AccessibilityHudMessagesEnabledConfig;
+}
+
 s32 accessibilityIsInteractableBeaconsEnabled(void)
 {
 	return g_AccessibilityEnabled && g_AccessibilityInteractableBeaconsEnabledConfig;
@@ -130,6 +138,7 @@ PD_CONSTRUCTOR static void accessibilityConfigInit(void)
 	configRegisterInt("Accessibility.LoggingEnabled", &g_AccessibilityLoggingEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.SpeechEnabled", &g_AccessibilitySpeechEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.MenuNarration", &g_AccessibilityMenuNarrationEnabledConfig, 0, 1);
+	configRegisterInt("Accessibility.HudMessages", &g_AccessibilityHudMessagesEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.InteractableBeacons", &g_AccessibilityInteractableBeaconsEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.TargetingFeedback", &g_AccessibilityTargetingFeedbackEnabledConfig, 0, 1);
 }
