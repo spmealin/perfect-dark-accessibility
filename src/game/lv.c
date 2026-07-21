@@ -1248,13 +1248,17 @@ Gfx *lvRender(Gfx *gdl)
 				// glares calculated earlier on PC, before prop matrices turn into garbage
 				bgCalculateGlaresForVisibleRooms();
 #endif
+				struct coord accessibilityaimhitpos;
+				struct prop *accessibilityaimhitprop = NULL;
 
 				// Calculate lookingatprop
 				if (PLAYERCOUNT() == 1
 						|| g_Vars.coopplayernum >= 0
 						|| g_Vars.antiplayernum >= 0
 						|| (weaponHasFlag(bgunGetWeaponNum(HAND_RIGHT), WEAPONFLAG_AIMTRACK) && bmoveIsInSightAimMode())) {
-					g_Vars.currentplayer->lookingatprop.prop = propFindAimingAt(HAND_RIGHT, false, FINDPROPCONTEXT_QUERY);
+					accessibilityaimhitprop = propFindAimingAtWithHit(HAND_RIGHT,
+							false, FINDPROPCONTEXT_QUERY, &accessibilityaimhitpos);
+					g_Vars.currentplayer->lookingatprop.prop = accessibilityaimhitprop;
 
 					if (g_Vars.currentplayer->lookingatprop.prop) {
 						if (g_Vars.currentplayer->lookingatprop.prop->type == PROPTYPE_CHR
@@ -1307,7 +1311,8 @@ Gfx *lvRender(Gfx *gdl)
 				}
 
 				/* Capture projections before prop rendering converts model matrices in place. */
-				accessibilityTargetingCaptureGame();
+				accessibilityTargetingCaptureGame(accessibilityaimhitprop,
+						&accessibilityaimhitpos);
 
 				// Handle eyespy Z presses
 				if (g_Vars.currentplayer->eyespy

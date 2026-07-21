@@ -64,6 +64,9 @@ struct accessibilitytargetingcandidate {
 	f32 screenx2;
 	f32 screeny2;
 	f32 horizontalscreenoffset;
+	s32 hasaimquality;
+	f32 aimquality;
+	f32 aimdistance;
 	u32 knowledgeflags;
 	const char *localizedname;
 };
@@ -85,7 +88,8 @@ struct accessibilitytargetingobservation {
 };
 
 void accessibilityTargetingObserve(const struct accessibilitytargetingobservation *observation);
-void accessibilityTargetingCaptureGame(void);
+void accessibilityTargetingCaptureGame(struct prop *queryaimedprop,
+		const struct coord *queryhitpos);
 void accessibilityTargetingObserveGame(void);
 void accessibilityTargetingReset(const char *reason);
 

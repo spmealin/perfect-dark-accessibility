@@ -14,18 +14,22 @@
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_log.h"
 #include "accessibility/accessibility_targeting.h"
+#include "accessibility/accessibility_tone.h"
 
 #define ACCESSIBILITY_TARGETING_VISIBLE_FRAMES 2
 #define ACCESSIBILITY_TARGETING_MISSING_FRAMES 2
 #define ACCESSIBILITY_TARGETING_BASE_CYCLE_TICKS TICKS(36)
 #define ACCESSIBILITY_TARGETING_MIN_SLOT_TICKS TICKS(6)
-#define ACCESSIBILITY_TARGETING_ALIGNMENT_TICKS TICKS(12)
 #define ACCESSIBILITY_TARGETING_FULL_DISTANCE 200.0f
 #define ACCESSIBILITY_TARGETING_FADE_DISTANCE 1200.0f
 #define ACCESSIBILITY_TARGETING_SILENT_DISTANCE 1400.0f
 #define ACCESSIBILITY_TARGETING_NAME_LENGTH 96
 #define ACCESSIBILITY_TARGETING_OBSERVATION_LOG_TICKS TICKS(60)
 #define ACCESSIBILITY_TARGETING_TELEMETRY_TICKS TICKS(60 * 30)
+#define ACCESSIBILITY_TARGETING_ALIGNMENT_LOG_TICKS TICKS(6)
+#define ACCESSIBILITY_TARGETING_TONE_BASE_FREQUENCY_HZ 440.0f
+#define ACCESSIBILITY_TARGETING_TONE_MIN_PITCH 1.5f
+#define ACCESSIBILITY_TARGETING_TONE_MAX_PITCH 3.0f
 
 struct accessibilitytargetingrecord {
 	struct accessibilitytargetingcandidate candidate;
@@ -37,10 +41,8 @@ struct accessibilitytargetingrecord {
 struct accessibilitytargetingpolicy {
 	s32 profile;
 	s16 presencesound;
-	s16 alignmentsound;
 	s32 basecycleticks;
 	s32 minslotticks;
-	s32 alignmentticks;
 	s32 visibleframes;
 	s32 missingframes;
 	f32 fulldistance;
@@ -56,12 +58,15 @@ struct accessibilitytargetingstate {
 	struct accessibilitytargetingidentity aimedidentity;
 	s32 hasaimedidentity;
 	s32 presencechannel;
-	struct sndstate *alignmenthandle;
+	s32 alignmentactive;
+	f32 alignmentfrequencyhz;
+	f32 alignmentquality;
+	f32 alignmentdistance;
 	s32 nextpresence60;
-	s32 nextalignment60;
+	s32 nextalignmentlog60;
 	u64 observationcount;
 	u64 presencepulsecount;
-	u64 alignmentpulsecount;
+	u64 alignmentupdatecount;
 	s32 haslastobservation;
 	s32 lastcandidatecount;
 	s32 lastaimed;
@@ -78,10 +83,8 @@ struct accessibilitytargetingstate {
 static const struct accessibilitytargetingpolicy g_AccessibilityTargetingRangePolicy = {
 	ACCESSIBILITY_TARGETING_PROFILE_FIRING_RANGE,
 	SFX_MENU_SELECT,
-	SFX_0007,
 	ACCESSIBILITY_TARGETING_BASE_CYCLE_TICKS,
 	ACCESSIBILITY_TARGETING_MIN_SLOT_TICKS,
-	ACCESSIBILITY_TARGETING_ALIGNMENT_TICKS,
 	ACCESSIBILITY_TARGETING_VISIBLE_FRAMES,
 	ACCESSIBILITY_TARGETING_MISSING_FRAMES,
 	ACCESSIBILITY_TARGETING_FULL_DISTANCE,
@@ -101,12 +104,15 @@ static s32 g_AccessibilityTargetingStatesInitialized;
 #define g_AccessibilityTargetingAimedIdentity (g_AccessibilityTargetingCurrentState->aimedidentity)
 #define g_AccessibilityTargetingHasAimedIdentity (g_AccessibilityTargetingCurrentState->hasaimedidentity)
 #define g_AccessibilityTargetingPresenceChannel (g_AccessibilityTargetingCurrentState->presencechannel)
-#define g_AccessibilityTargetingAlignmentHandle (g_AccessibilityTargetingCurrentState->alignmenthandle)
+#define g_AccessibilityTargetingAlignmentActive (g_AccessibilityTargetingCurrentState->alignmentactive)
+#define g_AccessibilityTargetingAlignmentFrequencyHz (g_AccessibilityTargetingCurrentState->alignmentfrequencyhz)
+#define g_AccessibilityTargetingAlignmentQuality (g_AccessibilityTargetingCurrentState->alignmentquality)
+#define g_AccessibilityTargetingAlignmentDistance (g_AccessibilityTargetingCurrentState->alignmentdistance)
 #define g_AccessibilityTargetingNextPresence60 (g_AccessibilityTargetingCurrentState->nextpresence60)
-#define g_AccessibilityTargetingNextAlignment60 (g_AccessibilityTargetingCurrentState->nextalignment60)
+#define g_AccessibilityTargetingNextAlignmentLog60 (g_AccessibilityTargetingCurrentState->nextalignmentlog60)
 #define g_AccessibilityTargetingObservationCount (g_AccessibilityTargetingCurrentState->observationcount)
 #define g_AccessibilityTargetingPresencePulseCount (g_AccessibilityTargetingCurrentState->presencepulsecount)
-#define g_AccessibilityTargetingAlignmentPulseCount (g_AccessibilityTargetingCurrentState->alignmentpulsecount)
+#define g_AccessibilityTargetingAlignmentUpdateCount (g_AccessibilityTargetingCurrentState->alignmentupdatecount)
 
 static s32 accessibilityTargetingPresenceOwned(void);
 
@@ -152,11 +158,11 @@ static void accessibilityTargetingLogTelemetry(s32 frame60)
 	}
 
 	accessibilityLogEvent("targeting", "telemetry",
-			"frame=%d observations=%llu presence_pulses=%llu alignment_pulses=%llu records=%d aimed=%d memory_available=%d working_set_bytes=%llu working_set_delta=%lld private_bytes=%llu private_delta=%lld snd_states=%d prop_channels_in_use=%d prop_channels_total=%d prop_channels_stopped=%d targeting_channels=%d presence_channel=%d presence_owned=%d alignment_handle=%p alignment_state=%d",
+			"frame=%d observations=%llu presence_pulses=%llu alignment_updates=%llu records=%d aimed=%d memory_available=%d working_set_bytes=%llu working_set_delta=%lld private_bytes=%llu private_delta=%lld snd_states=%d prop_channels_in_use=%d prop_channels_total=%d prop_channels_stopped=%d targeting_channels=%d presence_channel=%d presence_owned=%d alignment_active=%d alignment_frequency_hz=%.2f alignment_quality=%.4f alignment_distance=%.3f",
 			frame60,
 			(unsigned long long)g_AccessibilityTargetingObservationCount,
 			(unsigned long long)g_AccessibilityTargetingPresencePulseCount,
-			(unsigned long long)g_AccessibilityTargetingAlignmentPulseCount,
+			(unsigned long long)g_AccessibilityTargetingAlignmentUpdateCount,
 			g_AccessibilityTargetingRecordCount,
 			g_AccessibilityTargetingHasAimedIdentity, memoryavailable,
 			(unsigned long long)workingset,
@@ -168,9 +174,10 @@ static void accessibilityTargetingLogTelemetry(s32 frame60)
 			g_SndNumPlaying, inuse, channels, stopped, owned,
 			g_AccessibilityTargetingPresenceChannel,
 			accessibilityTargetingPresenceOwned(),
-			(void *)g_AccessibilityTargetingAlignmentHandle,
-			g_AccessibilityTargetingAlignmentHandle
-					? sndGetState(g_AccessibilityTargetingAlignmentHandle) : AL_STOPPED);
+			g_AccessibilityTargetingAlignmentActive,
+			g_AccessibilityTargetingAlignmentFrequencyHz,
+			g_AccessibilityTargetingAlignmentQuality,
+			g_AccessibilityTargetingAlignmentDistance);
 
 	g_AccessibilityTargetingCurrentState->nexttelemetry60
 			= frame60 + ACCESSIBILITY_TARGETING_TELEMETRY_TICKS;
@@ -276,22 +283,21 @@ static void accessibilityTargetingStopPresence(const char *reason)
 
 static void accessibilityTargetingStopAlignment(const char *reason)
 {
-	s32 state = AL_STOPPED;
-
-	if (g_AccessibilityTargetingAlignmentHandle) {
-		state = sndGetState(g_AccessibilityTargetingAlignmentHandle);
-
-		if (state != AL_STOPPED) {
-			audioStop(g_AccessibilityTargetingAlignmentHandle);
-		}
-
+	if (g_AccessibilityTargetingAlignmentActive) {
+		accessibilityToneSet(0, 0.0f);
 		accessibilityLogEvent("targeting", "alignment_stop",
-				"reason=%s state=%d handle=%p", reason, state,
-				(void *)g_AccessibilityTargetingAlignmentHandle);
+				"reason=%s frequency_hz=%.2f quality=%.4f distance=%.3f updates=%llu",
+				reason, g_AccessibilityTargetingAlignmentFrequencyHz,
+				g_AccessibilityTargetingAlignmentQuality,
+				g_AccessibilityTargetingAlignmentDistance,
+				(unsigned long long)g_AccessibilityTargetingAlignmentUpdateCount);
 	}
 
-	g_AccessibilityTargetingAlignmentHandle = NULL;
-	g_AccessibilityTargetingNextAlignment60 = 0;
+	g_AccessibilityTargetingAlignmentActive = false;
+	g_AccessibilityTargetingAlignmentFrequencyHz = 0.0f;
+	g_AccessibilityTargetingAlignmentQuality = 0.0f;
+	g_AccessibilityTargetingAlignmentDistance = 0.0f;
+	g_AccessibilityTargetingNextAlignmentLog60 = 0;
 }
 
 static s32 accessibilityTargetingFindRecord(
@@ -547,31 +553,45 @@ static void accessibilityTargetingPulsePresence(s32 frame60)
 			record->candidate.position.y, record->candidate.position.z);
 }
 
-static void accessibilityTargetingPulseAlignment(s32 frame60, const char *reason)
+static void accessibilityTargetingUpdateAlignment(s32 frame60,
+		const struct accessibilitytargetingcandidate *candidate,
+		const char *reason)
 {
-	if (g_AccessibilityTargetingAlignmentHandle
-			&& sndGetState(g_AccessibilityTargetingAlignmentHandle) != AL_STOPPED) {
-		audioStop(g_AccessibilityTargetingAlignmentHandle);
+	f32 quality = candidate->hasaimquality ? candidate->aimquality : 0.0f;
+	f32 frequencyhz;
+	s32 starting = !g_AccessibilityTargetingAlignmentActive;
+
+	if (quality < 0.0f) {
+		quality = 0.0f;
+	} else if (quality > 1.0f) {
+		quality = 1.0f;
 	}
 
-	g_AccessibilityTargetingAlignmentHandle = snd00010718(
-			&g_AccessibilityTargetingAlignmentHandle, 0, AL_VOL_FULL,
-			AL_PAN_CENTER, g_AccessibilityTargetingCurrentPolicy->alignmentsound,
-			1.0f, 1, -1, true);
-	g_AccessibilityTargetingNextAlignment60
-			= frame60 + g_AccessibilityTargetingCurrentPolicy->alignmentticks;
-	g_AccessibilityTargetingAlignmentPulseCount++;
+	frequencyhz = ACCESSIBILITY_TARGETING_TONE_BASE_FREQUENCY_HZ
+			* ACCESSIBILITY_TARGETING_TONE_MIN_PITCH
+			* powf(ACCESSIBILITY_TARGETING_TONE_MAX_PITCH
+					/ ACCESSIBILITY_TARGETING_TONE_MIN_PITCH, quality);
+	accessibilityToneSet(1, frequencyhz);
+	g_AccessibilityTargetingAlignmentActive = true;
+	g_AccessibilityTargetingAlignmentFrequencyHz = frequencyhz;
+	g_AccessibilityTargetingAlignmentQuality = quality;
+	g_AccessibilityTargetingAlignmentDistance = candidate->aimdistance;
+	g_AccessibilityTargetingAlignmentUpdateCount++;
 
-	accessibilityLogEvent("targeting", "alignment_pulse",
-			"pulse=%llu frame=%d next_frame=%d cadence=%d sound=%d reason=%s handle=%p source=%d slot=%d propnum=%d",
-			(unsigned long long)g_AccessibilityTargetingAlignmentPulseCount,
-			frame60, g_AccessibilityTargetingNextAlignment60,
-			g_AccessibilityTargetingCurrentPolicy->alignmentticks,
-			g_AccessibilityTargetingCurrentPolicy->alignmentsound, reason,
-			(void *)g_AccessibilityTargetingAlignmentHandle,
-			g_AccessibilityTargetingAimedIdentity.source,
-			g_AccessibilityTargetingAimedIdentity.sourceslot,
-			g_AccessibilityTargetingAimedIdentity.propnum);
+	if (starting || frame60 >= g_AccessibilityTargetingNextAlignmentLog60) {
+		accessibilityLogEvent("targeting",
+				starting ? "alignment_start" : "alignment_update",
+				"update=%llu frame=%d reason=%s source=%d slot=%d propnum=%d quality_available=%d quality=%.4f distance=%.3f frequency_hz=%.2f",
+				(unsigned long long)g_AccessibilityTargetingAlignmentUpdateCount,
+				frame60, reason,
+				g_AccessibilityTargetingAimedIdentity.source,
+				g_AccessibilityTargetingAimedIdentity.sourceslot,
+				g_AccessibilityTargetingAimedIdentity.propnum,
+				candidate->hasaimquality, quality, candidate->aimdistance,
+				frequencyhz);
+		g_AccessibilityTargetingNextAlignmentLog60
+				= frame60 + ACCESSIBILITY_TARGETING_ALIGNMENT_LOG_TICKS;
+	}
 }
 
 void accessibilityTargetingObserve(
@@ -582,6 +602,7 @@ void accessibilityTargetingObserve(
 	s32 aimedshootability;
 	s32 aimedvalid;
 	s32 i;
+	const struct accessibilitytargetingcandidate *aimedrecord = NULL;
 
 	if (!observation || !observation->inscope
 			|| !accessibilityIsTargetingFeedbackEnabled()) {
@@ -613,6 +634,7 @@ void accessibilityTargetingObserve(
 			if (accessibilityTargetingIdentityEqual(&observation->aimedidentity,
 					&observation->candidates[i].identity)) {
 				aimedcandidate = true;
+				aimedrecord = &observation->candidates[i];
 				aimedshootability = observation->candidates[i].shootability;
 				aimedvalid = aimedshootability
 						== ACCESSIBILITY_TARGETING_SHOOTABILITY_SHOOTABLE;
@@ -655,28 +677,19 @@ void accessibilityTargetingObserve(
 
 		if (acquisition) {
 			accessibilityLogEvent("targeting", "aim_acquisition",
-					"frame=%d source=%d slot=%d propnum=%d shootability=%d reason=%s native_expected=%d",
+					"frame=%d source=%d slot=%d propnum=%d shootability=%d reason=%s native_expected=%d quality_available=%d quality=%.4f distance=%.3f",
 					observation->frame60, observation->aimedidentity.source,
 					observation->aimedidentity.sourceslot,
 					observation->aimedidentity.propnum,
 					aimedshootability,
 					accessibilityTargetingShootabilityName(aimedshootability),
-					observation->nativealignmentexpected);
-
-			if (observation->nativealignmentexpected) {
-				g_AccessibilityTargetingNextAlignment60
-						= observation->frame60
-								+ g_AccessibilityTargetingCurrentPolicy->alignmentticks;
-				accessibilityLogEvent("targeting", "alignment_suppressed",
-						"frame=%d reason=native_acquisition_sound_expected next_frame=%d",
-						observation->frame60,
-						g_AccessibilityTargetingNextAlignment60);
-			} else {
-				accessibilityTargetingPulseAlignment(observation->frame60, "acquisition");
-			}
-		} else if (observation->frame60 >= g_AccessibilityTargetingNextAlignment60) {
-			accessibilityTargetingPulseAlignment(observation->frame60, "held");
+					observation->nativealignmentexpected,
+					aimedrecord->hasaimquality, aimedrecord->aimquality,
+					aimedrecord->aimdistance);
 		}
+
+		accessibilityTargetingUpdateAlignment(observation->frame60,
+				aimedrecord, acquisition ? "acquisition" : "held");
 	}
 
 	accessibilityTargetingMerge(observation);
@@ -712,7 +725,7 @@ void accessibilityTargetingObserve(
 			|| observation->frame60
 					>= g_AccessibilityTargetingCurrentState->nextobservationlog60) {
 		accessibilityLogEvent("targeting", "observation",
-				"count=%llu frame=%d stage=%d player=%d source=%d profile=%d sight_on=%d indicator_visible=%d candidates=%d tracked=%d aimed_candidate=%d aimed_shootable=%d shootability=%d shootability_reason=%s acquisition=%d next_presence=%d next_alignment=%d",
+				"count=%llu frame=%d stage=%d player=%d source=%d profile=%d sight_on=%d indicator_visible=%d candidates=%d tracked=%d aimed_candidate=%d aimed_shootable=%d shootability=%d shootability_reason=%s acquisition=%d next_presence=%d alignment_active=%d quality_available=%d quality=%.4f distance=%.3f frequency_hz=%.2f",
 				(unsigned long long)g_AccessibilityTargetingObservationCount,
 				observation->frame60, observation->stagenum, observation->playernum,
 				observation->source, observation->profile, observation->sighton,
@@ -721,7 +734,11 @@ void accessibilityTargetingObserve(
 				aimedshootability,
 				accessibilityTargetingShootabilityName(aimedshootability), acquisition,
 				g_AccessibilityTargetingNextPresence60,
-				g_AccessibilityTargetingNextAlignment60);
+				g_AccessibilityTargetingAlignmentActive,
+				aimedrecord ? aimedrecord->hasaimquality : 0,
+				aimedrecord ? aimedrecord->aimquality : 0.0f,
+				aimedrecord ? aimedrecord->aimdistance : 0.0f,
+				g_AccessibilityTargetingAlignmentFrequencyHz);
 		g_AccessibilityTargetingCurrentState->nextobservationlog60
 				= observation->frame60 + ACCESSIBILITY_TARGETING_OBSERVATION_LOG_TICKS;
 	}
@@ -749,18 +766,18 @@ static void accessibilityTargetingResetCurrent(const char *reason)
 	s32 hadstate = g_AccessibilityTargetingRecordCount
 			|| g_AccessibilityTargetingHasAimedIdentity
 			|| g_AccessibilityTargetingPresenceChannel >= 0
-			|| g_AccessibilityTargetingAlignmentHandle;
+			|| g_AccessibilityTargetingAlignmentActive;
 
 	accessibilityTargetingStopPresence(reason ? reason : "reset");
 	accessibilityTargetingStopAlignment(reason ? reason : "reset");
 
 	if (hadstate) {
 		accessibilityLogEvent("targeting", "reset",
-				"reason=%s observations=%llu presence_pulses=%llu alignment_pulses=%llu records=%d aimed=%d",
+				"reason=%s observations=%llu presence_pulses=%llu alignment_updates=%llu records=%d aimed=%d",
 				reason ? reason : "reset",
 				(unsigned long long)g_AccessibilityTargetingObservationCount,
 				(unsigned long long)g_AccessibilityTargetingPresencePulseCount,
-				(unsigned long long)g_AccessibilityTargetingAlignmentPulseCount,
+				(unsigned long long)g_AccessibilityTargetingAlignmentUpdateCount,
 				g_AccessibilityTargetingRecordCount,
 				g_AccessibilityTargetingHasAimedIdentity);
 	}
@@ -775,10 +792,10 @@ static void accessibilityTargetingResetCurrent(const char *reason)
 	g_AccessibilityTargetingHasLastPulseIdentity = false;
 	g_AccessibilityTargetingHasAimedIdentity = false;
 	g_AccessibilityTargetingNextPresence60 = 0;
-	g_AccessibilityTargetingNextAlignment60 = 0;
+	g_AccessibilityTargetingNextAlignmentLog60 = 0;
 	g_AccessibilityTargetingObservationCount = 0;
 	g_AccessibilityTargetingPresencePulseCount = 0;
-	g_AccessibilityTargetingAlignmentPulseCount = 0;
+	g_AccessibilityTargetingAlignmentUpdateCount = 0;
 	g_AccessibilityTargetingCurrentState->haslastobservation = false;
 	g_AccessibilityTargetingCurrentState->lastcandidatecount = 0;
 	g_AccessibilityTargetingCurrentState->lastaimed = false;

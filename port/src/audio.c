@@ -5,6 +5,7 @@
 #include "config.h"
 #include "audio.h"
 #include "system.h"
+#include "accessibility/accessibility_tone.h"
 
 static SDL_AudioDeviceID dev;
 static const s16 *nextBuf;
@@ -61,7 +62,8 @@ void audioEndFrame(void)
 {
 	if (nextBuf && nextSize) {
 		if (audioGetSamplesBuffered() < queueLimit) {
-			SDL_QueueAudio(dev, nextBuf, nextSize);
+			SDL_QueueAudio(dev,
+					accessibilityToneMix(nextBuf, nextSize), nextSize);
 		}
 		nextBuf = NULL;
 		nextSize = 0;

@@ -564,7 +564,10 @@ void func0f060bac(s32 weaponnum, struct prop *prop)
  *
  * The return value is the final prop that was hit.
  */
-struct prop *shotCalculateHits(s32 handnum, bool isshooting, struct coord *gunpos2d, struct coord *gundir2d, struct coord *gunpos3d, struct coord *gundir3d, u32 arg6, f32 distance, bool cheap)
+static struct prop *shotCalculateHitsInternal(s32 handnum, bool isshooting,
+		struct coord *gunpos2d, struct coord *gundir2d,
+		struct coord *gunpos3d, struct coord *gundir3d, u32 arg6,
+		f32 distance, bool cheap, struct coord *queryhitpos)
 {
 	u32 index;
 	struct prop **propptr;
@@ -958,6 +961,10 @@ struct prop *shotCalculateHits(s32 handnum, bool isshooting, struct coord *gunpo
 						done = true;
 					}
 
+					if (result == hitprop && queryhitpos) {
+						*queryhitpos = shotdata.hits[i].pos;
+					}
+
 					if (shotdata.hits[i].slowsbullet) {
 						s1++;
 
@@ -971,6 +978,15 @@ struct prop *shotCalculateHits(s32 handnum, bool isshooting, struct coord *gunpo
 	}
 
 	return result;
+}
+
+struct prop *shotCalculateHits(s32 handnum, bool isshooting,
+		struct coord *gunpos2d, struct coord *gundir2d,
+		struct coord *gunpos3d, struct coord *gundir3d, u32 arg6,
+		f32 distance, bool cheap)
+{
+	return shotCalculateHitsInternal(handnum, isshooting, gunpos2d, gundir2d,
+			gunpos3d, gundir3d, arg6, distance, cheap, NULL);
 }
 
 #ifndef PLATFORM_N64
@@ -1091,7 +1107,8 @@ bool shotTestLos(struct coord *gunpos2d, struct coord *gundir2d, struct coord *g
 
 #endif
 
-struct prop *propFindAimingAt(s32 handnum, bool isshooting, u32 context)
+static struct prop *propFindAimingAtInternal(s32 handnum, bool isshooting,
+		u32 context, struct coord *queryhitpos)
 {
 	struct coord gundir2d;
 	struct coord gunpos2d;
@@ -1107,7 +1124,20 @@ struct prop *propFindAimingAt(s32 handnum, bool isshooting, u32 context)
 	mtx4TransformVec(camGetProjectionMtxF(), &gunpos2d, &gunpos3d);
 	mtx4RotateVec(camGetProjectionMtxF(), &gundir2d, &gundir3d);
 
-	return shotCalculateHits(handnum, isshooting, &gunpos2d, &gundir2d, &gunpos3d, &gundir3d, 0, 4294836224, PLAYERCOUNT() >= 2);
+	return shotCalculateHitsInternal(handnum, isshooting, &gunpos2d, &gundir2d,
+			&gunpos3d, &gundir3d, 0, 4294836224, PLAYERCOUNT() >= 2,
+			queryhitpos);
+}
+
+struct prop *propFindAimingAt(s32 handnum, bool isshooting, u32 context)
+{
+	return propFindAimingAtInternal(handnum, isshooting, context, NULL);
+}
+
+struct prop *propFindAimingAtWithHit(s32 handnum, bool isshooting, u32 context,
+		struct coord *queryhitpos)
+{
+	return propFindAimingAtInternal(handnum, isshooting, context, queryhitpos);
 }
 
 void shotCreate(s32 handnum, bool isshooting, bool dorandom, s32 numshots, bool cheap)

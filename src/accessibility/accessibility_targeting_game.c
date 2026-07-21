@@ -15,6 +15,7 @@
 #include "accessibility/accessibility_targeting.h"
 
 #define ACCESSIBILITY_TARGETING_AUDIT_TICKS TICKS(60)
+#define ACCESSIBILITY_TARGETING_RANGE_OUTER_RADIUS 75.0f
 
 struct accessibilitytargetinggameaudit {
 	uintptr_t prop;
@@ -56,6 +57,9 @@ static struct accessibilitytargetinggameprojection
 static s32 g_AccessibilityTargetingGameProjectionFrame60 = -1;
 static s32 g_AccessibilityTargetingGameProjectionPlayer = -1;
 static s32 g_AccessibilityTargetingGameProjectionsValid;
+static uintptr_t g_AccessibilityTargetingGameAimProp;
+static struct coord g_AccessibilityTargetingGameAimHitPos;
+static s32 g_AccessibilityTargetingGameAimHitValid;
 
 static s32 accessibilityTargetingGameAuditEqual(
 		const struct accessibilitytargetinggameaudit *a,
@@ -173,9 +177,14 @@ static void accessibilityTargetingGameClearProjections(void)
 	g_AccessibilityTargetingGameProjectionFrame60 = -1;
 	g_AccessibilityTargetingGameProjectionPlayer = -1;
 	g_AccessibilityTargetingGameProjectionsValid = false;
+	g_AccessibilityTargetingGameAimProp = 0;
+	memset(&g_AccessibilityTargetingGameAimHitPos, 0,
+			sizeof(g_AccessibilityTargetingGameAimHitPos));
+	g_AccessibilityTargetingGameAimHitValid = false;
 }
 
-void accessibilityTargetingCaptureGame(void)
+void accessibilityTargetingCaptureGame(struct prop *queryaimedprop,
+		const struct coord *queryhitpos)
 {
 	struct frdata *frdata;
 	s32 i;
@@ -186,6 +195,16 @@ void accessibilityTargetingCaptureGame(void)
 
 	if (accessibilityTargetingGameScopeReason()) {
 		return;
+	}
+
+	if (queryaimedprop && queryhitpos
+			&& queryaimedprop == g_Vars.currentplayer->lookingatprop.prop
+			&& accessibilityTargetingGamePropNum(queryaimedprop) >= 0
+			&& isfinite(queryhitpos->x) && isfinite(queryhitpos->y)
+			&& isfinite(queryhitpos->z)) {
+		g_AccessibilityTargetingGameAimProp = (uintptr_t)queryaimedprop;
+		g_AccessibilityTargetingGameAimHitPos = *queryhitpos;
+		g_AccessibilityTargetingGameAimHitValid = true;
 	}
 
 	frdata = frGetData();
@@ -448,9 +467,32 @@ void accessibilityTargetingObserveGame(void)
 		candidate->localizedname = "Firing range target";
 
 		if (prop == aimedprop) {
+			f32 aimdx;
+			f32 aimdy;
+			f32 aimdz;
+
 			observation.hasaimedtarget = true;
 			observation.aimedidentity = candidate->identity;
 			aimedshootability = candidate->shootability;
+
+			if (g_AccessibilityTargetingGameAimHitValid
+					&& g_AccessibilityTargetingGameAimProp == (uintptr_t)prop) {
+				aimdx = g_AccessibilityTargetingGameAimHitPos.x - prop->pos.x;
+				aimdy = g_AccessibilityTargetingGameAimHitPos.y - prop->pos.y;
+				aimdz = g_AccessibilityTargetingGameAimHitPos.z - prop->pos.z;
+				candidate->aimdistance = sqrtf(aimdx * aimdx + aimdy * aimdy
+						+ aimdz * aimdz);
+				candidate->aimquality = 1.0f - candidate->aimdistance
+						/ ACCESSIBILITY_TARGETING_RANGE_OUTER_RADIUS;
+
+				if (candidate->aimquality < 0.0f) {
+					candidate->aimquality = 0.0f;
+				} else if (candidate->aimquality > 1.0f) {
+					candidate->aimquality = 1.0f;
+				}
+
+				candidate->hasaimquality = true;
+			}
 		}
 	}
 
