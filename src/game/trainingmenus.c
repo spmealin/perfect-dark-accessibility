@@ -1995,7 +1995,14 @@ char *dtMenuTextName(struct menuitem *item)
 
 MenuItemHandlerResult menuhandlerDtOkOrResume(s32 operation, struct menuitem *item, union handlerdata *data)
 {
-	if (operation == MENUOP_SET) {
+	if (operation == MENUOP_GETACCESSIBILITYTEXT) {
+		if (data->accessibility.part == MENUACCESSIBILITYPART_SUMMARY
+				&& data->accessibility.buffer && data->accessibility.bufferlen > 0) {
+			snprintf(data->accessibility.buffer, data->accessibility.bufferlen,
+					"%s", dtGetDescription());
+			return data->accessibility.buffer[0] != '\0';
+		}
+	} else if (operation == MENUOP_SET) {
 		// @bug: dtBegin() should not be called if training is already in
 		// progress. Doing this resets the training timer.
 		dtBegin();
@@ -2486,7 +2493,7 @@ struct menuitem g_DtDetailsMenuItems[] = {
 	{
 		MENUITEMTYPE_SELECTABLE,
 		0,
-		MENUITEMFLAG_SELECTABLE_CLOSESDIALOG,
+		MENUITEMFLAG_SELECTABLE_CLOSESDIALOG | MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		(uintptr_t)&dtMenuTextOkOrResume,
 		0,
 		menuhandlerDtOkOrResume,
