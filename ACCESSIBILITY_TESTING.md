@@ -61,6 +61,10 @@ Launch every built Perfect Dark executable from the MSYS2 MinGW64 environment, i
 
 Milestone 2 implements `$S/accessibility.log` separately from `pd.log`. It is created only when both `Accessibility.Enabled=1` and `Accessibility.LoggingEnabled=1`; both now default to one for blind-user acceptance testing but remain configurable. The schema records lifecycle, speech, and menu events.
 
+The temporary `ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS` CMake option defaults to `OFF`. Enable it for a diagnostic build in the required MinGW64 environment with `cmake -G"Unix Makefiles" -Bbuild -DACCESSIBILITY_PERFORMANCE_DIAGNOSTICS=ON .`, then rebuild normally. Return to the normal build with the same configure command using `OFF`.
+
+When compiled in and accessibility logging is active, `performance/frame_window` is emitted approximately once per real-time second regardless of whether targeting, beacons, or hazards currently have a selected object. It records rendered-frame rate, the longest observed inter-frame gap, logical game-tick rate and delta fields, stage/menu context, Windows working-set and private-byte totals and session-baseline deltas, desired oscillator states, and fixed-buffer mixer call/pass-through/active/frame counters. Use it to correlate a reported slowdown with memory growth, an oscillator that remained enabled, or continued expensive mixing. Hazard `scan` audits additionally include the current, average, and maximum scan duration in microseconds for the preceding audit window. These records are diagnostic observations only and do not allocate or lock in the audio callback. The session-start record reports `performance_diagnostics=1` and its interval when present, or zero when compiled out.
+
 A JSON Lines or equivalently parseable record could look like this, with the schema finalized in implementation:
 
 ```json
@@ -111,6 +115,7 @@ LoggingEnabled=1
 SpeechEnabled=1
 MenuNarration=1
 HudMessages=1
+EnvironmentalHazards=1
 ```
 
 Then launch `build/pd.x86_64.exe --accessibility-speech-test`. The flag never enables accessibility or speech by itself. The exact request is `Perfect Dark accessibility speech test.` With speech enabled but no flag, backend detection occurs without an output request. Development output must contain `Tolk.dll` and the architecture-matching NVDA controller beside the executable; notices are copied to `build/licenses/tolk/`.
@@ -223,6 +228,14 @@ For the remaining Milestone 7 work, trigger objective completion, objective fail
 Query at full and partial health/shield; change weapons/functions; test loaded and reserve ammunition, reload, empty ammo, dual wield, pickups, death/restart, pause, and a scripted/training health change. Compare announcements to semantic APIs or controlled in-game state, not solely a visual bar.
 
 ### Targeting and scanner
+
+#### Environmental damaging lasers
+
+With `Accessibility.EnvironmentalHazards=1`, start Carrington Institute holo-training 3 and leave F5/F6 beacons off for the first pass. Approach each horizontal laser while looking toward it. At no more than 500 world units and within the 25-degree facing cone, confirm one 220 Hz tone fades in and audibly sweeps from one physical endpoint to the other and back over 90 ticks. Turn just outside the cone, turn fully away, retreat beyond range, and place opaque background geometry between the camera and beam; each condition must fade the hazard lane out. Restore eligibility and confirm automatic reacquisition without a key press.
+
+Move through adjacent laser bars and confirm the nearest eligible bar replaces the prior one without rapid oscillation; the 75-unit margin should retain the current identity until another is materially nearer. Verify fully faded/open, disabled, and non-colliding lasers remain silent. Exercise standing, ducking, and crouching, then pause, open a menu, abort/complete the exercise, leave the stage, disable the setting, and shut down. In each case confirm the lane stops. Repeat with beacons and the firing-range fine-aim tone active where practical to confirm the three procedural voices do not interrupt one another. Run several sessions and check for stuck sound, frame degradation, or growing memory.
+
+Correlate `hazard/scan`, `selection`, `selection_lost`, `sweep`, `scan_guard`, and `reset` records with the observed beam. Validate endpoints, closest/source distances, facing dot, sweep phase, source position, attenuation, and pan. `scan` aggregates all rejection categories and `sweep` captures the selected source, each rate-limited to once per second; unchanged ineligible props do not create per-frame log records.
 
 Use a controlled room with known eligible and ineligible entities. Test friendly/hostile/neutral where applicable, occlusion/cloak rules, target loss, rapid crossings, empty scan, overlapping results, collected/opened/destroyed objects, and multiple local-player context. Explicitly audit for hidden-information leaks.
 

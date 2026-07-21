@@ -34,6 +34,8 @@ endif()
 
 set(ROMID "ntsc-final" CACHE STRING "Which ROM to build an executable for: ntsc-final, pal-final or jpn-final")
 option(FORCE_CROSSCOMPILE "Force cross compiling" NO)
+option(ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+  "Enable temporary high-frequency accessibility performance diagnostics" OFF)
 
 # Determine target arch
 
@@ -278,8 +280,10 @@ set(SRC_ACCESSIBILITY
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_announcement.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_beacon.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_hud.c"
+  "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_hazard.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_log.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_menu.c"
+  "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_performance.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_speech.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_targeting.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_targeting_game.c"
@@ -366,6 +370,8 @@ add_custom_target(pd_headers ALL DEPENDS ${JSON_HEADERS})
 
 set(BIN_NAME "pd${BIN_REGION}.${TARGET_ARCH}")
 add_executable(pd ${SRC})
+target_compile_definitions(pd PRIVATE
+  ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS=$<BOOL:${ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS}>)
 add_dependencies(pd pd_headers)
 if(WIN32)
   add_dependencies(pd tolk tolk_runtime_files)

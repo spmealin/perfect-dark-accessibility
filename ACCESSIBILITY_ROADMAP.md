@@ -105,6 +105,17 @@ Implementation status: the generic HUD-admission slice is implemented behind `Ac
 - **Risks and unknowns:** Target state may leak information, fluctuate per frame, or have sight/weapon-specific rules.
 - **Explicit non-goals:** No aim automation, snap-to-target, enemy radar, or hit guarantee.
 
+### Prioritized environmental-hazard slice
+
+- **Status:** Generic damaging-laser implementation builds; runtime and blind-user acceptance are pending.
+- **Goal:** Make nearby, directly faced laser barriers perceptible without creating a constant environmental alarm.
+- **User-visible result:** The nearest active damaging laser within 500 units emits an automatically enabled 220 Hz spatial sweep along its beam and back; turning away or losing sight silences it.
+- **Systems:** Active-prop traversal, semantic laser-door state, live model bounds/rotation, closest-point and camera-facing tests, background line of sight, prop-sound spatial math, and a third fixed procedural mixer voice.
+- **Acceptance:** In holo-training 3, approach every laser at standing, ducking, and crouching heights; confirm the sweep follows the visible beam, stops outside the forward cone/range or behind geometry, advances to the next bar without chatter, and coexists with aiming and beacon cues. Repeat through exercise start, completion/abort, pause, menu, death where practical, stage exit, feature disable, and several sessions without growth or stuck audio.
+- **Logging/evidence:** Record selected identity, endpoints, closest/source distance, facing dot, line-of-sight and state exclusions, sweep phase/source, attenuation, pan, selection changes, lifecycle resets, and aggregate scans.
+- **Risks and unknowns:** Stereo cannot fully encode elevation or front/rear position; 500-unit range, 25-degree cone, 90-tick cycle, 75-unit hysteresis, level, and masking require blind-user tuning.
+- **Explicit non-goals:** No global hazard radar, warning for inactive/occluded/rearward lasers, automated crouching, route advice, or non-laser hazard claim.
+
 ## Milestone 10 — Broader interaction scanner
 
 - **Goal:** Generalize the Carrington Institute beacon proof into a deliberate, knowledge-safe query for a broader set of nearby actionable things.

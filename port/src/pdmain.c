@@ -73,7 +73,9 @@
 #include "data.h"
 #include "types.h"
 #include "system.h"
+#include "accessibility/accessibility.h"
 #include "accessibility/accessibility_beacon.h"
+#include "accessibility/accessibility_hazard.h"
 #include "accessibility/accessibility_targeting.h"
 
 extern u8 *g_MempHeap;
@@ -513,6 +515,7 @@ void mainLoop(void)
 		}
 
 		accessibilityBeaconReset("stage_stop");
+		accessibilityHazardReset("stage_stop");
 		accessibilityTargetingReset("stage_stop");
 		lvStop();
 		mempDisablePool(MEMPOOL_STAGE);
@@ -535,6 +538,7 @@ void mainTick(void)
 
 	if (g_MainChangeToStageNum < 0) {
 		frametimeCalculate();
+		accessibilityPerformanceTick();
 		profileReset();
 		profileSetMarker(PROFILE_MAINTICK_START);
 		joyDebugJoy();
@@ -548,6 +552,7 @@ void mainTick(void)
 
 			lvTick();
 			accessibilityBeaconTick();
+			accessibilityHazardTick();
 			playermgrShuffle();
 
 			if (g_StageNum < STAGE_TITLE) {
