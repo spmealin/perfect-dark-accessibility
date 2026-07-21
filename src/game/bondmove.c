@@ -2102,6 +2102,17 @@ void bmoveProcessInput(bool allowc1x, bool allowc1y, bool allowc1buttons, bool i
 
 			g_Vars.currentplayer->vv_verta += g_Vars.currentplayer->speedverta * g_Vars.lvupdate60freal * 3.5f;
 		}
+
+#ifndef PLATFORM_N64
+		if (c1buttonsthisframe & BUTTON_RESET_VIEW) {
+			g_Vars.currentplayer->vv_verta = 0.0f;
+			g_Vars.currentplayer->speedverta = 0.0f;
+			g_Vars.currentplayer->docentreupdown = false;
+			g_Vars.currentplayer->prevupdown = false;
+			g_Vars.currentplayer->automovecentre = false;
+			g_Vars.currentplayer->movecentrerelease = false;
+		}
+#endif
 	}
 
 	if (movedata.cannaturalturn) {

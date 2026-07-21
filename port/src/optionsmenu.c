@@ -1741,6 +1741,7 @@ static const struct menubind menuBinds[] = {
 	{ CK_C_L,    "Strafe Left [CL]\n",  "N64 C-Left\n" },
 	{ CK_X,      "Reload [X]\n",        "N64 Ext X\n" },
 	{ CK_Y,      "Next Weapon [Y]\n",   "N64 Ext Y\n" },
+	{ CK_1000,   "Reset View [+]\n",    "N64 Ext 1000\n" },
 	{ CK_8000,   "Cycle Crouch [+]\n",  "N64 Ext 8000\n" },
 	{ CK_4000,   "Half Crouch [+]\n",   "N64 Ext 4000\n" },
 	{ CK_2000,   "Full Crouch [+]\n",   "N64 Ext 2000\n" },
@@ -1764,6 +1765,7 @@ static MenuItemHandlerResult menuhandlerResetBindsN64(s32 operation, struct menu
 	}
 
 struct menuitem g_ExtendedBindsMenuItems[] = {
+	DEFINE_MENU_BIND(),
 	DEFINE_MENU_BIND(),
 	DEFINE_MENU_BIND(),
 	DEFINE_MENU_BIND(),

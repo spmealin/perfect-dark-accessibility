@@ -35,6 +35,10 @@ The current branch contains the Milestone 2 accessibility coordinator/logger, th
 
 This is only the firing-range proof. Hostile/friendly character semantics, ordinary combat, cloaking and occlusion policy, special sights, target speech/repeat, multiplayer output, and full Milestone 9 blind-user acceptance remain pending.
 
+### View orientation recovery
+
+The PC default control scheme maps both the keyboard End key and an Xbox-compatible controller's right thumbstick click (R3) to the configurable `Reset View` action. Pressing either during active gameplay immediately sets the camera's vertical look angle to horizontal without changing the player's compass heading. It also clears residual vertical-look and automatic-centering state so the camera does not continue drifting after the reset. The action is available in the extended controls binding menu under `Reset View`; the N64 default scheme leaves it unbound.
+
 ### Fine aiming tone
 
 The firing-range targeting alignment lane uses a centered generated sine wave instead of the former repeated `SFX_0007` cue. It activates automatically only while the game reports that the reticle is over a visible, currently shootable range target. The adapter reuses the exact non-random query-ray hit position produced while calculating `lookingatprop`; it does not include weapon spread or cast an additional ray. The range's existing scoring model measures that point's distance from the target center, with bullseye/ring boundaries at 18, 37, and 56 world units. Accessibility converts the same distance into a continuous quality value across the approximately 75-unit scoring radius. Center produces the highest pitch. A 440 Hz reference and `1.5` to `3.0` pitch range produce 660–1320 Hz. The tone stops on aim loss, a back-facing target, scope loss, pause/menu transitions, feature disable, stage teardown, or shutdown. The backend preserves oscillator phase, interpolates frequency through each audio buffer, applies a 10 ms gain ramp, and uses one fixed buffer with no runtime allocation or game sound handle. There is no F9 prototype binding.
