@@ -322,8 +322,26 @@ MenuItemHandlerResult frWeaponListMenuHandler(s32 operation, struct menuitem *it
 				&& data->accessibility.buffer && data->accessibility.bufferlen > 0
 				&& data->accessibility.index >= 0
 				&& data->accessibility.index < frGetNumWeaponsAvailable()) {
-			snprintf(data->accessibility.buffer, data->accessibility.bufferlen,
-					"%s", bgunGetName(frGetWeaponBySlot(data->accessibility.index)));
+			const char *difficulties[] = {
+				langGet(L_MPMENU_439), // "Bronze"
+				langGet(L_MPMENU_440), // "Silver"
+				langGet(L_MPMENU_441), // "Gold"
+			};
+
+			weaponnum = frGetWeaponBySlot(data->accessibility.index);
+			score = ciGetFiringRangeScore(frGetWeaponIndexByWeapon(weaponnum));
+			data->accessibility.buffer[0] = '\0';
+			frAccessibilityAppend(data->accessibility.buffer,
+					data->accessibility.bufferlen, bgunGetName(weaponnum), NULL);
+
+			for (i = 0; i < ARRAYCOUNT(difficulties) && i < score; i++) {
+				frAccessibilityAppend(data->accessibility.buffer,
+						data->accessibility.bufferlen, difficulties[i], ". ");
+				frAccessibilityAppend(data->accessibility.buffer,
+						data->accessibility.bufferlen,
+						langGet(L_OPTIONS_276), " "); // "Completed"
+			}
+
 			return 1;
 		}
 		break;
