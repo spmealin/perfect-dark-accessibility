@@ -2374,7 +2374,14 @@ char *htMenuTextName(struct menuitem *item)
 
 MenuItemHandlerResult menuhandler001a6a34(s32 operation, struct menuitem *item, union handlerdata *data)
 {
-	if (operation == MENUOP_SET) {
+	if (operation == MENUOP_GETACCESSIBILITYTEXT) {
+		if (data->accessibility.part == MENUACCESSIBILITYPART_SUMMARY
+				&& data->accessibility.buffer && data->accessibility.bufferlen > 0) {
+			snprintf(data->accessibility.buffer, data->accessibility.bufferlen,
+					"%s", htGetDescription());
+			return data->accessibility.buffer[0] != '\0';
+		}
+	} else if (operation == MENUOP_SET) {
 		htBegin();
 		func0f0f8120();
 	}
@@ -2691,7 +2698,7 @@ struct menuitem g_HtDetailsMenuItems[] = {
 	{
 		MENUITEMTYPE_SELECTABLE,
 		0,
-		MENUITEMFLAG_SELECTABLE_CLOSESDIALOG,
+		MENUITEMFLAG_SELECTABLE_CLOSESDIALOG | MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		(uintptr_t)&htMenuTextOkOrResume,
 		0,
 		menuhandler001a6a34,

@@ -8,6 +8,8 @@ The current branch contains the Milestone 2 accessibility coordinator/logger, th
 
 The firing-range weapon list announces the same completed bronze, silver, and gold proficiency stars rendered beside each weapon. It reads only the filled stars represented by the saved score and does not infer incomplete progress or expose state absent from the visual row.
 
+The holo-training computer announces the selected exercise's localized static description when its details dialog opens and on F5 repeat, before announcing the focused `OK` or `Resume` control. The speech comes from the same `htGetDescription()` value rendered in the dialog's non-focusable text panel.
+
 ### Carrington Institute beacon prototype
 
 `Accessibility.InteractableBeacons` defaults to `1` for project-owner blind-user acceptance testing. It remains configurable in `pd.ini`. Enabling the setting does not start a sound automatically; use F5 and F6 during Carrington Institute gameplay.
