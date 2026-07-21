@@ -37,7 +37,9 @@ The first blind-user acceptance route must include at least one Carrington Insti
 
 Do not add pickups, weapons merely because they can be collected, characters, enemies, lifts without a door prop, mission objectives, alarms outside the scoped interaction rules, or decorative props as new categories.
 
-### Existing sound selection
+### Original existing-sound selection (superseded)
+
+The initial accepted prototype below used existing samples. A later cue-quality revision replaces those two samples with a 100 ms procedural sine chirp: 440 Hz for doors and 880 Hz for interactable objects. It retains the same round-robin cadence, spatial pan, distance attenuation, category toggles, and one-at-a-time rule while moving pulse ownership from a property-sound channel to the fixed accessibility mixer. This revision adds no external asset and does not change the semantic scan policy.
 
 No synthesized tone and no external audio file is needed for this milestone.
 
@@ -108,8 +110,8 @@ Use a named, single-source provisional scan radius of **1,200 game units**. The 
 
 Apply a knowledge boundary in addition to raw distance:
 
-- An interactable object must share at least one player room or be in a directly adjacent room and pass a read-only background line-of-sight check when the object's interaction flags ordinarily require line of sight.
-- A door may share or connect the player's room set or an immediately adjacent room without requiring line of sight through the closed door itself.
+- An interactable object must share at least one player room or be in a directly adjacent room and always pass a read-only background line-of-sight check.
+- A door must share or connect the player's room set or an immediately adjacent room and pass a background-only line-of-sight test. Door geometry is excluded from that ray so the selected closed door does not block itself, while sight-blocking level geometry suppresses doors beyond it.
 - Reject invalid room lists, props beyond the adjacency boundary, and props whose state says they are hidden, destroyed, disabled, or unavailable.
 
 Do not use `PROPFLAG_ONTHISSCREENTHISTICK` as the scan's knowledge rule: the beacon must find things the blind player is not already aiming at. Conversely, do not treat mere allocation in the stage as knowledge; that would reveal distant or hidden content.
@@ -356,8 +358,8 @@ Exit: the acceptance criteria pass and the roadmap status is updated honestly.
 - Vertical separation is measured and documented.
 - A prop outside 1,200 units is excluded.
 - A distant or nonadjacent-room prop is excluded even if allocated.
-- A closed door at a room boundary remains discoverable without an impossible LOS-through-door requirement.
-- An object that requires LOS does not leak through inaccessible geometry.
+- A closed door at a room boundary remains discoverable when background line of sight is clear; its own door geometry is not included in the ray.
+- An interactable object does not beacon through sight-blocking background geometry, regardless of its native interaction flags.
 
 ### Lifecycle and robustness
 
@@ -400,7 +402,7 @@ Do not add the ROM, generated executable, logs, save data, or copied build outpu
 | --- | --- |
 | Reusing immediate interaction code mutates global state or requires render focus | Extract pure semantic predicates; never call `propFindForInteract` or interaction action functions from a scan. |
 | A scan reveals content through walls | Apply bounded room adjacency plus category-appropriate LOS policy and log every decision. |
-| Closed doors fail an ordinary LOS test | Use door room connectivity rather than requiring a ray through the closed door. |
+| Closed doors block their own LOS test | Use the established background-only ray so walls occlude the door but door geometry itself does not. |
 | Door panels appear multiple times | Canonicalize the sibling group and log all members. |
 | Prop pointer becomes stale | Reset on stage transitions; retain identity fields; validate type/object identity before every pulse. |
 | Existing sounds imply an action occurred | Use neutral focus/subfocus samples, never movement/switch/success sounds. |
@@ -431,9 +433,9 @@ Do not add the ROM, generated executable, logs, save data, or copied build outpu
 - [x] Door siblings canonicalized and prop lifetimes validated in code; runtime cases remain below.
 - [x] Context-gated F5 object and F6 door toggles implemented provisionally with independent category state.
 - [x] `Accessibility.InteractableBeacons` registered, default enabled for acceptance testing, with runtime initially silent until F5/F6.
-- [x] Interactable objects use positioned `SFX_MENU_FOCUS` pulses.
-- [x] Doors use positioned `SFX_MENU_SUBFOCUS` pulses.
-- [x] Global round-robin cadence, single-channel transfer, and all planned stop/reset paths implemented.
+- [x] Interactable objects use positioned 880 Hz procedural chirps (superseding the accepted `SFX_MENU_FOCUS` prototype).
+- [x] Doors use positioned 440 Hz procedural chirps (superseding the accepted `SFX_MENU_SUBFOCUS` prototype).
+- [x] Global round-robin cadence, single-chirp retriggering, and all planned stop/reset paths implemented.
 - [x] Comprehensive command, scan, candidate, ordering, pulse, and lifecycle logs implemented.
 - [x] MinGW64 build passes using the required commands.
 - [ ] Enabled, disabled, dependency-failure, empty-result, state-transition, and long-session runtime checks pass.
@@ -447,6 +449,6 @@ After this work is accepted, Milestone 6 adds narrated, persistent accessibility
 
 ## Implementation result (2026-07-19)
 
-The engineering implementation is present and the default `ntsc-final` x86-64 MinGW64 build succeeds. The new core module is `src/accessibility/accessibility_beacon.c`; `port/src/pdmain.c` supplies one post-`lvTick` coordinator call and a pre-`lvStop` reset. No `propobj.c` or `propsnd.c` hook was required because existing read-only state and the public prop-sound API were sufficient. A dedicated sound type in `src/include/constants.h` isolates stop operations from gameplay sounds. A later performance hardening pass made each category reclaim its exact tracked channel when ownership is still safe and added 30-second process-memory/audio-channel telemetry for long-session acceptance. Blind-user testing confirmed the laptop and office-door beacons and reported that the prior choppiness was gone after hardening; a five-minute telemetry run showed bounded audio-channel use, zero allocation failures, and no sustained linear memory-growth pattern. Subsequent usability passes added twice-per-second automatic target refresh followed by a global multi-target round-robin scheduler. Current CI policy retains three targets per category with a 150-unit membership margin and a 300 ms minimum gap; the scheduler architecture keeps the cap and density policy replaceable for future enemy tracking.
+The engineering implementation is present and the default `ntsc-final` x86-64 MinGW64 build succeeded for the original sample-backed version. The core module is `src/accessibility/accessibility_beacon.c`; `port/src/pdmain.c` supplies one post-`lvTick` coordinator call and a pre-`lvStop` reset. No `propobj.c` or `propsnd.c` hook was required because existing read-only state and public spatial calculation APIs were sufficient. Blind-user testing confirmed the laptop and office-door beacons and reported that the prior choppiness was gone after channel hardening; a five-minute telemetry run showed bounded audio-channel use, zero allocation failures, and no sustained linear memory-growth pattern. Subsequent usability passes added twice-per-second automatic target refresh followed by a global multi-target round-robin scheduler. Current CI policy retains three targets per category with a 150-unit membership margin and a 300 ms minimum gap; the scheduler architecture keeps the cap and density policy replaceable for future enemy tracking. The later procedural revision removes beacon property-sound ownership entirely and publishes 440/880 Hz positioned chirps to the fixed-buffer accessibility mixer. Its default MinGW64 build passed on 2026-07-20; blind runtime acceptance remains pending.
 
 Runtime and blind-user checklist items intentionally remain open. Before acceptance, verify `Accessibility.InteractableBeacons=1` in both the effective configuration and session-start log, launch only through the MinGW64 environment, run the verification matrix, and retain the accessibility session ID and relevant logs.

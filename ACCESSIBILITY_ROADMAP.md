@@ -51,15 +51,15 @@ This roadmap orders work by user task and evidence. Milestones are not promises 
 
 ## Milestone 5 — Carrington Institute interactable beacons
 
-- **Status:** Engineering implementation and the MinGW64 `ntsc-final` x86-64 build are complete. In-game runtime verification, cue tuning, and blind-user acceptance are pending.
+- **Status:** The original existing-sample implementation, automatic refresh, and multi-target scheduling passed blind-user acceptance. The procedural-chirp cue revision builds successfully and is pending runtime acceptance.
 - **Detailed plan:** `milestones/ACCESSIBILITY_MILESTONE_05_PLAN.md` is the authoritative implementation handoff.
 - **Goal:** Let a blind player deliberately select and spatially locate two useful classes of nearby Carrington Institute props: interactable objects and doors.
-- **User-visible result:** F5 independently toggles a positioned beacon on the nearest eligible interactable object and F6 does the same for the nearest eligible door, allowing neither, either, or both categories to run. Interactable objects use `SFX_MENU_FOCUS`; doors use `SFX_MENU_SUBFOCUS`. When both are active their pulses are staggered. No new audio asset is required.
-- **Systems:** Accessibility gameplay coordinator, read-only prop eligibility, active-prop traversal, door sibling canonicalization, player-relative ordering, `propsnd` positional audio, provisional PC actions, configuration, and structured logging.
+- **User-visible result:** F5 independently toggles positioned 880 Hz chirps on eligible interactable objects and F6 does the same with 440 Hz chirps on eligible doors, allowing neither, either, or both categories to run. When both are active their pulses are staggered. No new audio asset is required.
+- **Systems:** Accessibility gameplay coordinator, read-only prop eligibility, active-prop traversal, door sibling canonicalization, player-relative ordering, procedural stereo audio, provisional PC actions, configuration, and structured logging.
 - **Acceptance:** In Carrington Institute training, results are stable, range-limited, and limited to the two named categories; cues remain attached to their props; open/closed/locked/destroyed/deactivated state updates safely; menu/pause/cutscene/death transitions silence the beacon; a blind tester can distinguish the categories and independently locate a designated laptop or terminal and a designated door.
-- **Logging/evidence:** Record every scan and per-category toggle, player pose/rooms, every considered prop and raw identity, inclusion/exclusion reason, canonical door group, exact distance/bearing/order, each category's selected target, sound/channel/pulse lifecycle, invalidation, and timing.
-- **Risks and unknowns:** Interaction checks currently mix actionability with on-screen/facing constraints; closed doors require different knowledge checks than ordinary objects; prop lifetimes and linked doors need safe handling; existing stereo panning may require turning to resolve front from rear; the two existing cues must be validated for real-world distinguishability.
-- **Explicit non-goals:** No procedural or external audio, HRTF, global radar, automatic movement/interaction, other stages, other prop categories, permanent bindings/options UI, or claim of a generalized scanner.
+- **Logging/evidence:** Record every scan and per-category toggle, player pose/rooms, every considered prop and raw identity, inclusion/exclusion reason, canonical door group, exact distance/bearing/order, each category's selected target, chirp frequency/volume/pan/pulse lifecycle, invalidation, and timing.
+- **Risks and unknowns:** Interaction checks currently mix actionability with on-screen/facing constraints; closed doors require different knowledge checks than ordinary objects; prop lifetimes and linked doors need safe handling; stereo panning may require turning to resolve front from rear; chirp duration, level, and category contrast need runtime validation.
+- **Explicit non-goals:** No external audio, HRTF, global radar, automatic movement/interaction, other stages, other prop categories, permanent bindings/options UI, or claim of a generalized scanner.
 
 ## Milestone 6 — Discoverable accessibility settings
 

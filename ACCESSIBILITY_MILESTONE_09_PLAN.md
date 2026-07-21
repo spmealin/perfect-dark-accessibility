@@ -359,7 +359,7 @@ Use two deliberately separate lanes.
 
 - Initial candidate sound: `SFX_MENU_SELECT`.
 - Playback: `psCreate` attached to the candidate prop.
-- Ownership: add `PSTYPE_ACCESSIBILITY_TARGETING`, distinct from `PSTYPE_ACCESSIBILITY_BEACON` and gameplay owners.
+- Ownership: add `PSTYPE_ACCESSIBILITY_TARGETING`, distinct from gameplay owners. Beacon cues later moved off property-sound channels to the procedural mixer, so they no longer require a `PSTYPE_*` owner.
 - Concurrency: at most one targeting-presence channel may play at once.
 - Before every pulse, validate the identity/prop/object again, stop or reclaim only the exact free-or-targeting-owned prior channel, then attach the next pulse.
 - Do not create one persistent channel per visible target.
