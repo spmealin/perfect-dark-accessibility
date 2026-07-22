@@ -10,6 +10,10 @@
 #define ACCESSIBILITY_CHIRP_DURATION_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.10f))
 #define ACCESSIBILITY_CHIRP_ATTACK_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.005f))
 #define ACCESSIBILITY_CHIRP_RELEASE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.02f))
+#define ACCESSIBILITY_CHIRP_PATTERN_BEEP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.035f))
+#define ACCESSIBILITY_CHIRP_PATTERN_GAP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.025f))
+#define ACCESSIBILITY_CHIRP_PATTERN_ATTACK_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.003f))
+#define ACCESSIBILITY_CHIRP_PATTERN_RELEASE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.007f))
 #define ACCESSIBILITY_WEAPON_FUNCTION_FREQUENCY_HZ 1000.0f
 #define ACCESSIBILITY_WEAPON_FUNCTION_VOLUME 0.10f
 #define ACCESSIBILITY_WEAPON_FUNCTION_BEEP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.035f))
@@ -35,6 +39,7 @@ static SDL_atomic_t g_AccessibilityChirpEnabled;
 static SDL_atomic_t g_AccessibilityChirpFrequencyMilliHz;
 static SDL_atomic_t g_AccessibilityChirpVolumeMillionths;
 static SDL_atomic_t g_AccessibilityChirpPanMillionths;
+static SDL_atomic_t g_AccessibilityChirpPulses;
 static SDL_atomic_t g_AccessibilityWeaponFunctionSequence;
 static SDL_atomic_t g_AccessibilityWeaponFunctionPulses;
 static SDL_atomic_t g_AccessibilityHazardEnabled;
@@ -72,6 +77,7 @@ static f32 g_AccessibilityToneGain;
 static s32 g_AccessibilityChirpObservedSequence;
 static s32 g_AccessibilityChirpSamplesRemaining;
 static s32 g_AccessibilityChirpSample;
+static s32 g_AccessibilityChirpPulseCount;
 static f32 g_AccessibilityChirpPhase;
 static f32 g_AccessibilityChirpFrequencyHz;
 static f32 g_AccessibilityChirpVolume;
@@ -127,6 +133,12 @@ void accessibilityToneSet(s32 enabled, f32 frequencyhz)
 
 void accessibilityTonePlayChirp(f32 frequencyhz, f32 volume, f32 pan)
 {
+	accessibilityTonePlayChirpPattern(frequencyhz, volume, pan, 1);
+}
+
+void accessibilityTonePlayChirpPattern(f32 frequencyhz, f32 volume, f32 pan,
+		s32 pulses)
+{
 	if (frequencyhz < 1.0f) {
 		frequencyhz = 1.0f;
 	}
@@ -143,12 +155,19 @@ void accessibilityTonePlayChirp(f32 frequencyhz, f32 volume, f32 pan)
 		pan = 1.0f;
 	}
 
+	if (pulses < 1) {
+		pulses = 1;
+	} else if (pulses > 8) {
+		pulses = 8;
+	}
+
 	SDL_AtomicSet(&g_AccessibilityChirpFrequencyMilliHz,
 			(s32)(frequencyhz * 1000.0f));
 	SDL_AtomicSet(&g_AccessibilityChirpVolumeMillionths,
 			(s32)(volume * 1000000.0f));
 	SDL_AtomicSet(&g_AccessibilityChirpPanMillionths,
 			(s32)(pan * 1000000.0f));
+	SDL_AtomicSet(&g_AccessibilityChirpPulses, pulses);
 	SDL_AtomicSet(&g_AccessibilityChirpEnabled, volume > 0.0f);
 	SDL_AtomicAdd(&g_AccessibilityChirpSequence, 1);
 }
@@ -496,7 +515,15 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 					&g_AccessibilityChirpVolumeMillionths) / 1000000.0f;
 			g_AccessibilityChirpPan = (f32)SDL_AtomicGet(
 					&g_AccessibilityChirpPanMillionths) / 1000000.0f;
-			g_AccessibilityChirpSamplesRemaining = ACCESSIBILITY_CHIRP_DURATION_SAMPLES;
+			g_AccessibilityChirpPulseCount = SDL_AtomicGet(
+					&g_AccessibilityChirpPulses);
+			g_AccessibilityChirpSamplesRemaining
+					= g_AccessibilityChirpPulseCount > 1
+						? ACCESSIBILITY_CHIRP_PATTERN_BEEP_SAMPLES
+								* g_AccessibilityChirpPulseCount
+							+ ACCESSIBILITY_CHIRP_PATTERN_GAP_SAMPLES
+								* (g_AccessibilityChirpPulseCount - 1)
+						: ACCESSIBILITY_CHIRP_DURATION_SAMPLES;
 			g_AccessibilityChirpSample = 0;
 			g_AccessibilityChirpPhase = 0.0f;
 		} else {
@@ -614,13 +641,29 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 		if (g_AccessibilityChirpSamplesRemaining > 0) {
 			f32 envelope = 1.0f;
+			s32 chirpactive = 1;
 			f32 leftpan = g_AccessibilityChirpPan > 0.0f
 					? 1.0f - g_AccessibilityChirpPan : 1.0f;
 			f32 rightpan = g_AccessibilityChirpPan < 0.0f
 					? 1.0f + g_AccessibilityChirpPan : 1.0f;
 			f32 chirp;
 
-			if (g_AccessibilityChirpSample < ACCESSIBILITY_CHIRP_ATTACK_SAMPLES) {
+			if (g_AccessibilityChirpPulseCount > 1) {
+				s32 cycle = ACCESSIBILITY_CHIRP_PATTERN_BEEP_SAMPLES
+						+ ACCESSIBILITY_CHIRP_PATTERN_GAP_SAMPLES;
+				s32 sample = g_AccessibilityChirpSample % cycle;
+
+				if (sample >= ACCESSIBILITY_CHIRP_PATTERN_BEEP_SAMPLES) {
+					chirpactive = 0;
+				} else if (sample < ACCESSIBILITY_CHIRP_PATTERN_ATTACK_SAMPLES) {
+					envelope = (f32)sample
+							/ (f32)ACCESSIBILITY_CHIRP_PATTERN_ATTACK_SAMPLES;
+				} else if (ACCESSIBILITY_CHIRP_PATTERN_BEEP_SAMPLES - sample
+						< ACCESSIBILITY_CHIRP_PATTERN_RELEASE_SAMPLES) {
+					envelope = (f32)(ACCESSIBILITY_CHIRP_PATTERN_BEEP_SAMPLES - sample)
+							/ (f32)ACCESSIBILITY_CHIRP_PATTERN_RELEASE_SAMPLES;
+				}
+			} else if (g_AccessibilityChirpSample < ACCESSIBILITY_CHIRP_ATTACK_SAMPLES) {
 				envelope = (f32)g_AccessibilityChirpSample
 						/ (f32)ACCESSIBILITY_CHIRP_ATTACK_SAMPLES;
 			} else if (g_AccessibilityChirpSamplesRemaining
@@ -629,9 +672,9 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 						/ (f32)ACCESSIBILITY_CHIRP_RELEASE_SAMPLES;
 			}
 
-			chirp = sinf(g_AccessibilityChirpPhase) * envelope
+			chirp = chirpactive ? sinf(g_AccessibilityChirpPhase) * envelope
 					* g_AccessibilityChirpVolume * ACCESSIBILITY_CHIRP_VOLUME
-					* 32767.0f;
+					* 32767.0f : 0.0f;
 			chirpleft = (s32)(chirp * leftpan);
 			chirpright = (s32)(chirp * rightpan);
 

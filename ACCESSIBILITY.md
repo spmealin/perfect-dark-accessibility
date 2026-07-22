@@ -4,7 +4,7 @@
 
 This work aims to make the Perfect Dark PC port meaningfully playable by blind and low-vision players, starting with nonvisual access to menus and essential game state and progressing through small, testable gameplay slices.
 
-The current branch contains the accessibility coordinator/logger, Tolk/NVDA speech backend, menu-agnostic focus narration, non-subtitle HUD-message speech, Carrington Institute interaction beacons, damaging-laser hazard cues, firing-range and hostile-character targeting feedback, weapon-function state cues, and a seven-direction virtual-cane prototype. All implemented feature backends default to enabled for blind-user acceptance testing; the cane defaults to Slow mode. Menu narration has passed project-owner blind-user acceptance, while the newer gameplay slices retain the narrower evidence and pending tests documented below and in `ACCESSIBILITY_TESTING.md`. Broader navigation/route guidance, combat categories beyond characters, and full-game accessibility are not implemented.
+The current branch contains the accessibility coordinator/logger, Tolk/NVDA speech backend, menu-agnostic focus narration, non-subtitle HUD-message speech, Carrington Institute interaction/door/pickup beacons, damaging-laser hazard cues, firing-range and hostile-character targeting feedback, weapon-function state cues, and a seven-direction virtual-cane prototype. All implemented feature backends default to enabled for blind-user acceptance testing; the cane defaults to Slow mode. Menu narration has passed project-owner blind-user acceptance, while the newer gameplay slices retain the narrower evidence and pending tests documented below and in `ACCESSIBILITY_TESTING.md`. Broader navigation/route guidance, combat categories beyond characters, and full-game accessibility are not implemented.
 
 The firing-range weapon list announces the same completed bronze, silver, and gold proficiency stars rendered beside each weapon. It reads only the filled stars represented by the saved score and does not infer incomplete progress or expose state absent from the visual row.
 
@@ -46,12 +46,14 @@ The pattern has a dedicated fixed oscillator lane and does not consume a game so
 
 - F5 independently toggles automatic nearby interactable-object beacons.
 - F6 independently toggles automatic nearby door beacons.
-- Each enabled category tracks up to its three nearest eligible props. The combined target set plays through one global round-robin timeline, interleaving objects and doors so two cues never begin simultaneously.
+- F8 independently toggles automatic nearby collectible-item beacons.
+- Each enabled category tracks up to its three nearest eligible props. The combined target set plays through one global round-robin timeline, interleaving interactables, doors, and pickups so two cues never begin simultaneously.
 - The pulse gap is 750 ms divided by the scheduled target count, with a current minimum of 300 ms. Each category refreshes twice per second, and a 150-unit membership margin prevents borderline targets from repeatedly entering and leaving the rotation.
-- Door and interactable-object candidates require a clear background line of sight from the player on every scan and again before every chirp. The ray excludes object and door geometry, so the selected target does not block itself, while walls and other sight-blocking background geometry suppress targets beyond them.
+- Door and interactable-object candidates require a clear background line of sight from the player on every scan and again before every chirp. Collectible items use the pickup path's door-and-background sight blockers. The selected target does not block itself, while intervening world geometry suppresses targets beyond it.
 - While a menu is open, F5 retains its menu-narration repeat action and F6 retains its speech-cancel action; gameplay beacons are reset and do not process those presses.
-- Interactable objects use a short positioned 880 Hz sine chirp; doors use a short positioned 440 Hz sine chirp. The chirps retain the existing distance attenuation and stereo direction while avoiding game/menu sound meanings.
-- The implementation is limited to single-player Carrington Institute training, a 1,200-unit radius, and the two named categories.
+- Interactable objects use one short positioned 880 Hz sine chirp; collectible items use three 35 ms 880 Hz chirps separated by 25 ms; doors use one short positioned 440 Hz chirp. The patterns retain the existing distance attenuation and stereo direction while avoiding game/menu sound meanings.
+- Pickups are recognized from the same object-type and collectible/uncollectable flags used by the collection path, including temporarily spawned device-training objects such as the Data Uplink. Invisible, inactive, deleted, and temporarily reserved/in-flight projectile items are excluded. The item disappears from the next bounded refresh after collection.
+- The implementation is limited to single-player Carrington Institute training and a 1,200-unit radius. F5, F6, and F8 each retain up to three nearby targets for their independently enabled category.
 - Menus, pause, cutscenes, death, unsupported player counts, stage changes, invalid props, and audio allocation failures stop the beacon.
 - The current stereo positional system primarily conveys left/right and distance. Front/rear and vertical usefulness require runtime and blind-user evidence and are not yet claimed.
 
