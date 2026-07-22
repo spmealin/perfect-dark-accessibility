@@ -12,5 +12,6 @@ s32 accessibilityIsHudMessagesEnabled(void);
 s32 accessibilityIsInteractableBeaconsEnabled(void);
 s32 accessibilityIsMenuNarrationEnabled(void);
 s32 accessibilityIsTargetingFeedbackEnabled(void);
+s32 accessibilityIsWeaponFunctionCuesEnabled(void);
 
 #endif

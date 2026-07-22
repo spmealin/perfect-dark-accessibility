@@ -53,6 +53,7 @@
 #include "lib/lib_317f0.h"
 #include "data.h"
 #include "types.h"
+#include "accessibility/accessibility_weapon.h"
 #ifndef PLATFORM_N64
 #include "game/stagetable.h"
 #include "video.h"
@@ -12050,6 +12051,8 @@ void bgunTickGameplay(bool triggeron)
 	}
 
 	invIncrementHeldTime(bgunGetWeaponNum(HAND_RIGHT), bgunGetWeaponNum(HAND_LEFT));
+	accessibilityWeaponFunctionObserve(g_Vars.currentplayernum, g_Vars.stagenum,
+			bgunGetWeaponNum(HAND_RIGHT), bgunIsUsingSecondaryFunction());
 }
 
 void bgunSetPassiveMode(bool enable)

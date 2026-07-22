@@ -127,6 +127,14 @@ Implementation status: the generic HUD-admission slice is implemented behind `Ac
 - **Risks:** A body-midpoint line-of-sight ray may reject a character visible only at an extremity; the finalized attack-query hit mitigates this only while aimed. Ten five-Hz voices intentionally create dense output and need masking/overload tuning; candidates beyond the fixed capacity wait behind stable existing assignments. Combat aim quality remains unavailable, so the tone does not yet communicate head or other high-value-zone accuracy.
 - **Explicit non-goals:** No aim automation, through-wall disclosure, spoken identity, friendly/neutral cue vocabulary, head-quality pitch mapping, multiplayer policy, or automatic support for turrets, vehicles, and non-character threats.
 
+### Weapon-function state cue slice
+
+- **Status:** Implemented; runtime and blind-user acceptance pending.
+- **Goal:** Make the existing visual primary/secondary function indicator available without speech latency or controller-specific assumptions.
+- **Behavior:** Observe the engine's final effective function after weapon processing. A transition to primary produces one centered 1000 Hz, 35 ms beep; secondary produces two, separated by 30 ms. Initial state, stage changes, and weapon changes are silent baselines. The dedicated fixed oscillator lane remains independent of beacon, hazard, aiming, and combat voices.
+- **Acceptance:** With several weapons that have persistent and temporary alternate functions, use R1/right bumper and at least one other supported function-selection path. Confirm exactly two beeps only when secondary becomes effective and exactly one only when primary becomes effective; invalid or unavailable toggles, equipping weapons, stage entry, pause, and menus must not create false output. Check rapid toggles, firing during transitions, dual wielding, and audio overlap. Multiplayer remains unvalidated.
+- **Evidence:** Correlate `weapon_function/state_change` with player, stage, weapon, previous/current state, beep count, and tone parameters. Advanced performance logs expose the pattern sequence and requested pulse count; long sessions must show bounded mixer work and no allocation or game-channel growth.
+
 ## Milestone 10 — Broader interaction scanner
 
 - **Goal:** Generalize the Carrington Institute beacon proof into a deliberate, knowledge-safe query for a broader set of nearby actionable things.

@@ -79,7 +79,7 @@ void accessibilityPerformanceTick(void)
 	memset(&tone, 0, sizeof(tone));
 	accessibilityToneGetDiagnostics(&tone);
 	accessibilityLogEvent("performance", "frame_window",
-			"window_us=%" PRIu64 " render_frames=%d render_fps=%.3f max_frame_gap_us=%" PRIu64 " game_ticks=%d game_tick_rate=%.3f stage=%d lvframe60=%d diffframe60=%d lvupdate60=%d tickmode=%d menu_count=%d memory_available=%d working_set_bytes=%" PRIu64 " working_set_delta=%lld private_bytes=%" PRIu64 " private_delta=%lld tone_enabled=%d chirp_enabled=%d chirp_sequence=%d hazard_enabled=%d combat_enabled_slots=%d hazard_frequency_millihz=%d hazard_volume_millionths=%d hazard_pan_millionths=%d mixer_calls_delta=%d mixer_passthrough_delta=%d mixer_active_delta=%d mixer_frames_delta=%d mixer_calls_total=%d mixer_active_total=%d",
+			"window_us=%" PRIu64 " render_frames=%d render_fps=%.3f max_frame_gap_us=%" PRIu64 " game_ticks=%d game_tick_rate=%.3f stage=%d lvframe60=%d diffframe60=%d lvupdate60=%d tickmode=%d menu_count=%d memory_available=%d working_set_bytes=%" PRIu64 " working_set_delta=%lld private_bytes=%" PRIu64 " private_delta=%lld tone_enabled=%d chirp_enabled=%d chirp_sequence=%d weapon_function_sequence=%d weapon_function_pulses=%d hazard_enabled=%d combat_enabled_slots=%d hazard_frequency_millihz=%d hazard_volume_millionths=%d hazard_pan_millionths=%d mixer_calls_delta=%d mixer_passthrough_delta=%d mixer_active_delta=%d mixer_frames_delta=%d mixer_calls_total=%d mixer_active_total=%d",
 			(uint64_t)elapsed, g_AccessibilityPerformanceFrames, renderfps,
 			(uint64_t)g_AccessibilityPerformanceMaxFrameGapUs,
 			gameticks, gametickrate, mainGetStageNum(), g_Vars.lvframe60,
@@ -90,6 +90,7 @@ void accessibilityPerformanceTick(void)
 			(uint64_t)privatebytes, (long long)privatebytes
 					- (long long)g_AccessibilityPerformancePrivateBaseline,
 			tone.toneenabled, tone.chirpenabled, tone.chirpsequence,
+			tone.weaponfunctionsequence, tone.weaponfunctionpulses,
 			tone.hazardenabled, tone.combatenabledslots,
 			tone.hazardfrequencymillihz,
 			tone.hazardvolumemillionths, tone.hazardpanmillionths,

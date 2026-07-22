@@ -12,6 +12,7 @@
 #include "accessibility/accessibility_menu.h"
 #include "accessibility/accessibility_speech.h"
 #include "accessibility/accessibility_targeting.h"
+#include "accessibility/accessibility_weapon.h"
 
 static s32 g_AccessibilityEnabledConfig = 1;
 static s32 g_AccessibilityLoggingEnabledConfig = 1;
@@ -21,6 +22,7 @@ static s32 g_AccessibilityHudMessagesEnabledConfig = 1;
 static s32 g_AccessibilityEnvironmentalHazardsEnabledConfig = 1;
 static s32 g_AccessibilityInteractableBeaconsEnabledConfig = 1;
 static s32 g_AccessibilityTargetingFeedbackEnabledConfig = 1;
+static s32 g_AccessibilityWeaponFunctionCuesEnabledConfig = 1;
 static s32 g_AccessibilityInitialized = 0;
 static s32 g_AccessibilityEnabled = 0;
 static s32 g_AccessibilityShutdownComplete = 0;
@@ -38,22 +40,24 @@ void accessibilityInit(void)
 	accessibilityBeaconReset("init");
 	accessibilityHazardReset("init");
 	accessibilityTargetingReset("init");
+	accessibilityWeaponFunctionReset("init");
 
 	if (!g_AccessibilityEnabled) {
 		return;
 	}
 
-	sysLogPrintf(LOG_NOTE, "accessibility: enabled (logging %s, speech %s, HUD messages %s, environmental hazards %s, interactable beacons %s, targeting feedback %s)",
+	sysLogPrintf(LOG_NOTE, "accessibility: enabled (logging %s, speech %s, HUD messages %s, environmental hazards %s, interactable beacons %s, targeting feedback %s, weapon function cues %s)",
 			g_AccessibilityLoggingEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilitySpeechEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityHudMessagesEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityEnvironmentalHazardsEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityInteractableBeaconsEnabledConfig ? "enabled" : "disabled",
-			g_AccessibilityTargetingFeedbackEnabledConfig ? "enabled" : "disabled");
+			g_AccessibilityTargetingFeedbackEnabledConfig ? "enabled" : "disabled",
+			g_AccessibilityWeaponFunctionCuesEnabledConfig ? "enabled" : "disabled");
 
 	if (g_AccessibilityLoggingEnabledConfig && accessibilityLogInit()) {
 		accessibilityLogEvent("lifecycle", "session_start",
-				"enabled=%d logging=%d speech=%d menu_narration=%d hud_messages=%d environmental_hazards=%d interactable_beacons=%d targeting_feedback=%d performance_diagnostics=%d performance_interval_us=%d speech_test=%d path=%s",
+				"enabled=%d logging=%d speech=%d menu_narration=%d hud_messages=%d environmental_hazards=%d interactable_beacons=%d targeting_feedback=%d weapon_function_cues=%d performance_diagnostics=%d performance_interval_us=%d speech_test=%d path=%s",
 				g_AccessibilityEnabledConfig,
 				g_AccessibilityLoggingEnabledConfig,
 				g_AccessibilitySpeechEnabledConfig,
@@ -62,6 +66,7 @@ void accessibilityInit(void)
 				g_AccessibilityEnvironmentalHazardsEnabledConfig,
 				g_AccessibilityInteractableBeaconsEnabledConfig,
 				g_AccessibilityTargetingFeedbackEnabledConfig,
+				g_AccessibilityWeaponFunctionCuesEnabledConfig,
 				ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS,
 				ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS ? 1000000 : 0,
 				sysArgCheck("--accessibility-speech-test"),
@@ -97,6 +102,7 @@ void accessibilityShutdown(void)
 	accessibilityBeaconReset("shutdown");
 	accessibilityHazardReset("shutdown");
 	accessibilityTargetingReset("shutdown");
+	accessibilityWeaponFunctionReset("shutdown");
 	accessibilityMenuReset();
 	accessibilityAnnouncementReset();
 	accessibilitySpeechShutdown();
@@ -146,6 +152,12 @@ s32 accessibilityIsTargetingFeedbackEnabled(void)
 	return g_AccessibilityEnabled && g_AccessibilityTargetingFeedbackEnabledConfig;
 }
 
+s32 accessibilityIsWeaponFunctionCuesEnabled(void)
+{
+	return g_AccessibilityEnabled
+			&& g_AccessibilityWeaponFunctionCuesEnabledConfig;
+}
+
 PD_CONSTRUCTOR static void accessibilityConfigInit(void)
 {
 	configRegisterInt("Accessibility.Enabled", &g_AccessibilityEnabledConfig, 0, 1);
@@ -156,4 +168,5 @@ PD_CONSTRUCTOR static void accessibilityConfigInit(void)
 	configRegisterInt("Accessibility.EnvironmentalHazards", &g_AccessibilityEnvironmentalHazardsEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.InteractableBeacons", &g_AccessibilityInteractableBeaconsEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.TargetingFeedback", &g_AccessibilityTargetingFeedbackEnabledConfig, 0, 1);
+	configRegisterInt("Accessibility.WeaponFunctionCues", &g_AccessibilityWeaponFunctionCuesEnabledConfig, 0, 1);
 }

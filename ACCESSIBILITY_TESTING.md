@@ -116,6 +116,7 @@ SpeechEnabled=1
 MenuNarration=1
 HudMessages=1
 EnvironmentalHazards=1
+WeaponFunctionCues=1
 ```
 
 Then launch `build/pd.x86_64.exe --accessibility-speech-test`. The flag never enables accessibility or speech by itself. The exact request is `Perfect Dark accessibility speech test.` With speech enabled but no flag, backend detection occurs without an output request. Development output must contain `Tolk.dll` and the architecture-matching NVDA controller beside the executable; notices are copied to `build/licenses/tolk/`.
@@ -246,6 +247,12 @@ Multiple enemies should retain independent spatial voices whose starts are stagg
 In a later mission with friendly or neutral characters, confirm only characters classified as hostile receive positive targeting feedback. Where practical, also test hidden/untargetable state, a cloaked hostile with and without IR perception, an aimed hostile visible only around cover, and a group large enough to exercise the fixed candidate capacity. The accessibility layer must not identify or disclose characters that the existing semantic visibility and relationship rules exclude.
 
 Correlate `targeting/combat_candidate`, `scope_gate`, `observation`, `combat_slot_assign`, `combat_slot_cadence`, `combat_slot_release`, `combat_presence_stop`, `aim_acquisition`, `aim_loss`, `alignment_start`, `alignment_update`, `alignment_stop`, and `telemetry` records with the perceived character set. Confirm cadence logs contain center distance, near-surface cue distance, punch range, `1.1X` exit and `5X` far thresholds, zone, normalized proximity, period, duration, continuous mode, immediate-trigger state, volume, and pan. Confirm combat reports `profile=2`/`source=2`, profile changes reset old identities and owned sounds, eliminated characters report `dead_dying_or_knocked_out`, no more than ten oscillator slots are assigned, phase staggering avoids exact starts, and the fixed-capacity path shows no game sound-channel or memory growth. Stress one through ten simultaneous enemies, then more than ten to verify deterministic bounded selection.
+
+#### Weapon-function state cues
+
+With `Accessibility.WeaponFunctionCues=1`, equip a weapon with two persistent functions and press R1/right bumper. Switching to the secondary function must produce exactly two centered 1000 Hz beeps; returning to primary must produce exactly one. Each beep should be brief (35 ms), the two-beep gap should be clearly countable at 30 ms, and output should begin only after the same semantic value that drives the visual indicator changes. Repeat using the active-menu function selector and any configured keyboard binding: input path must not affect the pattern.
+
+Try a weapon with no alternate function, temporary alternate-function weapons, an unavailable function, rapid repeated presses, weapon changes, dual wielding, firing/reloading, pause/menu transitions, death, and stage changes. Equipping a weapon or entering a stage must not announce its stored function as a new toggle. Confirm beacon chirps, hazard sweeps, aiming tones, and combat slots can overlap without interrupting the function pattern. Correlate every audible pattern with `weapon_function/state_change`; advanced `performance/frame_window` records should advance `weapon_function_sequence` without memory or channel growth. Record multiplayer behavior as unvalidated rather than accepted until independently tested.
 
 Use a controlled room with known eligible and ineligible entities. Test friendly/hostile/neutral where applicable, occlusion/cloak rules, target loss, rapid crossings, empty scan, overlapping results, collected/opened/destroyed objects, and multiple local-player context. Explicitly audit for hidden-information leaks.
 
