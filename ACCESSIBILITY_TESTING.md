@@ -196,6 +196,12 @@ After the channel-reuse hardening, the project owner reported that the prior gam
 
 ## Menu interaction scripts
 
+### Active weapon menu
+
+With `Accessibility.MenuNarration=1`, hold the active-menu control in ordinary single-player gameplay and use each supported directional input path to highlight weapon/device slots. Confirm every occupied non-center slot announces exactly the localized label drawn in that slot, including `Unarmed`. Hold one direction and confirm it speaks once rather than every tick. Release direction to return to the center, then select the same slot again and confirm it speaks again. Move directly between several slots and confirm each settled selection interrupts the prior short announcement with the new label; empty slots and the center `Weapon` label remain silent.
+
+Release the active-menu control while speech is underway and confirm the selected item is still applied normally and the short announcement remains understandable. Reopen the menu, change inventory, collect a device, select a cloak with a changing duration label, die, pause, enter a cutscene, and change stages; verify there is no stale or repeated selection. Function and bot-order screens must remain silent in this bounded slice. Correlate speech with one `active_menu/focus` record per deliberate selection and `active_menu/context_cleared` on relevant closure/scope loss. Multiplayer output remains unvalidated and is intentionally suppressed for non-primary local players.
+
 ### Script A: deterministic focus basics
 
 Precondition: a documented profile/start state that reaches a known dialog; speech enabled; logging explicitly enabled and its comprehensive contents explained to the tester.

@@ -10,6 +10,12 @@ The firing-range weapon list announces the same completed bronze, silver, and go
 
 The holo-training computer announces the selected exercise's localized static description when its details dialog opens and on F5 repeat, before announcing the focused `OK` or `Resume` control. The speech comes from the same `htGetDescription()` value rendered in the dialog's non-focusable text panel.
 
+### Active weapon menu narration
+
+With `Accessibility.MenuNarration=1`, holding the active-menu control and selecting a weapon or device announces the exact localized short label rendered in the highlighted radial slot. This includes `Unarmed`. Speech occurs only when a non-center slot becomes selected; returning to the center, holding a selection, or renderer animation does not repeat it. Returning to center and deliberately selecting the same item again announces it again. Closing the radial menu resets selection state without cancelling an already-started short item announcement.
+
+This initial slice observes only active-menu screen `0`, the weapon/device screen. Function choices and bot-order screens are not yet narrated. Only the primary local player publishes speech; the underlying item selection and application behavior are unchanged.
+
 ### HUD message narration
 
 `Accessibility.HudMessages` defaults to `1` for blind-user acceptance testing and is subordinate to both `Accessibility.Enabled` and the speech setting. Every message successfully admitted by the common HUD queue is eligible regardless of the stage or script that created it. The accessibility layer speaks its resolved, wrapped text at normal, non-interrupting priority after replacing line breaks and other control whitespace with spaces. Messages rejected by the HUD's existing alive, duplicate, subtitle-option, or capacity rules are not announced.

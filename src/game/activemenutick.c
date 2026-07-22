@@ -15,6 +15,7 @@
 #ifndef PLATFORM_N64
 #include "game/player.h"
 #include "input.h"
+#include "accessibility/accessibility_menu.h"
 #endif
 
 void amTick(void)
@@ -442,6 +443,10 @@ void amTick(void)
 				g_AmMenus[g_AmIndex].selpulse -= 18.849555969238f;
 			}
 		}
+
+#ifndef PLATFORM_N64
+		accessibilityMenuObserveActive(g_Vars.currentplayernum);
+#endif
 	}
 
 	setCurrentPlayerNum(prevplayernum);

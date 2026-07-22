@@ -7,6 +7,7 @@ struct menu;
 
 void accessibilityMenuObserve(s32 menuslot, s32 playernum, s32 menuroot,
 		s32 menudepth, struct menu *menu);
+void accessibilityMenuObserveActive(s32 playernum);
 void accessibilityMenuReset(void);
 
 #endif

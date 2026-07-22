@@ -3,11 +3,13 @@
 #include <string.h>
 #include <ultra64.h>
 #include "constants.h"
+#include "bss.h"
 #include "data.h"
 #include "input.h"
 #include "system.h"
 #include "types.h"
 #include "game/lang.h"
+#include "game/activemenu.h"
 #include "game/menu.h"
 #include "game/menuitem.h"
 #include "accessibility/accessibility.h"
@@ -48,10 +50,21 @@ struct accessibilitymenusnapshot {
 	char utterance[ACCESSIBILITY_MENU_TEXT_MAX];
 };
 
+struct accessibilityactivemenusnapshot {
+	s32 valid;
+	s32 screenindex;
+	s32 slotnum;
+	char label[ACCESSIBILITY_MENU_FIELD_MAX];
+};
+
 static struct accessibilitymenusnapshot g_AccessibilityMenuSnapshots[MAX_PLAYERS];
+static struct accessibilityactivemenusnapshot
+		g_AccessibilityActiveMenuSnapshots[MAX_PLAYERS];
 static u64 g_AccessibilityMenuObservations;
 static u64 g_AccessibilityMenuChanges;
 static u64 g_AccessibilityMenuUnsupported;
+static u64 g_AccessibilityActiveMenuObservations;
+static u64 g_AccessibilityActiveMenuChanges;
 
 static void accessibilityMenuCopyNormalized(char *dst, size_t dstlen, const char *src)
 {
@@ -656,15 +669,89 @@ void accessibilityMenuObserve(s32 menuslot, s32 playernum, s32 menuroot,
 	}
 }
 
+void accessibilityMenuObserveActive(s32 playernum)
+{
+	struct accessibilityactivemenusnapshot *previous;
+	struct accessibilityactivemenusnapshot next;
+	struct activemenu *menu;
+	char label[ACCESSIBILITY_MENU_FIELD_MAX];
+	u32 flags = 0;
+
+	if (playernum < 0 || playernum >= MAX_PLAYERS) {
+		return;
+	}
+
+	previous = &g_AccessibilityActiveMenuSnapshots[playernum];
+	g_AccessibilityActiveMenuObservations++;
+
+	if (!accessibilityIsMenuNarrationEnabled()
+			|| !g_Vars.currentplayer
+			|| g_Vars.currentplayer->activemenumode != AMMODE_VIEW
+			|| playernum != 0) {
+		if (previous->valid) {
+			accessibilityLogEvent("active_menu", "context_cleared",
+					"player=%d reason=%s previous_screen=%d previous_slot=%d previous_label=%s",
+					playernum,
+					accessibilityIsMenuNarrationEnabled()
+						? "closed_or_unsupported" : "narration_disabled",
+					previous->screenindex, previous->slotnum, previous->label);
+		}
+
+		memset(previous, 0, sizeof(*previous));
+		return;
+	}
+
+	menu = &g_AmMenus[playernum];
+
+	if (menu->screenindex != 0 || menu->slotnum == 4) {
+		memset(previous, 0, sizeof(*previous));
+		return;
+	}
+
+	memset(label, 0, sizeof(label));
+	amGetSlotDetails(menu->slotnum, &flags, label);
+
+	memset(&next, 0, sizeof(next));
+	next.valid = true;
+	next.screenindex = menu->screenindex;
+	next.slotnum = menu->slotnum;
+	accessibilityMenuCopyNormalized(next.label, sizeof(next.label), label);
+
+	if (!next.label[0]) {
+		memset(previous, 0, sizeof(*previous));
+		return;
+	}
+
+	if (previous->valid
+			&& previous->screenindex == next.screenindex
+			&& previous->slotnum == next.slotnum) {
+		return;
+	}
+
+	accessibilityLogEvent("active_menu", "focus",
+			"player=%d screen=%d slot=%d flags=0x%08x label=%s",
+			playernum, next.screenindex, next.slotnum, flags, next.label);
+	g_AccessibilityActiveMenuChanges++;
+	*previous = next;
+	accessibilityAnnouncementReplaceMenu(previous->label,
+			ACCESSIBILITY_ANNOUNCEMENT_FOCUS);
+}
+
 void accessibilityMenuReset(void)
 {
 	accessibilityLogEvent("menu", "reset",
-			"observations=%llu changes=%llu unsupported=%llu",
+			"observations=%llu changes=%llu unsupported=%llu active_observations=%llu active_changes=%llu",
 			(unsigned long long)g_AccessibilityMenuObservations,
 			(unsigned long long)g_AccessibilityMenuChanges,
-			(unsigned long long)g_AccessibilityMenuUnsupported);
+			(unsigned long long)g_AccessibilityMenuUnsupported,
+			(unsigned long long)g_AccessibilityActiveMenuObservations,
+			(unsigned long long)g_AccessibilityActiveMenuChanges);
 	memset(g_AccessibilityMenuSnapshots, 0, sizeof(g_AccessibilityMenuSnapshots));
+	memset(g_AccessibilityActiveMenuSnapshots, 0,
+			sizeof(g_AccessibilityActiveMenuSnapshots));
 	g_AccessibilityMenuObservations = 0;
 	g_AccessibilityMenuChanges = 0;
 	g_AccessibilityMenuUnsupported = 0;
+	g_AccessibilityActiveMenuObservations = 0;
+	g_AccessibilityActiveMenuChanges = 0;
 }
