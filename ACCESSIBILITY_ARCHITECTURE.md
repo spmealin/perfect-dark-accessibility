@@ -114,12 +114,14 @@ Milestones 2 and 3 implement:
 ```text
 src/accessibility/
   accessibility.c          lifecycle and feature coordinator
+  accessibility_cane.c     live seven-angle movement-collision orientation cue
   accessibility_log.c      comprehensive structured development log
   accessibility_speech.c   speech lifecycle and UTF-8 output boundary
   accessibility_targeting.c generic fixed-capacity target state and owned audio lanes
   accessibility_targeting_game.c firing-range and hostile-character semantic source adapter
 src/include/accessibility/
   accessibility.h
+  accessibility_cane.h
   accessibility_log.h
   accessibility_speech.h
   accessibility_speech_backend.h
@@ -225,6 +227,7 @@ Accessibility.EnvironmentalHazards=1
 Accessibility.InteractableBeacons=1
 Accessibility.TargetingFeedback=1
 Accessibility.WeaponFunctionCues=1
+Accessibility.VirtualCaneMode=1
 ```
 
 Later features may add:
@@ -267,6 +270,14 @@ Publish an accepted-HUD event after `hudmsgCreateFromArgs` commits a message. Ca
 
 Capture a per-player snapshot at a stable logical tick: health fraction, shield fraction, equipped weapons/functions, relevant loaded/reserve ammunition, death/pause state, and stage context. A user command formats this snapshot on demand. Automatic threshold announcements compare semantic snapshots and use hysteresis to avoid chatter.
 
+### Virtual cane
+
+The virtual-cane core runs once after `lvTick` on the main game thread. It accepts F4 only in ordinary single-player walking gameplay, cycles a constructor-registered `0..2` mode, and schedules seven live camera-relative angles without resetting for movement. The slow and fast schedules use region-correct logical ticks, include an end pause, skip overdue work after a hitch, and enforce no more than one collision query per tick.
+
+Each scheduled sample copies the current player movement bbox and follows the walking system's room traversal plus `cdExamCylMove06`/`cdExamCylMove02` ordering. The collision mask is background, objects, doors, and path blockers when normal Bond collision is enabled, otherwise background only; characters and players are excluded. Collision APIs publish through shared global scratch state, so the adapter immediately copies a swept hit's full position/geometry record or derives the destination-overlap fallback from its returned obstacle edge before computing distance, volume, and pan. The query never runs on the audio thread and does not call the state-mutating `bwalkCalculateNewPosition` wrapper.
+
+Seven fixed procedural-mixer slots own one 330 Hz, 35 ms chirp each. Atomic sequences transfer frequency, normalized volume, and pan to audio-owned phase/envelope storage; stop clears all slots. The path allocates no native game sound channels. One preallocated text buffer aggregates all seven sample records and uses the logger's preformatted event API, avoiding a periodic formatting allocation while retaining the logger's existing synchronous flush behavior. Advanced diagnostics expose collision timing/counters and mixer request/active masks.
+
 ### Target and scanner
 
 The environmental-hazard adapter traverses active props after `lvTick` and recognizes the engine's semantic damaging laser-door type. It derives a beam centerline from the live door model bounding box and rotation, computes distance and facing against the closest point on that segment, and requires a background-only line-of-sight ray. One retained nearest candidate drives a 220 Hz source along the segment and back. This is independent of setup tags and can apply to matching laser barriers in other stages without disclosing inactive, distant, occluded, or rearward hazards.
@@ -293,10 +304,10 @@ This table records implemented and anticipated changes to established files so f
 
 | Established file | Proposed narrow hook or reason | Semantic payload | Why polling alone may be insufficient | Status |
 | --- | --- | --- | --- | --- |
-| `CMakeLists.txt` | Register core sources and select exactly one native/null speech backend | Build platform/configuration only | `src/accessibility` is outside the game glob and platform backends must not compile together | Implemented through the generic damaging-laser hazard slice |
+| `CMakeLists.txt` | Register core sources and select exactly one native/null speech backend | Build platform/configuration only | `src/accessibility` is outside the game glob and platform backends must not compile together | Implemented through the virtual-cane prototype |
 | `port/src/main.c` | Initialize after `configInit`; shut down in `cleanup` | Lifecycle and logger availability | First UI may occur before a later tick; resources need ordered shutdown | Implemented in Milestone 2 with two calls |
-| `port/src/pdmain.c` | Call the compile-time-optional, rate-limited performance observer after frame-time calculation, call accessibility gameplay ticks immediately after `lvTick`, and reset owned audio before `lvStop` | Real/render timing, frame deltas, input, stage, current-player context, and safe teardown | Diagnostics must observe every rendered frame when compiled in, while beacon commands and hazard selection need stable semantic state; all owned sounds must stop before stage prop/audio memory is disabled | `ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS` one-second windows default off; beacon and generic laser-hazard ticks remain active, and targeting/hazard stage-stop resets protect stage-owned identities |
-| `port/src/audio.c` | Mix procedural accessibility voices into each completed stereo buffer before SDL queueing | Centered targeting tone, short beacon chirp, weapon-function pattern, and positioned environmental-hazard tone state | Clean responsive carriers cannot be made from game samples with finite duration or baked-in modulation | Independent fixed voices share one staging buffer: centered fine aim, beacon chirps, a one/two-beep weapon-function lane, continuous hazards, and combat slots; none allocate at runtime |
+| `port/src/pdmain.c` | Call the compile-time-optional performance observer, call accessibility gameplay ticks immediately after `lvTick`, and reset owned audio before `lvStop` | Timing, input, stage/player context, safe main-thread collision queries, and teardown | Gameplay cues need settled semantic state, cane collision scratch state must be copied on the main thread, and owned sounds must stop before stage memory is disabled | Beacon, virtual-cane, and laser-hazard ticks run after `lvTick`; cane, targeting, and hazard stage-stop resets protect owned voices and stage identities |
+| `port/src/audio.c` | Mix procedural accessibility voices into each completed stereo buffer before SDL queueing | Centered targeting tone, short beacon/cane chirps, weapon-function pattern, and positioned environmental-hazard tone state | Clean responsive carriers cannot be made from game samples with finite duration or baked-in modulation | Independent fixed voices share one staging buffer: centered fine aim, beacon chirps, seven cane slots, a one/two-beep weapon-function lane, continuous hazards, and combat slots; none allocate at runtime |
 | `src/game/menutick.c` | Observe the final active dialog/focus once immediately after `menuProcessInput` | Menu slot/player/root/depth and current menu/dialog state | Captures all focus paths after item state settles without hooks in every transition | Implemented in Milestone 4 with one call |
 | `src/game/menu.c` | Expose a read-only focused-item runtime-data lookup | Dialog/item to existing row/block data | Accessibility must not duplicate private row/block mapping | Implemented in Milestone 4 as `menuGetItemData` |
 | `src/game/menuitem.c` | Expose type-owned ranking/player-stats summaries only if existing APIs cannot be queried safely by the adapter | Current semantic row/stat labels and values | Compound presentation state is assembled inside type-specific render paths | Audit found no hook necessary; generic scroll/selection summaries are used |
@@ -311,7 +322,7 @@ This table records implemented and anticipated changes to established files so f
 | `src/game/propobj.c` | Expose the smallest pure/read-only CI object and door eligibility/grouping helpers only if existing public queries are insufficient | Semantic eligibility, CI tag, door canonical identity, and state | Existing immediate interaction tests mix actionability with render/facing/range checks and mutate the selected interaction path | No hook needed in Milestone 5; the core combines existing `propobjGetCiTagId`, `objIsHealthy`, flags, and door data without calling action tests |
 | `src/game/propsnd.c` | Reuse public read-only distance-volume and pan calculations for procedural spatial cues | World position, distance, range, volume, and pan | Procedural cues should retain the tested spatial behavior without allocating or stopping gameplay channels | No hook needed; beacon and hazard cores call `psCalculateVolumeFromDistance` and `psCalculatePan` |
 | `src/include/constants.h` | Reserve `PSTYPE_ACCESSIBILITY_TARGETING` | Prop-sound ownership for target-presence cues only | Targeting must stop/reuse only its own positioned sample, never gameplay sounds | Targeting owner added in the Milestone 9 firing-range slice; the obsolete beacon owner was removed when beacons moved to the procedural chirp lane |
-| `port/include/input.h` | Use provisional context-sensitive PC F5/F6 accessibility keys | Development-only action identifiers | Menus use F5 for repeat and F6 for speech cancel; unobscured CI gameplay uses F5 for object beacons and F6 for door beacons | Implemented through Milestone 5; replacement by Milestone 6 required |
+| `port/include/input.h` | Use provisional context-sensitive PC F4/F5/F6 accessibility keys and expose both Alt modifier bits | Development-only action identifiers | Gameplay uses F4 for virtual-cane mode; menus and CI beacon controls retain their F5/F6 contexts; Alt+F4 must not change cane state | Implemented through the virtual-cane prototype; replacement by Milestone 6 actions/settings remains required |
 | `port/src/input.c` | Add configurable accessibility actions or a dispatch boundary | Repeat, status, beacon/scan, cancel, navigation commands | Current binding model represents game controls, not a separate action set | Proposed for Milestone 6; provisional keys require no binding-model change |
 | `port/src/input.c`, `port/src/optionsmenu.c`, `src/include/constants.h`, `src/game/bondmove.c` | Add a configurable reset-view gameplay action using the unused extended control bit | Pressed edge from End, R3, or a player-selected replacement binding | Gives a deterministic horizontal-orientation recovery command without changing yaw or bypassing the binding system | Implemented as `CK_1000`/`BUTTON_RESET_VIEW`; PC defaults are End and right-stick click |
 | `port/src/optionsmenu.c` | Add an accessibility settings entry/dialog | Existing registered values, including proven beacon actions | Users need discoverable control without editing `pd.ini` | Proposed for Milestone 6 after beacon behavior is tested |

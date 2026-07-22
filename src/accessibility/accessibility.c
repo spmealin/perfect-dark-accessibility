@@ -7,6 +7,7 @@
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_announcement.h"
 #include "accessibility/accessibility_beacon.h"
+#include "accessibility/accessibility_cane.h"
 #include "accessibility/accessibility_hazard.h"
 #include "accessibility/accessibility_log.h"
 #include "accessibility/accessibility_menu.h"
@@ -23,6 +24,7 @@ static s32 g_AccessibilityEnvironmentalHazardsEnabledConfig = 1;
 static s32 g_AccessibilityInteractableBeaconsEnabledConfig = 1;
 static s32 g_AccessibilityTargetingFeedbackEnabledConfig = 1;
 static s32 g_AccessibilityWeaponFunctionCuesEnabledConfig = 1;
+static s32 g_AccessibilityVirtualCaneModeConfig = 1;
 static s32 g_AccessibilityInitialized = 0;
 static s32 g_AccessibilityEnabled = 0;
 static s32 g_AccessibilityShutdownComplete = 0;
@@ -38,6 +40,7 @@ void accessibilityInit(void)
 	g_AccessibilityEnabled = g_AccessibilityEnabledConfig;
 	g_AccessibilityStartTimeUs = sysGetMicroseconds();
 	accessibilityBeaconReset("init");
+	accessibilityCaneReset("init");
 	accessibilityHazardReset("init");
 	accessibilityTargetingReset("init");
 	accessibilityWeaponFunctionReset("init");
@@ -46,18 +49,19 @@ void accessibilityInit(void)
 		return;
 	}
 
-	sysLogPrintf(LOG_NOTE, "accessibility: enabled (logging %s, speech %s, HUD messages %s, environmental hazards %s, interactable beacons %s, targeting feedback %s, weapon function cues %s)",
+	sysLogPrintf(LOG_NOTE, "accessibility: enabled (logging %s, speech %s, HUD messages %s, environmental hazards %s, interactable beacons %s, targeting feedback %s, weapon function cues %s, virtual cane mode %d)",
 			g_AccessibilityLoggingEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilitySpeechEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityHudMessagesEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityEnvironmentalHazardsEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityInteractableBeaconsEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityTargetingFeedbackEnabledConfig ? "enabled" : "disabled",
-			g_AccessibilityWeaponFunctionCuesEnabledConfig ? "enabled" : "disabled");
+			g_AccessibilityWeaponFunctionCuesEnabledConfig ? "enabled" : "disabled",
+			g_AccessibilityVirtualCaneModeConfig);
 
 	if (g_AccessibilityLoggingEnabledConfig && accessibilityLogInit()) {
 		accessibilityLogEvent("lifecycle", "session_start",
-				"enabled=%d logging=%d speech=%d menu_narration=%d hud_messages=%d environmental_hazards=%d interactable_beacons=%d targeting_feedback=%d weapon_function_cues=%d performance_diagnostics=%d performance_interval_us=%d speech_test=%d path=%s",
+				"enabled=%d logging=%d speech=%d menu_narration=%d hud_messages=%d environmental_hazards=%d interactable_beacons=%d targeting_feedback=%d weapon_function_cues=%d virtual_cane_mode=%d performance_diagnostics=%d performance_interval_us=%d speech_test=%d path=%s",
 				g_AccessibilityEnabledConfig,
 				g_AccessibilityLoggingEnabledConfig,
 				g_AccessibilitySpeechEnabledConfig,
@@ -67,6 +71,7 @@ void accessibilityInit(void)
 				g_AccessibilityInteractableBeaconsEnabledConfig,
 				g_AccessibilityTargetingFeedbackEnabledConfig,
 				g_AccessibilityWeaponFunctionCuesEnabledConfig,
+				g_AccessibilityVirtualCaneModeConfig,
 				ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS,
 				ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS ? 1000000 : 0,
 				sysArgCheck("--accessibility-speech-test"),
@@ -100,6 +105,7 @@ void accessibilityShutdown(void)
 
 	g_AccessibilityShutdownComplete = 1;
 	accessibilityBeaconReset("shutdown");
+	accessibilityCaneReset("shutdown");
 	accessibilityHazardReset("shutdown");
 	accessibilityTargetingReset("shutdown");
 	accessibilityWeaponFunctionReset("shutdown");
@@ -158,6 +164,26 @@ s32 accessibilityIsWeaponFunctionCuesEnabled(void)
 			&& g_AccessibilityWeaponFunctionCuesEnabledConfig;
 }
 
+s32 accessibilityGetVirtualCaneMode(void)
+{
+	if (!g_AccessibilityEnabled) {
+		return 0;
+	}
+
+	return g_AccessibilityVirtualCaneModeConfig;
+}
+
+void accessibilitySetVirtualCaneMode(s32 mode)
+{
+	if (mode < 0) {
+		mode = 0;
+	} else if (mode > 2) {
+		mode = 2;
+	}
+
+	g_AccessibilityVirtualCaneModeConfig = mode;
+}
+
 PD_CONSTRUCTOR static void accessibilityConfigInit(void)
 {
 	configRegisterInt("Accessibility.Enabled", &g_AccessibilityEnabledConfig, 0, 1);
@@ -169,4 +195,5 @@ PD_CONSTRUCTOR static void accessibilityConfigInit(void)
 	configRegisterInt("Accessibility.InteractableBeacons", &g_AccessibilityInteractableBeaconsEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.TargetingFeedback", &g_AccessibilityTargetingFeedbackEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.WeaponFunctionCues", &g_AccessibilityWeaponFunctionCuesEnabledConfig, 0, 1);
+	configRegisterInt("Accessibility.VirtualCaneMode", &g_AccessibilityVirtualCaneModeConfig, 0, 2);
 }

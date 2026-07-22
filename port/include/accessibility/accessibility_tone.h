@@ -4,6 +4,7 @@
 #include <PR/ultratypes.h>
 
 #define ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT 10
+#define ACCESSIBILITY_TONE_CANE_SLOT_COUNT 7
 
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 struct accessibilitytonediagnostics {
@@ -14,6 +15,11 @@ struct accessibilitytonediagnostics {
 	s32 weaponfunctionpulses;
 	s32 hazardenabled;
 	s32 combatenabledslots;
+	s32 canerequestedmask;
+	s32 caneactivemask;
+	s32 canecommands;
+	s32 canetonesstarted;
+	s32 canestops;
 	s32 hazardfrequencymillihz;
 	s32 hazardvolumemillionths;
 	s32 hazardpanmillionths;
@@ -34,6 +40,9 @@ void accessibilityToneSetCombatSlot(s32 slot, s32 enabled, f32 frequencyhz,
 		f32 volume, f32 pan, s32 periodms, s32 durationms, s32 continuous,
 		s32 restart, s32 triggernow);
 void accessibilityToneStopCombat(void);
+void accessibilityTonePlayCaneSlot(s32 slot, f32 frequencyhz,
+		f32 volume, f32 pan);
+void accessibilityToneStopCane(void);
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 void accessibilityToneGetDiagnostics(struct accessibilitytonediagnostics *diagnostics);
 #endif

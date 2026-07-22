@@ -9,6 +9,7 @@
 #include "lib/main.h"
 #include "system.h"
 #include "accessibility/accessibility.h"
+#include "accessibility/accessibility_cane.h"
 #include "accessibility/accessibility_log.h"
 #include "accessibility/accessibility_tone.h"
 
@@ -23,10 +24,12 @@ static s32 g_AccessibilityPerformanceMemoryBaselineValid;
 static u64 g_AccessibilityPerformanceWorkingSetBaseline;
 static u64 g_AccessibilityPerformancePrivateBaseline;
 static struct accessibilitytonediagnostics g_AccessibilityPerformancePreviousTone;
+static struct accessibilitycanediagnostics g_AccessibilityPerformancePreviousCane;
 
 void accessibilityPerformanceTick(void)
 {
 	struct accessibilitytonediagnostics tone;
+	struct accessibilitycanediagnostics cane;
 	u64 now;
 	u64 elapsed;
 	u64 gap;
@@ -48,6 +51,7 @@ void accessibilityPerformanceTick(void)
 		g_AccessibilityPerformancePreviousFrameUs = now;
 		g_AccessibilityPerformanceStartLvFrame60 = g_Vars.lvframe60;
 		accessibilityToneGetDiagnostics(&g_AccessibilityPerformancePreviousTone);
+		accessibilityCaneGetDiagnostics(&g_AccessibilityPerformancePreviousCane);
 		return;
 	}
 
@@ -77,9 +81,11 @@ void accessibilityPerformanceTick(void)
 	}
 
 	memset(&tone, 0, sizeof(tone));
+	memset(&cane, 0, sizeof(cane));
 	accessibilityToneGetDiagnostics(&tone);
+	accessibilityCaneGetDiagnostics(&cane);
 	accessibilityLogEvent("performance", "frame_window",
-			"window_us=%" PRIu64 " render_frames=%d render_fps=%.3f max_frame_gap_us=%" PRIu64 " game_ticks=%d game_tick_rate=%.3f stage=%d lvframe60=%d diffframe60=%d lvupdate60=%d tickmode=%d menu_count=%d memory_available=%d working_set_bytes=%" PRIu64 " working_set_delta=%lld private_bytes=%" PRIu64 " private_delta=%lld tone_enabled=%d chirp_enabled=%d chirp_sequence=%d weapon_function_sequence=%d weapon_function_pulses=%d hazard_enabled=%d combat_enabled_slots=%d hazard_frequency_millihz=%d hazard_volume_millionths=%d hazard_pan_millionths=%d mixer_calls_delta=%d mixer_passthrough_delta=%d mixer_active_delta=%d mixer_frames_delta=%d mixer_calls_total=%d mixer_active_total=%d",
+			"window_us=%" PRIu64 " render_frames=%d render_fps=%.3f max_frame_gap_us=%" PRIu64 " game_ticks=%d game_tick_rate=%.3f stage=%d lvframe60=%d diffframe60=%d lvupdate60=%d tickmode=%d menu_count=%d memory_available=%d working_set_bytes=%" PRIu64 " working_set_delta=%lld private_bytes=%" PRIu64 " private_delta=%lld tone_enabled=%d chirp_enabled=%d chirp_sequence=%d weapon_function_sequence=%d weapon_function_pulses=%d hazard_enabled=%d combat_enabled_slots=%d cane_mode=%d cane_requested_mask=0x%x cane_active_mask=0x%x cane_commands_delta=%d cane_tones_started_delta=%d cane_stops_delta=%d cane_queries_delta=%" PRIu64 " cane_hits_delta=%" PRIu64 " cane_misses_delta=%" PRIu64 " cane_skipped_delta=%" PRIu64 " cane_sweeps_delta=%" PRIu64 " cane_missed_cycles_delta=%" PRIu64 " cane_query_us_delta=%" PRIu64 " cane_query_max_us=%" PRIu64 " hazard_frequency_millihz=%d hazard_volume_millionths=%d hazard_pan_millionths=%d mixer_calls_delta=%d mixer_passthrough_delta=%d mixer_active_delta=%d mixer_frames_delta=%d mixer_calls_total=%d mixer_active_total=%d",
 			(uint64_t)elapsed, g_AccessibilityPerformanceFrames, renderfps,
 			(uint64_t)g_AccessibilityPerformanceMaxFrameGapUs,
 			gameticks, gametickrate, mainGetStageNum(), g_Vars.lvframe60,
@@ -92,6 +98,27 @@ void accessibilityPerformanceTick(void)
 			tone.toneenabled, tone.chirpenabled, tone.chirpsequence,
 			tone.weaponfunctionsequence, tone.weaponfunctionpulses,
 			tone.hazardenabled, tone.combatenabledslots,
+			accessibilityGetVirtualCaneMode(), tone.canerequestedmask,
+			tone.caneactivemask,
+			tone.canecommands - g_AccessibilityPerformancePreviousTone.canecommands,
+			tone.canetonesstarted
+					- g_AccessibilityPerformancePreviousTone.canetonesstarted,
+			tone.canestops - g_AccessibilityPerformancePreviousTone.canestops,
+			(uint64_t)(cane.queries
+					- g_AccessibilityPerformancePreviousCane.queries),
+			(uint64_t)(cane.hits
+					- g_AccessibilityPerformancePreviousCane.hits),
+			(uint64_t)(cane.misses
+					- g_AccessibilityPerformancePreviousCane.misses),
+			(uint64_t)(cane.skipped
+					- g_AccessibilityPerformancePreviousCane.skipped),
+			(uint64_t)(cane.sweeps
+					- g_AccessibilityPerformancePreviousCane.sweeps),
+			(uint64_t)(cane.missedcycles
+					- g_AccessibilityPerformancePreviousCane.missedcycles),
+			(uint64_t)(cane.querytotalus
+					- g_AccessibilityPerformancePreviousCane.querytotalus),
+			(uint64_t)cane.querymaxus,
 			tone.hazardfrequencymillihz,
 			tone.hazardvolumemillionths, tone.hazardpanmillionths,
 			tone.mixcalls - g_AccessibilityPerformancePreviousTone.mixcalls,
@@ -102,6 +129,7 @@ void accessibilityPerformanceTick(void)
 			tone.mixcalls, tone.activecalls);
 
 	g_AccessibilityPerformancePreviousTone = tone;
+	g_AccessibilityPerformancePreviousCane = cane;
 	g_AccessibilityPerformanceWindowStartUs = now;
 	g_AccessibilityPerformanceMaxFrameGapUs = 0;
 	g_AccessibilityPerformanceFrames = 0;

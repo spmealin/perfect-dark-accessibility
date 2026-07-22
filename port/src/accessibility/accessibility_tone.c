@@ -21,6 +21,10 @@
 #define ACCESSIBILITY_COMBAT_GAIN_STEP (ACCESSIBILITY_COMBAT_CHIRP_VOLUME / (ACCESSIBILITY_TONE_SAMPLE_RATE * 0.01f))
 #define ACCESSIBILITY_COMBAT_CHIRP_ATTACK_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.004f))
 #define ACCESSIBILITY_COMBAT_CHIRP_RELEASE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.012f))
+#define ACCESSIBILITY_CANE_VOLUME 0.115f
+#define ACCESSIBILITY_CANE_DURATION_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.035f))
+#define ACCESSIBILITY_CANE_ATTACK_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.003f))
+#define ACCESSIBILITY_CANE_RELEASE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.008f))
 #define ACCESSIBILITY_TONE_MIX_BUFFER_SAMPLES 2048
 #define TWO_PI 6.28318530717958647692f
 
@@ -46,11 +50,20 @@ static SDL_atomic_t g_AccessibilityCombatPanMillionths[ACCESSIBILITY_TONE_COMBAT
 static SDL_atomic_t g_AccessibilityCombatPeriodMs[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityCombatDurationMs[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityCombatContinuous[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
+static SDL_atomic_t g_AccessibilityCaneEnabled[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
+static SDL_atomic_t g_AccessibilityCaneSequence[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
+static SDL_atomic_t g_AccessibilityCaneFrequencyMilliHz[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
+static SDL_atomic_t g_AccessibilityCaneVolumeMillionths[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
+static SDL_atomic_t g_AccessibilityCanePanMillionths[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 static SDL_atomic_t g_AccessibilityToneMixCalls;
 static SDL_atomic_t g_AccessibilityTonePassthroughCalls;
 static SDL_atomic_t g_AccessibilityToneActiveCalls;
 static SDL_atomic_t g_AccessibilityToneMixedFrames;
+static SDL_atomic_t g_AccessibilityCaneActiveMask;
+static SDL_atomic_t g_AccessibilityCaneCommands;
+static SDL_atomic_t g_AccessibilityCaneTonesStarted;
+static SDL_atomic_t g_AccessibilityCaneStops;
 #endif
 static s16 g_AccessibilityToneMixBuffer[ACCESSIBILITY_TONE_MIX_BUFFER_SAMPLES];
 static f32 g_AccessibilityTonePhase;
@@ -77,6 +90,13 @@ static s32 g_AccessibilityCombatCycleSample[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT
 static f32 g_AccessibilityCombatPhase[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static f32 g_AccessibilityCombatPan[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static f32 g_AccessibilityCombatGain[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
+static s32 g_AccessibilityCaneObservedSequence[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
+static s32 g_AccessibilityCaneSamplesRemaining[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
+static s32 g_AccessibilityCaneSample[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
+static f32 g_AccessibilityCanePhase[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
+static f32 g_AccessibilityCaneFrequencyHz[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
+static f32 g_AccessibilityCaneVolume[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
+static f32 g_AccessibilityCanePan[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 
 static s16 accessibilityToneClamp(s32 value)
 {
@@ -245,6 +265,55 @@ void accessibilityToneStopCombat(void)
 	}
 }
 
+void accessibilityTonePlayCaneSlot(s32 slot, f32 frequencyhz,
+		f32 volume, f32 pan)
+{
+	if (slot < 0 || slot >= ACCESSIBILITY_TONE_CANE_SLOT_COUNT) {
+		return;
+	}
+
+	if (frequencyhz < 1.0f) {
+		frequencyhz = 1.0f;
+	}
+
+	if (volume < 0.0f) {
+		volume = 0.0f;
+	} else if (volume > 1.0f) {
+		volume = 1.0f;
+	}
+
+	if (pan < -1.0f) {
+		pan = -1.0f;
+	} else if (pan > 1.0f) {
+		pan = 1.0f;
+	}
+
+	SDL_AtomicSet(&g_AccessibilityCaneFrequencyMilliHz[slot],
+			(s32)(frequencyhz * 1000.0f));
+	SDL_AtomicSet(&g_AccessibilityCaneVolumeMillionths[slot],
+			(s32)(volume * 1000000.0f));
+	SDL_AtomicSet(&g_AccessibilityCanePanMillionths[slot],
+			(s32)(pan * 1000000.0f));
+	SDL_AtomicSet(&g_AccessibilityCaneEnabled[slot], volume > 0.0f);
+	SDL_AtomicAdd(&g_AccessibilityCaneSequence[slot], 1);
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+	SDL_AtomicAdd(&g_AccessibilityCaneCommands, 1);
+#endif
+}
+
+void accessibilityToneStopCane(void)
+{
+	s32 slot;
+
+	for (slot = 0; slot < ACCESSIBILITY_TONE_CANE_SLOT_COUNT; slot++) {
+		SDL_AtomicSet(&g_AccessibilityCaneEnabled[slot], 0);
+		SDL_AtomicAdd(&g_AccessibilityCaneSequence[slot], 1);
+	}
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+	SDL_AtomicAdd(&g_AccessibilityCaneStops, 1);
+#endif
+}
+
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 void accessibilityToneGetDiagnostics(struct accessibilitytonediagnostics *diagnostics)
 {
@@ -263,10 +332,22 @@ void accessibilityToneGetDiagnostics(struct accessibilitytonediagnostics *diagno
 			&g_AccessibilityWeaponFunctionPulses);
 	diagnostics->hazardenabled = SDL_AtomicGet(&g_AccessibilityHazardEnabled);
 	diagnostics->combatenabledslots = 0;
+	diagnostics->canerequestedmask = 0;
 	for (slot = 0; slot < ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT; slot++) {
 		diagnostics->combatenabledslots += SDL_AtomicGet(
 				&g_AccessibilityCombatEnabled[slot]) != 0;
 	}
+	for (slot = 0; slot < ACCESSIBILITY_TONE_CANE_SLOT_COUNT; slot++) {
+		if (SDL_AtomicGet(&g_AccessibilityCaneEnabled[slot])) {
+			diagnostics->canerequestedmask |= 1 << slot;
+		}
+	}
+	diagnostics->caneactivemask = SDL_AtomicGet(
+			&g_AccessibilityCaneActiveMask);
+	diagnostics->canecommands = SDL_AtomicGet(&g_AccessibilityCaneCommands);
+	diagnostics->canetonesstarted = SDL_AtomicGet(
+			&g_AccessibilityCaneTonesStarted);
+	diagnostics->canestops = SDL_AtomicGet(&g_AccessibilityCaneStops);
 	diagnostics->hazardfrequencymillihz = SDL_AtomicGet(
 			&g_AccessibilityHazardFrequencyMilliHz);
 	diagnostics->hazardvolumemillionths = SDL_AtomicGet(
@@ -296,6 +377,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 	s32 combatdurationsamples[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 	s32 combatcontinuous[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 	s32 anycombatenabled = 0;
+	s32 anycaneactive = 0;
 	f32 targetfrequency = (f32)SDL_AtomicGet(
 			&g_AccessibilityToneFrequencyMilliHz) / 1000.0f;
 	f32 targetgain = enabled ? ACCESSIBILITY_TONE_VOLUME : 0.0f;
@@ -372,6 +454,34 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		}
 	}
 
+	for (slot = 0; slot < ACCESSIBILITY_TONE_CANE_SLOT_COUNT; slot++) {
+		s32 sequence = SDL_AtomicGet(&g_AccessibilityCaneSequence[slot]);
+
+		if (sequence != g_AccessibilityCaneObservedSequence[slot]) {
+			g_AccessibilityCaneObservedSequence[slot] = sequence;
+
+			if (SDL_AtomicGet(&g_AccessibilityCaneEnabled[slot])) {
+				g_AccessibilityCaneFrequencyHz[slot] = (f32)SDL_AtomicGet(
+						&g_AccessibilityCaneFrequencyMilliHz[slot]) / 1000.0f;
+				g_AccessibilityCaneVolume[slot] = (f32)SDL_AtomicGet(
+						&g_AccessibilityCaneVolumeMillionths[slot]) / 1000000.0f;
+				g_AccessibilityCanePan[slot] = (f32)SDL_AtomicGet(
+						&g_AccessibilityCanePanMillionths[slot]) / 1000000.0f;
+				g_AccessibilityCaneSamplesRemaining[slot]
+						= ACCESSIBILITY_CANE_DURATION_SAMPLES;
+				g_AccessibilityCaneSample[slot] = 0;
+				g_AccessibilityCanePhase[slot] = 0.0f;
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+				SDL_AtomicAdd(&g_AccessibilityCaneTonesStarted, 1);
+#endif
+			} else {
+				g_AccessibilityCaneSamplesRemaining[slot] = 0;
+			}
+		}
+
+		anycaneactive |= g_AccessibilityCaneSamplesRemaining[slot] > 0;
+	}
+
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 	SDL_AtomicAdd(&g_AccessibilityToneMixCalls, 1);
 #endif
@@ -412,8 +522,9 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			&& !hazardenabled && g_AccessibilityHazardGain <= 0.0f
 			&& g_AccessibilityChirpSamplesRemaining <= 0
 			&& g_AccessibilityWeaponFunctionSamplesRemaining <= 0
-			&& !anycombatenabled) {
+			&& !anycombatenabled && !anycaneactive) {
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+		SDL_AtomicSet(&g_AccessibilityCaneActiveMask, 0);
 		SDL_AtomicAdd(&g_AccessibilityTonePassthroughCalls, 1);
 #endif
 		return input;
@@ -450,6 +561,8 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		s32 weaponfunctiontone = 0;
 		s32 combatleft = 0;
 		s32 combatright = 0;
+		s32 caneleft = 0;
+		s32 caneright = 0;
 		u32 index = i * 2;
 
 		g_AccessibilityToneFrequencyHz += frequencystep;
@@ -649,12 +762,53 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			}
 		}
 
+		if (anycaneactive) {
+			for (slot = 0; slot < ACCESSIBILITY_TONE_CANE_SLOT_COUNT; slot++) {
+				if (g_AccessibilityCaneSamplesRemaining[slot] > 0) {
+					f32 envelope = 1.0f;
+					f32 leftpan = g_AccessibilityCanePan[slot] > 0.0f
+							? 1.0f - g_AccessibilityCanePan[slot] : 1.0f;
+					f32 rightpan = g_AccessibilityCanePan[slot] < 0.0f
+							? 1.0f + g_AccessibilityCanePan[slot] : 1.0f;
+					f32 cane;
+
+					if (g_AccessibilityCaneSample[slot]
+							< ACCESSIBILITY_CANE_ATTACK_SAMPLES) {
+						envelope = (f32)g_AccessibilityCaneSample[slot]
+								/ (f32)ACCESSIBILITY_CANE_ATTACK_SAMPLES;
+					} else if (g_AccessibilityCaneSamplesRemaining[slot]
+							< ACCESSIBILITY_CANE_RELEASE_SAMPLES) {
+						envelope = (f32)g_AccessibilityCaneSamplesRemaining[slot]
+								/ (f32)ACCESSIBILITY_CANE_RELEASE_SAMPLES;
+					}
+
+					cane = sinf(g_AccessibilityCanePhase[slot]) * envelope
+							* g_AccessibilityCaneVolume[slot]
+							* ACCESSIBILITY_CANE_VOLUME * 32767.0f;
+					caneleft += (s32)(cane * leftpan);
+					caneright += (s32)(cane * rightpan);
+					g_AccessibilityCanePhase[slot] += TWO_PI
+							* g_AccessibilityCaneFrequencyHz[slot]
+							/ ACCESSIBILITY_TONE_SAMPLE_RATE;
+
+					if (g_AccessibilityCanePhase[slot] >= TWO_PI) {
+						g_AccessibilityCanePhase[slot] -= TWO_PI;
+					}
+
+					g_AccessibilityCaneSample[slot]++;
+					g_AccessibilityCaneSamplesRemaining[slot]--;
+				}
+			}
+		}
+
 		g_AccessibilityToneMixBuffer[index] = accessibilityToneClamp(
 				(s32)g_AccessibilityToneMixBuffer[index] + tone + chirpleft
-						+ hazardleft + combatleft + weaponfunctiontone);
+						+ hazardleft + combatleft + caneleft
+						+ weaponfunctiontone);
 		g_AccessibilityToneMixBuffer[index + 1] = accessibilityToneClamp(
 				(s32)g_AccessibilityToneMixBuffer[index + 1] + tone + chirpright
-						+ hazardright + combatright + weaponfunctiontone);
+						+ hazardright + combatright + caneright
+						+ weaponfunctiontone);
 
 		g_AccessibilityTonePhase += TWO_PI
 				* g_AccessibilityToneFrequencyHz / ACCESSIBILITY_TONE_SAMPLE_RATE;
@@ -670,6 +824,20 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			g_AccessibilityHazardPhase -= TWO_PI;
 		}
 	}
+
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+	{
+		s32 activemask = 0;
+
+		for (slot = 0; slot < ACCESSIBILITY_TONE_CANE_SLOT_COUNT; slot++) {
+			if (g_AccessibilityCaneSamplesRemaining[slot] > 0) {
+				activemask |= 1 << slot;
+			}
+		}
+
+		SDL_AtomicSet(&g_AccessibilityCaneActiveMask, activemask);
+	}
+#endif
 
 	return g_AccessibilityToneMixBuffer;
 }

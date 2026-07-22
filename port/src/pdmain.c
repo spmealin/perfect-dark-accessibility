@@ -75,6 +75,7 @@
 #include "system.h"
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_beacon.h"
+#include "accessibility/accessibility_cane.h"
 #include "accessibility/accessibility_hazard.h"
 #include "accessibility/accessibility_targeting.h"
 
@@ -515,6 +516,7 @@ void mainLoop(void)
 		}
 
 		accessibilityBeaconReset("stage_stop");
+		accessibilityCaneReset("stage_stop");
 		accessibilityHazardReset("stage_stop");
 		accessibilityTargetingReset("stage_stop");
 		lvStop();
@@ -552,6 +554,7 @@ void mainTick(void)
 
 			lvTick();
 			accessibilityBeaconTick();
+			accessibilityCaneTick();
 			accessibilityHazardTick();
 			playermgrShuffle();
 

@@ -12,5 +12,7 @@ s32 accessibilityLogIsOpen(void);
 // This logger is main-thread-only until synchronization is added.
 void accessibilityLogEvent(const char *category, const char *event, const char *fmt, ...)
 		__attribute__((format(printf, 3, 4)));
+void accessibilityLogEventMessage(const char *category, const char *event,
+		const char *message);
 
 #endif

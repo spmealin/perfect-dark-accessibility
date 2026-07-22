@@ -36,6 +36,7 @@ enum virtkey {
 	VK_COMMA = 54,
 	VK_PERIOD = 55,
 	VK_F1 = 58,
+	VK_F4 = 61,
 	VK_F5 = 62,
 	VK_F6 = 63,
 	VK_F9 = 66,
@@ -45,6 +46,7 @@ enum virtkey {
 	VK_LALT = 226,
 	VK_RCTRL = 228,
 	VK_RSHIFT = 229,
+	VK_RALT = 230,
 
 	/* same order as SDL mouse buttons */
 	VK_MOUSE_BEGIN = 512,
@@ -76,9 +78,12 @@ enum keymod {
 	KM_RSHIFT = 0x0002,
 	KM_LCTRL = 0x0040,
 	KM_RCTRL = 0x0080,
+	KM_LALT = 0x0100,
+	KM_RALT = 0x0200,
 	KM_CAPS = 0x2000,
 	KM_CTRL = KM_LCTRL | KM_RCTRL,
-	KM_SHIFT = KM_LSHIFT | KM_RSHIFT
+	KM_SHIFT = KM_LSHIFT | KM_RSHIFT,
+	KM_ALT = KM_LALT | KM_RALT
 };
 
 enum contkey {

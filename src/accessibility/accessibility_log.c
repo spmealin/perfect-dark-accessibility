@@ -190,15 +190,9 @@ s32 accessibilityLogIsOpen(void)
 	return g_AccessibilityLogFile != NULL;
 }
 
-void accessibilityLogEvent(const char *category, const char *event, const char *fmt, ...)
+void accessibilityLogEventMessage(const char *category, const char *event,
+		const char *message)
 {
-	static const char formaterror[] = "<message formatting failed>";
-	static const char allocationerror[] = "<message allocation failed>";
-	const char *message = "";
-	char *allocated = NULL;
-	va_list args;
-	va_list copy;
-	s32 length;
 	uint64_t sequence;
 	uint64_t timestamp;
 
@@ -208,33 +202,6 @@ void accessibilityLogEvent(const char *category, const char *event, const char *
 
 	sequence = g_AccessibilityLogSequence++;
 	timestamp = (uint64_t)sysGetMicroseconds();
-
-	if (fmt) {
-		va_start(args, fmt);
-		va_copy(copy, args);
-		length = vsnprintf(NULL, 0, fmt, copy);
-		va_end(copy);
-
-		if (length < 0) {
-			message = formaterror;
-		} else {
-			allocated = malloc((size_t)length + 1);
-
-			if (allocated) {
-				if (vsnprintf(allocated, (size_t)length + 1, fmt, args) < 0) {
-					free(allocated);
-					allocated = NULL;
-					message = formaterror;
-				} else {
-					message = allocated;
-				}
-			} else {
-				message = allocationerror;
-			}
-		}
-
-		va_end(args);
-	}
 
 	fputs("{\"schema\":", g_AccessibilityLogFile);
 	fprintf(g_AccessibilityLogFile, "%d", ACCESSIBILITY_LOG_SCHEMA);
@@ -264,9 +231,52 @@ void accessibilityLogEvent(const char *category, const char *event, const char *
 	accessibilityLogWriteJsonString(message);
 	fputs("}\n", g_AccessibilityLogFile);
 
-	free(allocated);
-
 	if (fflush(g_AccessibilityLogFile) != 0 || ferror(g_AccessibilityLogFile)) {
 		accessibilityLogCloseAfterFailure("write");
 	}
+}
+
+void accessibilityLogEvent(const char *category, const char *event, const char *fmt, ...)
+{
+	static const char formaterror[] = "<message formatting failed>";
+	static const char allocationerror[] = "<message allocation failed>";
+	const char *message = "";
+	char *allocated = NULL;
+	va_list args;
+	va_list copy;
+	s32 length;
+
+	if (!g_AccessibilityLogFile) {
+		return;
+	}
+
+	if (fmt) {
+		va_start(args, fmt);
+		va_copy(copy, args);
+		length = vsnprintf(NULL, 0, fmt, copy);
+		va_end(copy);
+
+		if (length < 0) {
+			message = formaterror;
+		} else {
+			allocated = malloc((size_t)length + 1);
+
+			if (allocated) {
+				if (vsnprintf(allocated, (size_t)length + 1, fmt, args) < 0) {
+					free(allocated);
+					allocated = NULL;
+					message = formaterror;
+				} else {
+					message = allocated;
+				}
+			} else {
+				message = allocationerror;
+			}
+		}
+
+		va_end(args);
+	}
+
+	accessibilityLogEventMessage(category, event, message);
+	free(allocated);
 }

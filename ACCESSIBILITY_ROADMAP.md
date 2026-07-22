@@ -147,6 +147,8 @@ Implementation status: the generic HUD-admission slice is implemented behind `Ac
 
 ## Milestone 11 — Navigation prototype
 
+Implementation status: a general single-player virtual-cane slice is implemented as an orientation experiment, but Milestone 11 remains open. F4 cycles off, a two-second seven-angle sweep, and a one-second seven-angle sweep. Each live player-sized movement-cylinder probe reports the nearest background/object/door/path-blocking collision with a fixed-pitch spatial chirp while excluding characters and drop-offs. Route guidance, landmarks, deviation/recovery semantics, controller/settings UI, runtime validation, and the required blind-user iterations remain pending.
+
 - **Goal:** Evaluate nonvisual orientation and route guidance in one bounded Carrington Institute/training route.
 - **User-visible result:** Heading/landmark queries and optional cues support following a short route, detecting deviation, and recovering.
 - **Systems:** player pose, rooms/portals/pads, doors/elevators, landmarks, route model, speech/earcons.
