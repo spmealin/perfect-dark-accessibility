@@ -30,6 +30,13 @@
 #define ACCESSIBILITY_TARGETING_TONE_BASE_FREQUENCY_HZ 440.0f
 #define ACCESSIBILITY_TARGETING_TONE_MIN_PITCH 1.5f
 #define ACCESSIBILITY_TARGETING_TONE_MAX_PITCH 3.0f
+#define ACCESSIBILITY_TARGETING_COMBAT_FREQUENCY_HZ 440.0f
+#define ACCESSIBILITY_TARGETING_COMBAT_FAR_PERIOD_MS 750
+#define ACCESSIBILITY_TARGETING_COMBAT_CLOSE_PERIOD_MS 200
+#define ACCESSIBILITY_TARGETING_COMBAT_FAR_DURATION_MS 180
+#define ACCESSIBILITY_TARGETING_COMBAT_CLOSE_DURATION_MS 50
+#define ACCESSIBILITY_TARGETING_COMBAT_TRIGGER_PERIOD_DELTA_MS 40
+#define ACCESSIBILITY_TARGETING_COMBAT_CLOSE_EXIT_SCALE 1.1f
 
 struct accessibilitytargetingrecord {
 	struct accessibilitytargetingcandidate candidate;
@@ -48,6 +55,17 @@ struct accessibilitytargetingpolicy {
 	f32 fulldistance;
 	f32 fadedistance;
 	f32 silentdistance;
+};
+
+struct accessibilitytargetingcombatslot {
+	struct accessibilitytargetingidentity identity;
+	s32 assigned;
+	s32 audible;
+	s32 periodms;
+	s32 durationms;
+	s32 triggerperiodms;
+	s32 distancezone;
+	s32 nextcadencelog60;
 };
 
 struct accessibilitytargetingstate {
@@ -78,10 +96,25 @@ struct accessibilitytargetingstate {
 	s32 memorybaselinevalid;
 	u64 workingsetbaseline;
 	u64 privatebaseline;
+	s32 profile;
+	struct accessibilitytargetingcombatslot
+			combatslots[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 };
 
 static const struct accessibilitytargetingpolicy g_AccessibilityTargetingRangePolicy = {
 	ACCESSIBILITY_TARGETING_PROFILE_FIRING_RANGE,
+	SFX_MENU_SELECT,
+	ACCESSIBILITY_TARGETING_BASE_CYCLE_TICKS,
+	ACCESSIBILITY_TARGETING_MIN_SLOT_TICKS,
+	ACCESSIBILITY_TARGETING_VISIBLE_FRAMES,
+	ACCESSIBILITY_TARGETING_MISSING_FRAMES,
+	ACCESSIBILITY_TARGETING_FULL_DISTANCE,
+	ACCESSIBILITY_TARGETING_FADE_DISTANCE,
+	ACCESSIBILITY_TARGETING_SILENT_DISTANCE,
+};
+
+static const struct accessibilitytargetingpolicy g_AccessibilityTargetingCombatPolicy = {
+	ACCESSIBILITY_TARGETING_PROFILE_COMBAT,
 	SFX_MENU_SELECT,
 	ACCESSIBILITY_TARGETING_BASE_CYCLE_TICKS,
 	ACCESSIBILITY_TARGETING_MIN_SLOT_TICKS,
@@ -113,8 +146,22 @@ static s32 g_AccessibilityTargetingStatesInitialized;
 #define g_AccessibilityTargetingObservationCount (g_AccessibilityTargetingCurrentState->observationcount)
 #define g_AccessibilityTargetingPresencePulseCount (g_AccessibilityTargetingCurrentState->presencepulsecount)
 #define g_AccessibilityTargetingAlignmentUpdateCount (g_AccessibilityTargetingCurrentState->alignmentupdatecount)
+#define g_AccessibilityTargetingCombatSlots (g_AccessibilityTargetingCurrentState->combatslots)
 
 static s32 accessibilityTargetingPresenceOwned(void);
+static void accessibilityTargetingResetCurrent(const char *reason);
+
+static s32 accessibilityTargetingCombatSlotCount(void)
+{
+	s32 count = 0;
+	s32 slot;
+
+	for (slot = 0; slot < ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT; slot++) {
+		count += g_AccessibilityTargetingCombatSlots[slot].assigned != 0;
+	}
+
+	return count;
+}
 
 static const char *accessibilityTargetingShootabilityName(s32 shootability)
 {
@@ -158,7 +205,7 @@ static void accessibilityTargetingLogTelemetry(s32 frame60)
 	}
 
 	accessibilityLogEvent("targeting", "telemetry",
-			"frame=%d observations=%llu presence_pulses=%llu alignment_updates=%llu records=%d aimed=%d memory_available=%d working_set_bytes=%llu working_set_delta=%lld private_bytes=%llu private_delta=%lld snd_states=%d prop_channels_in_use=%d prop_channels_total=%d prop_channels_stopped=%d targeting_channels=%d presence_channel=%d presence_owned=%d alignment_active=%d alignment_frequency_hz=%.2f alignment_quality=%.4f alignment_distance=%.3f",
+			"frame=%d observations=%llu presence_pulses=%llu alignment_updates=%llu records=%d aimed=%d memory_available=%d working_set_bytes=%llu working_set_delta=%lld private_bytes=%llu private_delta=%lld snd_states=%d prop_channels_in_use=%d prop_channels_total=%d prop_channels_stopped=%d targeting_channels=%d presence_channel=%d presence_owned=%d combat_oscillator_slots=%d combat_oscillator_capacity=%d alignment_active=%d alignment_frequency_hz=%.2f alignment_quality=%.4f alignment_distance=%.3f",
 			frame60,
 			(unsigned long long)g_AccessibilityTargetingObservationCount,
 			(unsigned long long)g_AccessibilityTargetingPresencePulseCount,
@@ -174,6 +221,8 @@ static void accessibilityTargetingLogTelemetry(s32 frame60)
 			g_SndNumPlaying, inuse, channels, stopped, owned,
 			g_AccessibilityTargetingPresenceChannel,
 			accessibilityTargetingPresenceOwned(),
+			accessibilityTargetingCombatSlotCount(),
+			ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT,
 			g_AccessibilityTargetingAlignmentActive,
 			g_AccessibilityTargetingAlignmentFrequencyHz,
 			g_AccessibilityTargetingAlignmentQuality,
@@ -187,6 +236,10 @@ static const struct accessibilitytargetingpolicy *accessibilityTargetingGetPolic
 {
 	if (profile == ACCESSIBILITY_TARGETING_PROFILE_FIRING_RANGE) {
 		return &g_AccessibilityTargetingRangePolicy;
+	}
+
+	if (profile == ACCESSIBILITY_TARGETING_PROFILE_COMBAT) {
+		return &g_AccessibilityTargetingCombatPolicy;
 	}
 
 	return NULL;
@@ -279,6 +332,22 @@ static void accessibilityTargetingStopPresence(const char *reason)
 	}
 
 	g_AccessibilityTargetingPresenceChannel = -1;
+}
+
+static void accessibilityTargetingStopCombatPresence(const char *reason)
+{
+	s32 count = accessibilityTargetingCombatSlotCount();
+
+	accessibilityToneStopCombat();
+
+	if (count > 0) {
+		accessibilityLogEvent("targeting", "combat_presence_stop",
+				"reason=%s assigned_slots=%d capacity=%d",
+				reason, count, ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT);
+	}
+
+	memset(g_AccessibilityTargetingCombatSlots, 0,
+			sizeof(g_AccessibilityTargetingCurrentState->combatslots));
 }
 
 static void accessibilityTargetingStopAlignment(const char *reason)
@@ -486,6 +555,210 @@ static struct accessibilitytargetingrecord *accessibilityTargetingNextPresence(v
 	return NULL;
 }
 
+static s32 accessibilityTargetingRecordEligible(
+		const struct accessibilitytargetingrecord *record)
+{
+	return record
+			&& record->seenframes >= g_AccessibilityTargetingCurrentPolicy->visibleframes
+			&& record->missingframes == 0
+			&& accessibilityTargetingCandidateValid(&record->candidate);
+}
+
+static s32 accessibilityTargetingFindCombatSlot(
+		const struct accessibilitytargetingidentity *identity)
+{
+	s32 slot;
+
+	for (slot = 0; slot < ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT; slot++) {
+		if (g_AccessibilityTargetingCombatSlots[slot].assigned
+				&& accessibilityTargetingIdentityEqual(identity,
+					&g_AccessibilityTargetingCombatSlots[slot].identity)) {
+			return slot;
+		}
+	}
+
+	return -1;
+}
+
+static void accessibilityTargetingCombatCadence(f32 distance, f32 reference,
+		s32 previouszone, s32 *periodms, s32 *durationms, s32 *zone,
+		f32 *proximity)
+{
+	f32 value;
+	f32 closethreshold;
+
+	if (reference < 1.0f) {
+		reference = 60.0f;
+	}
+
+	closethreshold = previouszone == 2
+			? reference * ACCESSIBILITY_TARGETING_COMBAT_CLOSE_EXIT_SCALE
+			: reference;
+
+	if (distance <= closethreshold) {
+		value = 1.0f;
+		*zone = 2;
+	} else if (distance >= reference * 5.0f) {
+		value = 0.0f;
+		*zone = 0;
+	} else {
+		value = (reference * 5.0f - distance) / (reference * 4.0f);
+		*zone = 1;
+	}
+
+	*periodms = (s32)(ACCESSIBILITY_TARGETING_COMBAT_FAR_PERIOD_MS
+			+ (ACCESSIBILITY_TARGETING_COMBAT_CLOSE_PERIOD_MS
+					- ACCESSIBILITY_TARGETING_COMBAT_FAR_PERIOD_MS) * value
+			+ 0.5f);
+	*durationms = (s32)(ACCESSIBILITY_TARGETING_COMBAT_FAR_DURATION_MS
+			+ (ACCESSIBILITY_TARGETING_COMBAT_CLOSE_DURATION_MS
+					- ACCESSIBILITY_TARGETING_COMBAT_FAR_DURATION_MS) * value
+			+ 0.5f);
+	*proximity = value;
+}
+
+static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
+		f32 distancecuereference)
+{
+	s32 slot;
+	s32 index;
+
+	for (slot = 0; slot < ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT; slot++) {
+		struct accessibilitytargetingcombatslot *voice
+				= &g_AccessibilityTargetingCombatSlots[slot];
+		s32 recordindex;
+
+		if (!voice->assigned) {
+			continue;
+		}
+
+		recordindex = accessibilityTargetingFindRecord(&voice->identity);
+		if (recordindex < 0 || !accessibilityTargetingRecordEligible(
+				&g_AccessibilityTargetingRecords[recordindex])) {
+			accessibilityToneSetCombatSlot(slot, false,
+					ACCESSIBILITY_TARGETING_COMBAT_FREQUENCY_HZ,
+					0.0f, 0.0f,
+					ACCESSIBILITY_TARGETING_COMBAT_FAR_PERIOD_MS,
+					ACCESSIBILITY_TARGETING_COMBAT_FAR_DURATION_MS,
+					false, true, false);
+			accessibilityLogEvent("targeting", "combat_slot_release",
+					"frame=%d oscillator_slot=%d source=%d slot=%d propnum=%d reason=target_unavailable",
+					frame60, slot, voice->identity.source,
+					voice->identity.sourceslot, voice->identity.propnum);
+			memset(voice, 0, sizeof(*voice));
+		}
+	}
+
+	for (index = 0; index < g_AccessibilityTargetingRecordCount; index++) {
+		struct accessibilitytargetingrecord *record
+				= &g_AccessibilityTargetingRecords[index];
+		struct accessibilitytargetingcombatslot *voice;
+		s32 restart = false;
+		s32 triggernow = false;
+		s32 volume;
+		s32 pan;
+		s32 periodms;
+		s32 durationms;
+		s32 distancezone;
+		f32 normalizedvolume;
+		f32 normalizedpan;
+		f32 proximity;
+		f32 cuedistance;
+
+		if (!accessibilityTargetingRecordEligible(record)) {
+			continue;
+		}
+
+		slot = accessibilityTargetingFindCombatSlot(&record->candidate.identity);
+		if (slot < 0) {
+			for (slot = 0; slot < ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT; slot++) {
+				if (!g_AccessibilityTargetingCombatSlots[slot].assigned) {
+					break;
+				}
+			}
+
+			if (slot >= ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT) {
+				continue;
+			}
+
+			voice = &g_AccessibilityTargetingCombatSlots[slot];
+			voice->assigned = true;
+			voice->identity = record->candidate.identity;
+			restart = true;
+			accessibilityLogEvent("targeting", "combat_slot_assign",
+					"frame=%d oscillator_slot=%d source=%d slot=%d propnum=%d prop=%p frequency_hz=%.1f punch_range=%.3f",
+					frame60, slot, voice->identity.source,
+					voice->identity.sourceslot, voice->identity.propnum,
+					(void *)record->candidate.prop,
+					ACCESSIBILITY_TARGETING_COMBAT_FREQUENCY_HZ,
+					distancecuereference);
+		}
+
+		volume = psCalculateVolumeFromDistance(record->candidate.distance,
+				g_AccessibilityTargetingCurrentPolicy->fulldistance,
+				g_AccessibilityTargetingCurrentPolicy->fadedistance,
+				g_AccessibilityTargetingCurrentPolicy->silentdistance,
+				AL_VOL_FULL);
+		pan = psCalculatePan(&record->candidate.position,
+				g_AccessibilityTargetingCurrentPolicy->fulldistance,
+				g_AccessibilityTargetingCurrentPolicy->fadedistance,
+				g_AccessibilityTargetingCurrentPolicy->silentdistance,
+				record->candidate.distance, false, NULL);
+		normalizedvolume = (f32)volume / (f32)AL_VOL_FULL;
+		normalizedpan = ((f32)pan - (f32)AL_PAN_CENTER)
+				/ (f32)AL_PAN_CENTER;
+		voice = &g_AccessibilityTargetingCombatSlots[slot];
+		restart |= normalizedvolume > 0.0f && !voice->audible;
+		cuedistance = record->candidate.hasdistancecue
+				? record->candidate.distancecue : record->candidate.distance;
+		accessibilityTargetingCombatCadence(cuedistance,
+				distancecuereference, voice->distancezone,
+				&periodms, &durationms,
+				&distancezone, &proximity);
+		if (voice->triggerperiodms <= 0) {
+			voice->triggerperiodms = periodms;
+		} else if (periodms > voice->triggerperiodms) {
+			voice->triggerperiodms = periodms;
+		} else if (periodms <= voice->triggerperiodms
+				- ACCESSIBILITY_TARGETING_COMBAT_TRIGGER_PERIOD_DELTA_MS) {
+			triggernow = true;
+			voice->triggerperiodms = periodms;
+		}
+
+		if (voice->distancezone == 2 && distancezone != 2) {
+			triggernow = true;
+		}
+		if (restart || triggernow || distancezone != voice->distancezone
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+				|| frame60 >= voice->nextcadencelog60
+#endif
+		) {
+			accessibilityLogEvent("targeting", "combat_slot_cadence",
+					"frame=%d oscillator_slot=%d propnum=%d center_distance=%.3f cue_distance=%.3f cue_distance_available=%d punch_range=%.3f punch_range_exit=%.3f far_threshold=%.3f zone=%s proximity=%.4f period_ms=%d duration_ms=%d continuous=%d trigger_now=%d volume=%.4f pan=%.4f",
+					frame60, slot, voice->identity.propnum,
+					record->candidate.distance, cuedistance,
+					record->candidate.hasdistancecue, distancecuereference,
+					distancecuereference
+							* ACCESSIBILITY_TARGETING_COMBAT_CLOSE_EXIT_SCALE,
+					distancecuereference * 5.0f,
+					distancezone == 2 ? "punch_range"
+						: distancezone == 1 ? "ramping" : "far",
+					proximity, periodms, durationms, distancezone == 2,
+					triggernow,
+					normalizedvolume, normalizedpan);
+			voice->nextcadencelog60 = frame60 + TICKS(60);
+		}
+		accessibilityToneSetCombatSlot(slot, true,
+				ACCESSIBILITY_TARGETING_COMBAT_FREQUENCY_HZ,
+				normalizedvolume, normalizedpan, periodms, durationms,
+				distancezone == 2, restart, triggernow);
+		voice->audible = normalizedvolume > 0.0f;
+		voice->periodms = periodms;
+		voice->durationms = durationms;
+		voice->distancezone = distancezone;
+	}
+}
+
 static void accessibilityTargetingPulsePresence(s32 frame60)
 {
 	struct accessibilitytargetingrecord *record = accessibilityTargetingNextPresence();
@@ -624,6 +897,13 @@ void accessibilityTargetingObserve(
 	g_AccessibilityTargetingCurrentState
 			= &g_AccessibilityTargetingStates[observation->playernum];
 
+	if (g_AccessibilityTargetingCurrentState->profile != 0
+			&& g_AccessibilityTargetingCurrentState->profile
+					!= observation->profile) {
+		accessibilityTargetingResetCurrent("profile_changed");
+	}
+	g_AccessibilityTargetingCurrentState->profile = observation->profile;
+
 	g_AccessibilityTargetingObservationCount++;
 	aimedcandidate = false;
 	aimedshootability = ACCESSIBILITY_TARGETING_SHOOTABILITY_UNKNOWN;
@@ -694,7 +974,13 @@ void accessibilityTargetingObserve(
 
 	accessibilityTargetingMerge(observation);
 
-	if (g_AccessibilityTargetingHasLastPulseIdentity) {
+	if (observation->profile == ACCESSIBILITY_TARGETING_PROFILE_COMBAT) {
+		accessibilityTargetingStopPresence("combat_profile");
+		g_AccessibilityTargetingHasLastPulseIdentity = false;
+		g_AccessibilityTargetingNextPresence60 = 0;
+		accessibilityTargetingUpdateCombatPresence(observation->frame60,
+				observation->distancecuereference);
+	} else if (g_AccessibilityTargetingHasLastPulseIdentity) {
 		s32 lastindex = accessibilityTargetingFindRecord(
 				&g_AccessibilityTargetingLastPulseIdentity);
 
@@ -707,7 +993,8 @@ void accessibilityTargetingObserve(
 		}
 	}
 
-	if (observation->frame60 >= g_AccessibilityTargetingNextPresence60) {
+	if (observation->profile != ACCESSIBILITY_TARGETING_PROFILE_COMBAT
+			&& observation->frame60 >= g_AccessibilityTargetingNextPresence60) {
 		accessibilityTargetingPulsePresence(observation->frame60);
 	}
 
@@ -766,9 +1053,11 @@ static void accessibilityTargetingResetCurrent(const char *reason)
 	s32 hadstate = g_AccessibilityTargetingRecordCount
 			|| g_AccessibilityTargetingHasAimedIdentity
 			|| g_AccessibilityTargetingPresenceChannel >= 0
+			|| accessibilityTargetingCombatSlotCount() > 0
 			|| g_AccessibilityTargetingAlignmentActive;
 
 	accessibilityTargetingStopPresence(reason ? reason : "reset");
+	accessibilityTargetingStopCombatPresence(reason ? reason : "reset");
 	accessibilityTargetingStopAlignment(reason ? reason : "reset");
 
 	if (hadstate) {
@@ -823,6 +1112,7 @@ void accessibilityTargetingReset(const char *reason)
 		g_AccessibilityTargetingCurrentState
 				= &g_AccessibilityTargetingStates[playernum];
 		accessibilityTargetingResetCurrent(reason);
+		g_AccessibilityTargetingCurrentState->profile = 0;
 	}
 
 	g_AccessibilityTargetingCurrentState = NULL;

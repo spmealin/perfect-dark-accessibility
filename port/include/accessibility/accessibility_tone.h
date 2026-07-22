@@ -3,12 +3,15 @@
 
 #include <PR/ultratypes.h>
 
+#define ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT 10
+
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 struct accessibilitytonediagnostics {
 	s32 toneenabled;
 	s32 chirpenabled;
 	s32 chirpsequence;
 	s32 hazardenabled;
+	s32 combatenabledslots;
 	s32 hazardfrequencymillihz;
 	s32 hazardvolumemillionths;
 	s32 hazardpanmillionths;
@@ -23,6 +26,10 @@ void accessibilityToneSet(s32 enabled, f32 frequencyhz);
 void accessibilityTonePlayChirp(f32 frequencyhz, f32 volume, f32 pan);
 void accessibilityToneStopChirp(void);
 void accessibilityToneSetHazard(s32 enabled, f32 frequencyhz, f32 volume, f32 pan);
+void accessibilityToneSetCombatSlot(s32 slot, s32 enabled, f32 frequencyhz,
+		f32 volume, f32 pan, s32 periodms, s32 durationms, s32 continuous,
+		s32 restart, s32 triggernow);
+void accessibilityToneStopCombat(void);
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 void accessibilityToneGetDiagnostics(struct accessibilitytonediagnostics *diagnostics);
 #endif
