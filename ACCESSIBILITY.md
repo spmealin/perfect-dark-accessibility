@@ -4,7 +4,7 @@
 
 This work aims to make the Perfect Dark PC port meaningfully playable by blind and low-vision players, starting with nonvisual access to menus and essential game state and progressing through small, testable gameplay slices.
 
-The current branch contains the accessibility coordinator/logger, Tolk/NVDA speech backend, menu-agnostic focus narration, non-subtitle HUD-message speech, Carrington Institute interaction/door/pickup beacons, damaging-laser hazard cues, firing-range, hostile-character, and initial device-target feedback, weapon-function state cues, and a seven-direction virtual-cane prototype. All implemented feature backends default to enabled for blind-user acceptance testing; the cane defaults to Slow mode. Menu narration has passed project-owner blind-user acceptance, while the newer gameplay slices retain the narrower evidence and pending tests documented below and in `ACCESSIBILITY_TESTING.md`. Broader navigation/route guidance, combat categories beyond characters, and full-game accessibility are not implemented.
+The current branch contains the accessibility coordinator/logger, Tolk/NVDA speech backend, menu-agnostic focus narration, non-subtitle HUD-message speech, Carrington Institute interaction/door/pickup beacons, non-hostile-character beacons, damaging-laser hazard cues, firing-range, hostile-character, and initial device-target feedback, weapon-function state cues, and a seven-direction virtual-cane prototype. All implemented feature backends default to enabled for blind-user acceptance testing; the cane defaults to Slow mode. Menu narration has passed project-owner blind-user acceptance, while the newer gameplay slices retain the narrower evidence and pending tests documented below and in `ACCESSIBILITY_TESTING.md`. Broader navigation/route guidance, combat categories beyond characters, and full-game accessibility are not implemented.
 
 The firing-range weapon list announces the same completed bronze, silver, and gold proficiency stars rendered beside each weapon. It reads only the filled stars represented by the saved score and does not infer incomplete progress or expose state absent from the visual row.
 
@@ -48,7 +48,7 @@ The pattern has a dedicated fixed oscillator lane and does not consume a game so
 
 ### Carrington Institute beacon prototype
 
-`Accessibility.InteractableBeacons` defaults to `1` for project-owner blind-user acceptance testing. It remains configurable in `pd.ini`. Enabling the setting does not start a sound automatically; use F5 and F6 during Carrington Institute gameplay.
+`Accessibility.InteractableBeacons` defaults to `1` for project-owner blind-user acceptance testing. It remains configurable in `pd.ini`. Enabling the setting does not start a sound automatically; use F5, F6, and F8 during Carrington Institute gameplay.
 
 - F5 independently toggles automatic nearby interactable-object beacons.
 - F6 independently toggles automatic nearby door beacons.
@@ -62,6 +62,12 @@ The pattern has a dedicated fixed oscillator lane and does not consume a game so
 - The implementation is limited to single-player Carrington Institute training and a 1,200-unit radius. F5, F6, and F8 each retain up to three nearby targets for their independently enabled category.
 - Menus, pause, cutscenes, death, unsupported player counts, stage changes, invalid props, and audio allocation failures stop the beacon.
 - The current stereo positional system primarily conveys left/right and distance. Front/rear and vertical usefulness require runtime and blind-user evidence and are not yet claimed.
+
+### Non-hostile-character beacons
+
+`Accessibility.NonHostileBeacons` defaults to `1`. During unobscured single-player gameplay, F7 independently toggles positioned cues for nearby living friendly or neutral characters. Each person uses two rapid 440 Hz chirps—the door pitch with a distinct count—and shares the existing global beacon timeline, so character, door, object, and pickup patterns never start simultaneously.
+
+The category uses the engine's team comparison rather than stage or character identifiers: enemies are excluded, while friendly and neutral characters are eligible. The current player, dead, dying, knocked-out, hidden, untargetable, imperceptibly cloaked, inactive, disabled, out-of-range, room-disconnected, and line-of-sight-blocked characters are excluded. Up to three people are retained within the existing 1,200-unit radius and refresh automatically twice per second as characters move or change state. F7 is ignored while menus, pause, cutscenes, death, or unsupported multiplayer contexts suppress the beacon system. The category does not label a person's identity or promise that a neutral character will remain non-hostile after a future scripted state change.
 
 ### Carrington Institute firing-range targeting proof
 

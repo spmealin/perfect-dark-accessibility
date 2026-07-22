@@ -39,6 +39,7 @@ enum virtkey {
 	VK_F4 = 61,
 	VK_F5 = 62,
 	VK_F6 = 63,
+	VK_F7 = 64,
 	VK_F8 = 65,
 	VK_F9 = 66,
 	VK_DELETE = 76,

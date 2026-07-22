@@ -150,6 +150,16 @@ Implementation status: the active weapon/device radial now announces localized h
 
 ## Milestone 10 — Broader interaction scanner
 
+### Prioritized non-hostile-character beacon slice
+
+- **Status:** Engineering implementation builds; runtime and blind-user acceptance are pending.
+- **Goal:** Make nearby people who are not presently hostile spatially discoverable without mixing them with the hostile combat cue vocabulary.
+- **Behavior:** F7 independently toggles up to three automatically refreshed friendly or neutral character beacons in any single-player gameplay stage. Each retained person emits two rapid positioned 440 Hz chirps on the shared staggered beacon timeline. Existing team comparison, life/action, hidden, untargetable, cloak/IR, room, range, and shooting-blocker line-of-sight state govern eligibility.
+- **Acceptance:** Test friendly and neutral people, scripted allegiance changes, nearby hostiles, death/knockout, cloak with and without IR perception, occlusion, movement, more than three candidates, stage transitions, menus, pause, cutscenes, death, and repeated sessions. Confirm F7 changes only this category and all enabled categories remain serialized.
+- **Evidence:** Correlate `beacon/candidate`, `scan_result`, `schedule_target`, `pulse`, and `category_state` records with team, action, visibility, identity, position, distance, pan, and two-pulse output.
+- **Risks:** A neutral relationship can change through scripts after a refresh; two 440 Hz chirps require masking tests against one-chirp doors. A midpoint line-of-sight ray may exclude a partly visible person. The three-target cap prioritizes stable nearby identities rather than exhaustive awareness.
+- **Explicit non-goals:** No spoken identity, through-wall disclosure, hostility prediction, dialogue availability claim, multiplayer policy, or automatic interaction.
+
 - **Goal:** Generalize the Carrington Institute beacon proof into a deliberate, knowledge-safe query for a broader set of nearby actionable things.
 - **User-visible result:** A scan summarizes eligible doors, pickups, terminals, characters, and mission objects by direction/distance; results can be stepped or repeated, while positioned beacons remain available for supported categories.
 - **Systems:** Milestone 5 beacon core, prop/object types, generalized interaction eligibility, rooms/visibility, localized object names, spatial formatter, and permanent action bindings.

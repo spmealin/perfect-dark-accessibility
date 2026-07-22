@@ -117,6 +117,7 @@ MenuNarration=1
 HudMessages=1
 EnvironmentalHazards=1
 InteractableBeacons=1
+NonHostileBeacons=1
 TargetingFeedback=1
 WeaponFunctionCues=1
 VirtualCaneMode=1
@@ -191,6 +192,14 @@ The same background-only LOS policy now applies unconditionally to interactable 
 Start CI device training for the Data Uplink with F8 enabled and F5/F6 disabled. Before the exercise exposes the device, there must be no pickup pattern for its disabled, invisible, uncollectable setup object. Once the Uplink appears on the table, confirm its position is represented by exactly three quick 880 Hz chirps: 35 ms per chirp with 25 ms gaps. Confirm the pattern follows distance and stereo pan, stops behind door/background sight blockers, and disappears automatically within the next half-second refresh after the player collects it. Repeat with representative weapons, ammunition, keys, shields, scripted collectible objects, manually activated pickups, and walk-over pickups where available. Uncollectable/invisible objects and projectile pickups still reserved for another character or not yet settled must remain silent. Toggle F5, F6, and F8 in several combinations and verify each independently controls only its category; all targets still share one staggered timeline without simultaneous starts or a new native game-audio channel.
 
 The project owner's first enabled runtime pass confirmed that the laptop beacon sounded, proving the command, scan, pulse scheduling, and positioned object-audio path, but no office-door beacon was initially available. The comprehensive log identified the nearby unlocked, healthy door between rooms 14 and 16 as prop 9 and showed it was rejected solely because its setup flags included `OBJFLAG_DEACTIVATED`. The game's `doorTestForInteract` does not reject doors on that flag; it checks `OBJFLAG_CANNOT_ACTIVATE` and `maxfrac`. The beacon predicate was corrected to keep `OBJFLAG_DEACTIVATED` object-only, and a subsequent blind-user retest confirmed the office-door beacon.
+
+#### Non-hostile-character beacons
+
+Confirm the session-start record reports `non_hostile_beacons=1`. In Carrington Institute gameplay, leave F5/F6/F8 off, press F7, and approach known staff. Every eligible friendly or neutral person should emit exactly two rapid positioned 440 Hz chirps; nearby doors must remain silent. Toggle F7 off and confirm the character cues stop without affecting hostile targeting or other beacon categories. Then enable doors and people together and confirm one-chirp doors and two-chirp people remain countable and never start simultaneously.
+
+Test a nearby hostile and confirm it receives no F7 pattern. Where controllable, test a character before and after an allegiance change, death, knockout, hidden/untargetable state, and cloak with and without IR perception. Put doors, objects, or background geometry between the camera and the person's body midpoint and confirm the cue stops, then automatically reacquires after sight is restored. Move among more than three non-hostile characters and confirm stable nearest-target retention with the existing 150-unit replacement margin. Repeat outside CI to verify that F7 remains available while F5/F6/F8 stay CI-scoped. Menus, pause, cutscenes, player death, multiplayer, feature disable, stage teardown, and shutdown must clear the pattern.
+
+Correlate `beacon/candidate` reasons (`friendly_character`, `neutral_character`, `character_hostile`, life/visibility exclusions), `scan_result`, `schedule_target`, `pulse_count=2`, and `category_state non_hostile_active` with perceived output. Run with all four categories and inspect periodic telemetry for a bounded schedule of at most 12 retained targets, one shared chirp lane, stable fixed storage, and no progressive frame, channel, or memory growth.
 
 After the channel-reuse hardening, the project owner reported that the prior game/video choppiness was gone. The corresponding 297.5-second telemetry window contained 170 successful pulses, 144 exact-channel reuses, zero allocation failures, no more than one accessibility-owned channel at a time, no more than four total property-sound channels in use, and sound-state counts that repeatedly returned to zero. Working set grew 6.18 MiB and private bytes grew 7.11 MiB, predominantly during initial loading rather than as sustained linear growth. The session ended through the normal beacon, menu, and speech shutdown paths. This supports the fix for the observed slowdown but does not replace a longer soak test.
 
