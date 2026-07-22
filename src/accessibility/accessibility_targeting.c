@@ -125,6 +125,18 @@ static const struct accessibilitytargetingpolicy g_AccessibilityTargetingCombatP
 	ACCESSIBILITY_TARGETING_SILENT_DISTANCE,
 };
 
+static const struct accessibilitytargetingpolicy g_AccessibilityTargetingDevicePolicy = {
+	ACCESSIBILITY_TARGETING_PROFILE_DEVICE,
+	SFX_MENU_SELECT,
+	ACCESSIBILITY_TARGETING_BASE_CYCLE_TICKS,
+	ACCESSIBILITY_TARGETING_MIN_SLOT_TICKS,
+	ACCESSIBILITY_TARGETING_VISIBLE_FRAMES,
+	ACCESSIBILITY_TARGETING_MISSING_FRAMES,
+	ACCESSIBILITY_TARGETING_FULL_DISTANCE,
+	ACCESSIBILITY_TARGETING_FADE_DISTANCE,
+	ACCESSIBILITY_TARGETING_SILENT_DISTANCE,
+};
+
 static struct accessibilitytargetingstate g_AccessibilityTargetingStates[MAX_PLAYERS];
 static struct accessibilitytargetingstate *g_AccessibilityTargetingCurrentState;
 static const struct accessibilitytargetingpolicy *g_AccessibilityTargetingCurrentPolicy;
@@ -240,6 +252,10 @@ static const struct accessibilitytargetingpolicy *accessibilityTargetingGetPolic
 
 	if (profile == ACCESSIBILITY_TARGETING_PROFILE_COMBAT) {
 		return &g_AccessibilityTargetingCombatPolicy;
+	}
+
+	if (profile == ACCESSIBILITY_TARGETING_PROFILE_DEVICE) {
+		return &g_AccessibilityTargetingDevicePolicy;
 	}
 
 	return NULL;
@@ -980,6 +996,10 @@ void accessibilityTargetingObserve(
 		g_AccessibilityTargetingNextPresence60 = 0;
 		accessibilityTargetingUpdateCombatPresence(observation->frame60,
 				observation->distancecuereference);
+	} else if (observation->profile == ACCESSIBILITY_TARGETING_PROFILE_DEVICE) {
+		accessibilityTargetingStopPresence("device_profile");
+		g_AccessibilityTargetingHasLastPulseIdentity = false;
+		g_AccessibilityTargetingNextPresence60 = 0;
 	} else if (g_AccessibilityTargetingHasLastPulseIdentity) {
 		s32 lastindex = accessibilityTargetingFindRecord(
 				&g_AccessibilityTargetingLastPulseIdentity);
@@ -994,6 +1014,7 @@ void accessibilityTargetingObserve(
 	}
 
 	if (observation->profile != ACCESSIBILITY_TARGETING_PROFILE_COMBAT
+			&& observation->profile != ACCESSIBILITY_TARGETING_PROFILE_DEVICE
 			&& observation->frame60 >= g_AccessibilityTargetingNextPresence60) {
 		accessibilityTargetingPulsePresence(observation->frame60);
 	}

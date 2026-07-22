@@ -7,8 +7,10 @@
 #include "data.h"
 #include "game/chr.h"
 #include "game/chraction.h"
+#include "game/bondgun.h"
 #include "game/game_0b0fd0.h"
 #include "game/lv.h"
+#include "game/objectives.h"
 #include "game/propobj.h"
 #include "game/sight.h"
 #include "game/training.h"
@@ -65,6 +67,19 @@ struct accessibilitytargetingcombatprojection {
 	f32 y1;
 };
 
+struct accessibilitytargetingdevicetarget {
+	s32 stagenum;
+	s32 weaponnum;
+	s32 tagid;
+	s32 trainingonly;
+};
+
+static const struct accessibilitytargetingdevicetarget
+		g_AccessibilityTargetingDeviceTargets[] = {
+	{ STAGE_CITRAINING, WEAPON_DATAUPLINK, 0x30, true },
+	{ STAGE_CITRAINING, WEAPON_ECMMINE, 0x32, true },
+};
+
 static struct accessibilitytargetinggameaudit
 		g_AccessibilityTargetingGameAudit[18];
 static s32 g_AccessibilityTargetingGameAuditValid;
@@ -80,6 +95,9 @@ static s32 g_AccessibilityTargetingGameProjectionsValid;
 static uintptr_t g_AccessibilityTargetingGameAimProp;
 static struct coord g_AccessibilityTargetingGameAimHitPos;
 static s32 g_AccessibilityTargetingGameAimHitValid;
+static uintptr_t g_AccessibilityTargetingGameRawAimProp;
+static struct coord g_AccessibilityTargetingGameRawAimHitPos;
+static s32 g_AccessibilityTargetingGameRawAimHitValid;
 static struct accessibilitytargetingcombatprojection
 		g_AccessibilityTargetingCombatProjections[
 			ACCESSIBILITY_TARGETING_COMBAT_PROJECTION_CAPACITY];
@@ -194,6 +212,43 @@ static s32 accessibilityTargetingGameIsFiringRange(void)
 	return g_Vars.stagenum == STAGE_CITRAINING && g_FrIsValidWeapon;
 }
 
+static s32 accessibilityTargetingGameDeviceTargetInScope(
+		const struct accessibilitytargetingdevicetarget *target)
+{
+	struct trainingdata *data;
+
+	if (!target || g_Vars.stagenum != target->stagenum) {
+		return false;
+	}
+
+	if (!target->trainingonly) {
+		return bgunGetWeaponNum(HAND_RIGHT) == target->weaponnum;
+	}
+
+	data = dtGetData();
+	if (!data || !data->intraining || data->completed || data->failed
+			|| data->finished) {
+		return false;
+	}
+
+	return dtGetWeaponByDeviceIndex(dtGetIndexBySlot(g_DtSlot))
+			== target->weaponnum;
+}
+
+static s32 accessibilityTargetingGameHasDeviceTargets(void)
+{
+	s32 i;
+
+	for (i = 0; i < ARRAYCOUNT(g_AccessibilityTargetingDeviceTargets); i++) {
+		if (accessibilityTargetingGameDeviceTargetInScope(
+				&g_AccessibilityTargetingDeviceTargets[i])) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static s32 accessibilityTargetingGameNativeAlignmentExpected(struct prop *aimedprop)
 {
 	s32 i;
@@ -229,6 +284,10 @@ static void accessibilityTargetingGameClearProjections(void)
 	memset(&g_AccessibilityTargetingGameAimHitPos, 0,
 			sizeof(g_AccessibilityTargetingGameAimHitPos));
 	g_AccessibilityTargetingGameAimHitValid = false;
+	g_AccessibilityTargetingGameRawAimProp = 0;
+	memset(&g_AccessibilityTargetingGameRawAimHitPos, 0,
+			sizeof(g_AccessibilityTargetingGameRawAimHitPos));
+	g_AccessibilityTargetingGameRawAimHitValid = false;
 	memset(g_AccessibilityTargetingCombatProjections, 0,
 			sizeof(g_AccessibilityTargetingCombatProjections));
 	g_AccessibilityTargetingCombatProjectionCount = 0;
@@ -318,6 +377,15 @@ void accessibilityTargetingCaptureGame(struct prop *queryaimedprop,
 	}
 
 	if (queryaimedprop && queryhitpos
+			&& accessibilityTargetingGamePropNum(queryaimedprop) >= 0
+			&& isfinite(queryhitpos->x) && isfinite(queryhitpos->y)
+			&& isfinite(queryhitpos->z)) {
+		g_AccessibilityTargetingGameRawAimProp = (uintptr_t)queryaimedprop;
+		g_AccessibilityTargetingGameRawAimHitPos = *queryhitpos;
+		g_AccessibilityTargetingGameRawAimHitValid = true;
+	}
+
+	if (queryaimedprop && queryhitpos
 			&& queryaimedprop == g_Vars.currentplayer->lookingatprop.prop
 			&& accessibilityTargetingGamePropNum(queryaimedprop) >= 0
 			&& isfinite(queryhitpos->x) && isfinite(queryhitpos->y)
@@ -325,6 +393,11 @@ void accessibilityTargetingCaptureGame(struct prop *queryaimedprop,
 		g_AccessibilityTargetingGameAimProp = (uintptr_t)queryaimedprop;
 		g_AccessibilityTargetingGameAimHitPos = *queryhitpos;
 		g_AccessibilityTargetingGameAimHitValid = true;
+	}
+
+	if (accessibilityTargetingGameHasDeviceTargets()) {
+		g_AccessibilityTargetingGameProjectionsValid = true;
+		return;
 	}
 
 	if (!accessibilityTargetingGameIsFiringRange()) {
@@ -577,9 +650,117 @@ static void accessibilityTargetingObserveCombat(
 	accessibilityTargetingObserve(observation);
 }
 
+static void accessibilityTargetingObserveDevice(
+		struct accessibilitytargetingobservation *observation,
+		s32 detailed, s32 scopechanged)
+{
+	s32 i;
+
+	observation->inscope = true;
+	observation->sighton = g_Vars.currentplayer->lastsighton;
+	observation->targetindicatorvisible = !g_Vars.currentplayer->gunsightoff;
+
+	for (i = 0; i < ARRAYCOUNT(g_AccessibilityTargetingDeviceTargets); i++) {
+		const struct accessibilitytargetingdevicetarget *targetspec
+				= &g_AccessibilityTargetingDeviceTargets[i];
+		struct defaultobj *obj;
+		struct prop *prop;
+		struct accessibilitytargetingcandidate *candidate;
+		const char *reason = "eligible";
+		s32 propnum;
+		s32 equipped;
+		s32 eligible = true;
+		f32 dx;
+		f32 dy;
+		f32 dz;
+
+		if (!accessibilityTargetingGameDeviceTargetInScope(targetspec)) {
+			continue;
+		}
+
+		obj = objFindByTagId(targetspec->tagid);
+		prop = obj ? obj->prop : NULL;
+		propnum = accessibilityTargetingGamePropNum(prop);
+		equipped = bgunGetWeaponNum(HAND_RIGHT) == targetspec->weaponnum;
+
+		if (!equipped) {
+			eligible = false;
+			reason = "training_device_not_equipped";
+		} else if (propnum < 0 || !obj || !prop) {
+			eligible = false;
+			reason = "target_unavailable";
+		} else if (prop->type != PROPTYPE_OBJ) {
+			eligible = false;
+			reason = "wrong_prop_type";
+		} else if (!prop->active || (prop->flags & PROPFLAG_ENABLED) == 0) {
+			eligible = false;
+			reason = "inactive_or_disabled";
+		} else if (obj->flags2 & OBJFLAG2_INVISIBLE) {
+			eligible = false;
+			reason = "object_invisible";
+		} else if (obj->hidden & (OBJHFLAG_DELETING | OBJHFLAG_GONE)) {
+			eligible = false;
+			reason = "object_deleting_or_gone";
+		}
+
+		if (eligible && observation->candidatecount
+				< ACCESSIBILITY_TARGETING_MAX_CANDIDATES) {
+			candidate = &observation->candidates[observation->candidatecount++];
+			memset(candidate, 0, sizeof(*candidate));
+			candidate->identity.playernum = g_Vars.currentplayernum;
+			candidate->identity.source = ACCESSIBILITY_TARGETING_SOURCE_DEVICE;
+			candidate->identity.sourceslot = targetspec->tagid;
+			candidate->identity.propnum = propnum;
+			candidate->identity.proptype = prop->type;
+			candidate->identity.objectidentity = (uintptr_t)obj;
+			candidate->prop = prop;
+			candidate->category = ACCESSIBILITY_TARGETING_CATEGORY_OBJECT;
+			candidate->relationship = ACCESSIBILITY_TARGETING_RELATIONSHIP_NEUTRAL;
+			candidate->shootability = ACCESSIBILITY_TARGETING_SHOOTABILITY_SHOOTABLE;
+			candidate->position = prop->pos;
+			dx = prop->pos.x - g_Vars.currentplayer->prop->pos.x;
+			dy = prop->pos.y - g_Vars.currentplayer->prop->pos.y;
+			dz = prop->pos.z - g_Vars.currentplayer->prop->pos.z;
+			candidate->distance = sqrtf(dx * dx + dy * dy + dz * dz);
+
+			if (g_AccessibilityTargetingGameRawAimHitValid
+					&& g_AccessibilityTargetingGameRawAimProp
+							== (uintptr_t)prop) {
+				observation->hasaimedtarget = true;
+				observation->aimedidentity = candidate->identity;
+				dx = g_AccessibilityTargetingGameRawAimHitPos.x
+						- g_Vars.currentplayer->cam_pos.x;
+				dy = g_AccessibilityTargetingGameRawAimHitPos.y
+						- g_Vars.currentplayer->cam_pos.y;
+				dz = g_AccessibilityTargetingGameRawAimHitPos.z
+						- g_Vars.currentplayer->cam_pos.z;
+				candidate->aimdistance = sqrtf(dx * dx + dy * dy + dz * dz);
+			}
+		}
+
+		if (detailed || scopechanged) {
+			accessibilityLogEvent("targeting", "device_candidate",
+					"frame=%d stage=%d player=%d accepted=%d reason=%s weapon=%d equipped=%d target_tag=%d prop=%p propnum=%d obj=%p prop_type=%d prop_flags=0x%02x obj_flags2=0x%08x obj_hidden=0x%08x raw_aim_prop=%p raw_aim_valid=%d aimed=%d",
+					g_Vars.lvframe60, g_Vars.stagenum,
+					g_Vars.currentplayernum, eligible, reason,
+					targetspec->weaponnum, equipped, targetspec->tagid,
+					(void *)prop, propnum, (void *)obj,
+					propnum >= 0 ? prop->type : -1,
+					propnum >= 0 ? prop->flags : 0,
+					obj ? obj->flags2 : 0, obj ? obj->hidden : 0,
+					(void *)g_AccessibilityTargetingGameRawAimProp,
+					g_AccessibilityTargetingGameRawAimHitValid,
+					observation->hasaimedtarget);
+		}
+	}
+
+	accessibilityTargetingObserve(observation);
+}
+
 void accessibilityTargetingObserveGame(void)
 {
 	struct accessibilitytargetingobservation observation;
+	s32 hasdevicetargets = accessibilityTargetingGameHasDeviceTargets();
 	struct frdata *frdata;
 	struct prop *aimedprop;
 	const char *scopereason = accessibilityTargetingGameScopeReason();
@@ -595,12 +776,16 @@ void accessibilityTargetingObserveGame(void)
 
 	memset(&observation, 0, sizeof(observation));
 	observation.playernum = g_Vars.currentplayernum;
-	observation.source = accessibilityTargetingGameIsFiringRange()
-			? ACCESSIBILITY_TARGETING_SOURCE_FIRING_RANGE
-			: ACCESSIBILITY_TARGETING_SOURCE_COMBAT;
-	observation.profile = accessibilityTargetingGameIsFiringRange()
-			? ACCESSIBILITY_TARGETING_PROFILE_FIRING_RANGE
-			: ACCESSIBILITY_TARGETING_PROFILE_COMBAT;
+	observation.source = hasdevicetargets
+			? ACCESSIBILITY_TARGETING_SOURCE_DEVICE
+			: accessibilityTargetingGameIsFiringRange()
+				? ACCESSIBILITY_TARGETING_SOURCE_FIRING_RANGE
+				: ACCESSIBILITY_TARGETING_SOURCE_COMBAT;
+	observation.profile = hasdevicetargets
+			? ACCESSIBILITY_TARGETING_PROFILE_DEVICE
+			: accessibilityTargetingGameIsFiringRange()
+				? ACCESSIBILITY_TARGETING_PROFILE_FIRING_RANGE
+				: ACCESSIBILITY_TARGETING_PROFILE_COMBAT;
 	observation.stagenum = g_Vars.stagenum;
 	observation.frame60 = g_Vars.lvframe60;
 
@@ -635,6 +820,16 @@ void accessibilityTargetingObserveGame(void)
 	}
 	scopechanged = g_AccessibilityTargetingGameLastScopeReason != NULL;
 	g_AccessibilityTargetingGameLastScopeReason = NULL;
+
+	if (hasdevicetargets) {
+		accessibilityTargetingObserveDevice(&observation, detailed, scopechanged);
+		if (detailed) {
+			g_AccessibilityTargetingGameNextAudit60
+					= g_Vars.lvframe60 + ACCESSIBILITY_TARGETING_AUDIT_TICKS;
+		}
+		accessibilityTargetingGameClearProjections();
+		return;
+	}
 
 	if (!accessibilityTargetingGameIsFiringRange()) {
 		accessibilityTargetingObserveCombat(&observation, detailed, scopechanged);

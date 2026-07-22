@@ -107,6 +107,17 @@ Implementation status: the active weapon/device radial now announces localized h
 - **Risks and unknowns:** Target state may leak information, fluctuate per frame, or have sight/weapon-specific rules.
 - **Explicit non-goals:** No aim automation, snap-to-target, enemy radar, or hit guarantee.
 
+### Prioritized device-target alignment slice
+
+- **Status:** Engineering implementation added for the Data Uplink and ECM Mine exercises; runtime and blind-user acceptance are pending.
+- **Goal:** Identify the exact object accepted by a special item's existing exercise logic without treating every interactable or visually similar model as valid.
+- **Systems:** Active device-training state and selected device, equipped right-hand weapon, setup-script object tags, the raw non-shooting aim-query result, and the existing centered targeting oscillator.
+- **Initial behavior:** While the matching CI exercise and device are active, pointing the Uplink at terminal tag `0x30` or the ECM Mine at hub tag `0x32` produces a fixed 660 Hz centered tone. A separate device profile suppresses positioned presence audio. The Uplink still requires normal interaction range; ECM output identifies only the correct hub surface and does not predict the thrown mine's trajectory or impact.
+- **Acceptance:** Verify correct/wrong objects, device equipped/unequipped, off-aim silence, target disable/removal, exercise start/completion/failure/abort, menus, pause, stage exit, and repeated sessions. For ECM, deliberately produce both correct and incorrect throws after acquiring the tone and confirm the cue never claims that landing is guaranteed.
+- **Evidence:** Correlate `targeting/device_candidate`, `aim_acquisition`, `aim_loss`, `alignment_start`, `alignment_update`, `alignment_stop`, and profile-transition records with the exercise script outcome.
+- **Risks:** These validity rules exist as setup-script tags rather than a general runtime capability API. The registry supports multiple stage/training-scoped targets per item, but other devices still require independently confirmed semantic contracts before adding rows. The raw query can identify a surface but cannot establish Uplink range or simulate an ECM trajectory.
+- **Explicit non-goals:** No model-name heuristic, broad interactable-as-target rule, trajectory prediction, automatic use/throw, off-aim target beacon, or claim that arbitrary mission devices are covered.
+
 ### Prioritized environmental-hazard slice
 
 - **Status:** Generic damaging-laser implementation builds; runtime and blind-user acceptance are pending.
