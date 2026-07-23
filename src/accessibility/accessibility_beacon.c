@@ -93,6 +93,7 @@ static u64 g_AccessibilityBeaconWorkingSetBaseline;
 static u64 g_AccessibilityBeaconPrivateBaseline;
 static uintptr_t g_AccessibilityBeaconObserverProp;
 static s32 g_AccessibilityBeaconObserverRemote;
+static s32 g_AccessibilityBeaconSuppressed;
 
 static void accessibilityBeaconResetTelemetry(void)
 {
@@ -1052,6 +1053,48 @@ static void accessibilityBeaconDeactivateAll(const char *reason, s32 clearresult
 	}
 }
 
+static void accessibilityBeaconSuspend(const char *reason)
+{
+	s32 category;
+
+	if (g_AccessibilityBeaconSuppressed) {
+		return;
+	}
+
+	accessibilityLogEvent("beacon", "scope",
+			"state=suspended reason=%s tick=%d object_active=%d door_active=%d pickup_active=%d non_hostile_active=%d",
+			reason ? reason : "unknown", g_Vars.lvframe60,
+			g_AccessibilityBeaconCategoryActive[
+					ACCESSIBILITY_BEACON_CATEGORY_OBJECT],
+			g_AccessibilityBeaconCategoryActive[
+					ACCESSIBILITY_BEACON_CATEGORY_DOOR],
+			g_AccessibilityBeaconCategoryActive[
+					ACCESSIBILITY_BEACON_CATEGORY_PICKUP],
+			g_AccessibilityBeaconCategoryActive[
+					ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE]);
+
+	for (category = 0; category < ACCESSIBILITY_BEACON_CATEGORY_COUNT;
+			category++) {
+		accessibilityBeaconClearSelection(category,
+				reason ? reason : "scope_suspended");
+	}
+
+	accessibilityToneStopChirp();
+	g_AccessibilityBeaconResultCount = 0;
+	memset(g_AccessibilityBeaconResults, 0,
+			sizeof(g_AccessibilityBeaconResults));
+	memset(g_AccessibilityBeaconSchedule, -1,
+			sizeof(g_AccessibilityBeaconSchedule));
+	g_AccessibilityBeaconScheduleCount = 0;
+	g_AccessibilityBeaconScheduleCursor = 0;
+	g_AccessibilityBeaconNextScheduledPulse60 = 0;
+	g_AccessibilityBeaconNextRefresh60 = 0;
+	accessibilityBeaconResetTelemetry();
+	g_AccessibilityBeaconObserverProp = 0;
+	g_AccessibilityBeaconObserverRemote = false;
+	g_AccessibilityBeaconSuppressed = true;
+}
+
 static s32 accessibilityBeaconSelect(s32 category, s32 index, const char *reason)
 {
 	struct accessibilitybeaconresult *previous = NULL;
@@ -1533,14 +1576,22 @@ void accessibilityBeaconTick(void)
 	s32 toggled = false;
 
 	if (scopereason) {
-		if (accessibilityBeaconAnyActive() || g_AccessibilityBeaconResultCount) {
+		if (strcmp(scopereason, "feature_disabled") == 0) {
 			accessibilityBeaconDeactivateAll(scopereason, true);
+			g_AccessibilityBeaconSuppressed = false;
+		} else if (accessibilityBeaconAnyActive()
+				|| g_AccessibilityBeaconResultCount
+				|| g_AccessibilityBeaconSuppressed) {
+			accessibilityBeaconSuspend(scopereason);
 		}
 		return;
 	}
 
 	if (!accessibilityObserverGet(&observer)) {
-		accessibilityBeaconDeactivateAll("observer_unavailable", true);
+		if (accessibilityBeaconAnyActive() || g_AccessibilityBeaconResultCount
+				|| g_AccessibilityBeaconSuppressed) {
+			accessibilityBeaconSuspend("observer_unavailable");
+		}
 		return;
 	}
 
@@ -1558,6 +1609,24 @@ void accessibilityBeaconTick(void)
 	}
 	g_AccessibilityBeaconObserverProp = (uintptr_t)observer.prop;
 	g_AccessibilityBeaconObserverRemote = observer.isremote;
+
+	if (g_AccessibilityBeaconSuppressed) {
+		g_AccessibilityBeaconSuppressed = false;
+		accessibilityLogEvent("beacon", "scope",
+				"state=resumed reason=gameplay_eligible tick=%d object_active=%d door_active=%d pickup_active=%d non_hostile_active=%d",
+				g_Vars.lvframe60,
+				g_AccessibilityBeaconCategoryActive[
+						ACCESSIBILITY_BEACON_CATEGORY_OBJECT],
+				g_AccessibilityBeaconCategoryActive[
+						ACCESSIBILITY_BEACON_CATEGORY_DOOR],
+				g_AccessibilityBeaconCategoryActive[
+						ACCESSIBILITY_BEACON_CATEGORY_PICKUP],
+				g_AccessibilityBeaconCategoryActive[
+						ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE]);
+		if (accessibilityBeaconAnyActive()) {
+			accessibilityBeaconRescanActive("scope_resumed");
+		}
+	}
 
 	if ((!accessibilityIsInteractableBeaconsEnabled()
 			|| g_Vars.stagenum != STAGE_CITRAINING)
@@ -1752,4 +1821,5 @@ void accessibilityBeaconReset(const char *reason)
 	accessibilityBeaconResetTelemetry();
 	g_AccessibilityBeaconObserverProp = 0;
 	g_AccessibilityBeaconObserverRemote = false;
+	g_AccessibilityBeaconSuppressed = false;
 }
