@@ -801,14 +801,81 @@ MenuDialogHandlerResult menudialog00103608(s32 operation, struct menudialogdef *
 	return 0;
 }
 
+static MenuItemHandlerResult menuhandlerMissionObjectives(s32 operation,
+		struct menuitem *item, union handlerdata *data)
+{
+	u32 used = 0;
+	s32 position = 1;
+	s32 i;
+
+	if (operation != MENUOP_GETACCESSIBILITYTEXT
+			|| data->accessibility.part != MENUACCESSIBILITYPART_SUMMARY
+			|| !data->accessibility.buffer
+			|| data->accessibility.bufferlen == 0) {
+		return 0;
+	}
+
+	data->accessibility.buffer[0] = '\0';
+
+	for (i = 0; i < ARRAYCOUNT(g_Briefing.objectivenames); i++) {
+		if (g_Briefing.objectivenames[i]
+				&& (g_Briefing.objectivedifficulties[i]
+					& (1 << lvGetDifficulty()))) {
+			const char *text = langGet(g_Briefing.objectivenames[i]);
+			const char *status = NULL;
+			s32 written;
+
+			if (!text || !text[0] || used >= data->accessibility.bufferlen - 1) {
+				continue;
+			}
+
+			if (item->param != 1) {
+				switch (objectiveCheck(i)) {
+				case OBJECTIVE_INCOMPLETE:
+					status = langGet(L_OPTIONS_001); // "Incomplete"
+					break;
+				case OBJECTIVE_COMPLETE:
+					status = langGet(L_OPTIONS_000); // "Complete"
+					break;
+				case OBJECTIVE_FAILED:
+					status = langGet(L_OPTIONS_002); // "Failed"
+					break;
+				}
+			}
+
+			written = snprintf(data->accessibility.buffer + used,
+					data->accessibility.bufferlen - used,
+					"%s%d: %s%s%s",
+					position > 1 ? ". " : "", position, text,
+					status && status[0] ? ". " : "",
+					status && status[0] ? status : "");
+
+			if (written < 0) {
+				data->accessibility.buffer[used] = '\0';
+				break;
+			}
+
+			if ((u32)written >= data->accessibility.bufferlen - used) {
+				used = data->accessibility.bufferlen - 1;
+				break;
+			}
+
+			used += written;
+			position++;
+		}
+	}
+
+	return used > 0;
+}
+
 struct menuitem g_AcceptMissionMenuItems[] = {
 	{
 		MENUITEMTYPE_OBJECTIVES,
 		1,
+		MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		0,
 		0,
-		0,
-		NULL,
+		menuhandlerMissionObjectives,
 	},
 	{
 		MENUITEMTYPE_SELECTABLE,
@@ -4033,12 +4100,12 @@ char *invMenuTextWeaponManufacturer(struct menuitem *item)
 	return langGet(L_OPTIONS_003); // "\n"
 }
 
-char *invMenuTextWeaponDescription(struct menuitem *item)
+static char *invMenuGetWeaponDescription(s32 weaponnum)
 {
-	struct weapon *weapon = weaponFindById(g_InventoryWeapon);
+	struct weapon *weapon = weaponFindById(weaponnum);
 
 	if (weapon) {
-		if (g_InventoryWeapon == WEAPON_EYESPY && g_Vars.currentplayer->eyespy) {
+		if (weaponnum == WEAPON_EYESPY && g_Vars.currentplayer->eyespy) {
 			if (g_Vars.currentplayer->eyespy->mode == EYESPYMODE_DRUGSPY) {
 				return langGet(L_GUN_237); // Drugspy description
 			}
@@ -4048,7 +4115,7 @@ char *invMenuTextWeaponDescription(struct menuitem *item)
 			}
 		}
 
-		if (g_InventoryWeapon == WEAPON_NECKLACE
+		if (weaponnum == WEAPON_NECKLACE
 				&& g_Vars.stagenum == (VERSION >= VERSION_NTSC_1_0 ? STAGE_ATTACKSHIP : STAGE_SKEDARRUINS)
 				&& lvGetDifficulty() >= DIFF_PA) {
 #if VERSION >= VERSION_NTSC_1_0
@@ -4111,11 +4178,16 @@ char *invMenuTextWeaponDescription(struct menuitem *item)
 	return langGet(L_OPTIONS_003); // "\n"
 }
 
+char *invMenuTextWeaponDescription(struct menuitem *item)
+{
+	return invMenuGetWeaponDescription(g_InventoryWeapon);
+}
+
 struct menuitem g_SoloMissionInventoryMenuItems[] = {
 	{
 		MENUITEMTYPE_LIST,
 		0,
-		0,
+		MENUITEMFLAG_ACCESSIBILITYOPTION,
 		0x0000006e,
 		(VERSION >= VERSION_JPN_FINAL ? 0x54 : 0x63),
 		menuhandlerInventoryList,
@@ -4253,28 +4325,18 @@ struct menudialogdef g_FrWeaponsAvailableMenuDialog = {
 	NULL,
 };
 
-static MenuItemHandlerResult frInventoryGetAccessibilityText(union handlerdata *data)
+static MenuItemHandlerResult inventoryFormatAccessibilityText(
+		union handlerdata *data, s32 weaponnum, const char *name,
+		const char *description)
 {
-	struct weapon *weapon;
+	struct weapon *weapon = weaponFindById(weaponnum);
 	struct weaponfunc *primaryfunc;
 	struct weaponfunc *secondaryfunc;
 	const char *manufacturer;
 	const char *primary;
 	const char *secondary;
-	const char *description;
-	s32 weaponnum;
 
-	if (data->accessibility.part != MENUACCESSIBILITYPART_OPTION
-			|| !data->accessibility.buffer || data->accessibility.bufferlen == 0
-			|| data->accessibility.index < 0
-			|| data->accessibility.index >= frGetNumWeaponsAvailable()) {
-		return 0;
-	}
-
-	weaponnum = frGetWeaponBySlot(data->accessibility.index);
-	weapon = weaponFindById(weaponnum);
-
-	if (!weapon) {
+	if (!weapon || !name || !name[0]) {
 		return 0;
 	}
 
@@ -4284,11 +4346,10 @@ static MenuItemHandlerResult frInventoryGetAccessibilityText(union handlerdata *
 			? langGet(weapon->manufacturer) : NULL;
 	primary = primaryfunc ? langGet(primaryfunc->name) : NULL;
 	secondary = secondaryfunc ? langGet(secondaryfunc->name) : NULL;
-	description = langGet(weapon->description);
 
 	snprintf(data->accessibility.buffer, data->accessibility.bufferlen,
 			"%s%s%s%s%s%s%s%s%s",
-			bgunGetName(weaponnum),
+			name,
 			manufacturer ? ". Manufacturer: " : "",
 			manufacturer ? manufacturer : "",
 			primary ? ". Primary function: " : "",
@@ -4299,6 +4360,22 @@ static MenuItemHandlerResult frInventoryGetAccessibilityText(union handlerdata *
 			description && description[0] ? description : "");
 
 	return 1;
+}
+
+static MenuItemHandlerResult frInventoryGetAccessibilityText(union handlerdata *data)
+{
+	s32 weaponnum;
+
+	if (data->accessibility.part != MENUACCESSIBILITYPART_OPTION
+			|| !data->accessibility.buffer || data->accessibility.bufferlen == 0
+			|| data->accessibility.index < 0
+			|| data->accessibility.index >= frGetNumWeaponsAvailable()) {
+		return 0;
+	}
+
+	weaponnum = frGetWeaponBySlot(data->accessibility.index);
+	return inventoryFormatAccessibilityText(data, weaponnum,
+			bgunGetName(weaponnum), invMenuGetWeaponDescription(weaponnum));
 }
 
 MenuItemHandlerResult menuhandlerFrInventoryList(s32 operation, struct menuitem *item, union handlerdata *data)
@@ -4347,6 +4424,36 @@ MenuItemHandlerResult menuhandlerFrInventoryList(s32 operation, struct menuitem 
 MenuItemHandlerResult menuhandlerInventoryList(s32 operation, struct menuitem *item, union handlerdata *data)
 {
 	switch (operation) {
+	case MENUOP_GETACCESSIBILITYTEXT:
+		if (data->accessibility.part == MENUACCESSIBILITYPART_OPTION
+				&& data->accessibility.buffer
+				&& data->accessibility.bufferlen > 0
+				&& data->accessibility.index >= 0
+				&& data->accessibility.index < invGetCount()) {
+			s32 weaponnum = invGetWeaponNumByIndex(data->accessibility.index);
+			s32 state = weaponnum == WEAPON_NONE
+					? DEVICESTATE_UNEQUIPPED
+					: currentPlayerGetDeviceState(weaponnum);
+			MenuItemHandlerResult result;
+
+			result = inventoryFormatAccessibilityText(data, weaponnum,
+					invGetNameByIndex(data->accessibility.index),
+					invMenuGetWeaponDescription(weaponnum));
+
+			if (result && state != DEVICESTATE_UNEQUIPPED) {
+				size_t used = strlen(data->accessibility.buffer);
+
+				if (used < data->accessibility.bufferlen - 1) {
+					snprintf(data->accessibility.buffer + used,
+							data->accessibility.bufferlen - used,
+							", %s", state == DEVICESTATE_ACTIVE
+								? "checked" : "not checked");
+				}
+			}
+
+			return result;
+		}
+		break;
 	case MENUOP_GETOPTIONCOUNT:
 		data->list.value = invGetCount();
 		break;
@@ -4447,7 +4554,8 @@ struct menuitem g_MissionAbortMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		MENUITEMFLAG_00000002 | MENUITEMFLAG_LESSLEFTPADDING,
+		MENUITEMFLAG_00000002 | MENUITEMFLAG_LESSLEFTPADDING
+			| MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		L_OPTIONS_175, // "Do you want to abort the mission?"
 		0,
 		NULL,
@@ -4484,7 +4592,8 @@ struct menuitem g_2PMissionAbortVMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		MENUITEMFLAG_00000002 | MENUITEMFLAG_LESSLEFTPADDING,
+		MENUITEMFLAG_00000002 | MENUITEMFLAG_LESSLEFTPADDING
+			| MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		L_MPWEAPONS_155, // "Do you want to abort the mission?"
 		0,
 		NULL,
@@ -4576,10 +4685,10 @@ struct menuitem g_2PMissionPauseVMenuItems[] = {
 	{
 		MENUITEMTYPE_OBJECTIVES,
 		2,
+		MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		0,
 		0,
-		0,
-		NULL,
+		menuhandlerMissionObjectives,
 	},
 	{
 		MENUITEMTYPE_SELECTABLE,
@@ -4596,10 +4705,10 @@ struct menuitem g_MissionPauseMenuItems[] = {
 	{
 		MENUITEMTYPE_OBJECTIVES,
 		0,
+		MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		0,
 		0,
-		0,
-		NULL,
+		menuhandlerMissionObjectives,
 	},
 	{
 		MENUITEMTYPE_SELECTABLE,

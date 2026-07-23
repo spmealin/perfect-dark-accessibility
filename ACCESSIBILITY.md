@@ -10,6 +10,10 @@ The firing-range weapon list announces the same completed bronze, silver, and go
 
 The holo-training computer announces the selected exercise's localized static description when its details dialog opens and on F5 repeat, before announcing the focused `OK` or `Resume` control. The speech comes from the same `htGetDescription()` value rendered in the dialog's non-focusable text panel.
 
+The pre-mission Overview announces every objective visibly applicable to the selected difficulty, in displayed order and with the same numbering, before the focused `Accept` or `Decline` button. The in-mission pause Status screen announces the same visible objective list with each objective's localized `Complete`, `Incomplete`, or `Failed` state before the focused control. Moving among controls does not repeat the objectives; F5 reconstructs the stage title, complete objective list, and current control.
+
+The pause Inventory list announces the focused item's visible name, manufacturer when present, primary and secondary functions, complete marquee description, and the checked state shown for active or inactive devices. Mission- and device-dependent description variants use the same resolver as the visual panel. Pause Briefing narration retains the complete localized source, including all background, Carrington, and objective sections, rather than truncating it to a short control-value field. The pause Abort confirmation also announces its visible question before the focused Cancel or Abort button.
+
 ### Active weapon menu narration
 
 With `Accessibility.MenuNarration=1`, holding the active-menu control and selecting a weapon or device announces the exact localized short label rendered in the highlighted radial slot. This includes `Unarmed`. Speech occurs only when a non-center slot becomes selected; returning to the center, holding a selection, or renderer animation does not repeat it. Returning to center and deliberately selecting the same item again announces it again. Closing the radial menu resets selection state without cancelling an already-started short item announcement.

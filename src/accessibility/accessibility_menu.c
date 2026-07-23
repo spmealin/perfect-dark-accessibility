@@ -17,8 +17,9 @@
 #include "accessibility/accessibility_log.h"
 #include "accessibility/accessibility_menu.h"
 
-#define ACCESSIBILITY_MENU_TEXT_MAX 2048
 #define ACCESSIBILITY_MENU_FIELD_MAX 768
+#define ACCESSIBILITY_MENU_LONG_TEXT_MAX 8192
+#define ACCESSIBILITY_MENU_TEXT_MAX 12288
 
 struct accessibilitymenusnapshot {
 	s32 valid;
@@ -44,8 +45,8 @@ struct accessibilitymenusnapshot {
 	char title[ACCESSIBILITY_MENU_FIELD_MAX];
 	char label[ACCESSIBILITY_MENU_FIELD_MAX];
 	char role[64];
-	char value[ACCESSIBILITY_MENU_FIELD_MAX];
-	char summary[ACCESSIBILITY_MENU_FIELD_MAX];
+	char value[ACCESSIBILITY_MENU_LONG_TEXT_MAX];
+	char summary[ACCESSIBILITY_MENU_LONG_TEXT_MAX];
 	char keyboardtext[MPSETUP_MAXNAME + 1];
 	char utterance[ACCESSIBILITY_MENU_TEXT_MAX];
 };
@@ -182,7 +183,7 @@ static s32 accessibilityMenuGetProviderText(struct menuitem *item, s32 part, s32
 		char *dst, size_t dstlen)
 {
 	union handlerdata data;
-	char buffer[ACCESSIBILITY_MENU_FIELD_MAX];
+	char buffer[ACCESSIBILITY_MENU_LONG_TEXT_MAX];
 	uintptr_t result;
 
 	if (!item || !item->handler || !dstlen) {
