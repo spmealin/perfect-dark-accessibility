@@ -95,6 +95,7 @@ static const struct accessibilitytargetingdevicetarget
 		g_AccessibilityTargetingDeviceTargets[] = {
 	{ STAGE_CITRAINING, WEAPON_DATAUPLINK, 0x30, true },
 	{ STAGE_CITRAINING, WEAPON_ECMMINE, 0x32, true },
+	{ STAGE_CITRAINING, WEAPON_DOORDECODER, 0x35, true },
 };
 
 static struct accessibilitytargetinggameaudit
