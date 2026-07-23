@@ -242,6 +242,19 @@ Accessibility.VirtualCaneMode=1
 Accessibility.RTrackerAudio=1
 ```
 
+Navigation and hostile-cue tuning is constructor-registered as bounded floats:
+
+```ini
+Accessibility.VirtualCaneReach=900
+Accessibility.VirtualCaneFullVolumeDistance=112.5
+Accessibility.VirtualCaneFadeDistance=750
+Accessibility.VirtualCaneMaximumAudibleDistance=975
+Accessibility.EnemyFullVolumeDistance=600
+Accessibility.EnemyFadeDistance=3500
+Accessibility.EnemyMaximumDistance=4000
+Accessibility.EnemyVolume=0.14
+```
+
 Later features may add:
 
 ```ini
@@ -250,7 +263,7 @@ Accessibility.StatusNarration=1
 Accessibility.Verbosity=1
 ```
 
-The implemented keys are constructor-registered bounded integers in the existing config registry. Accessibility settings belong in `pd.ini`, not only in a selected Perfect Dark profile, because startup menus need them. Later key names/ranges remain provisional, and a later in-game settings page should use the same values.
+The implemented keys are constructor-registered bounded integers or floats in the existing config registry. Cross-field runtime validation enforces ordered attenuation thresholds, keeps the cane audible through its configured reach, rejects non-finite values, and caps enemy gain at 0.25. Effective values are sampled at startup and recorded in the session log; editing `pd.ini` requires a restart. Accessibility settings belong in `pd.ini`, not only in a selected Perfect Dark profile, because startup menus need them. Later key names/ranges remain provisional, and a later in-game settings page should use the same values.
 
 ### Playtest logging
 
@@ -308,7 +321,7 @@ Deterministic phase offsets prevent simultaneous starts, and live prop-sound att
 
 The firing-range aim-quality source reuses the exact hit coordinate calculated by the existing non-shooting `FINDPROPCONTEXT_QUERY` path that selects `lookingatprop`. A narrow optional-output wrapper exposes that coordinate without changing ordinary callers, firing, randomness, collision order, or weapon spread. The adapter retains the raw same-frame prop/coordinate for semantic device comparison and separately retains the coordinate tied to the final filtered aimed prop for firing-range quality. It computes the same Euclidean target-center distance used by `frCalculateHit`, then normalizes continuously over a 75-unit outer scoring radius. Projected rectangles remain visibility diagnostics and never determine fine aim. The PC backend generates the sine oscillator after the normal game mix and before SDL queueing; it preserves phase, interpolates frequency, applies a 10 ms gain ramp, mixes equally into both channels, and uses a fixed staging buffer with no runtime allocation or game sound handle.
 
-The combat profile has its own attenuation policy rather than inheriting the short firing-range/device envelope. Visible eligible hostiles remain full-distance audible through 600 world units, fade through 3,500, and become silent at 4,000. The backend applies a 0.14 combat oscillator gain after semantic distance attenuation. These values do not broaden eligibility: native hostile relationship, living/combat-capable state, viewport presence, and shooting-blocker line of sight remain mandatory.
+The combat profile has its own configuration-backed attenuation policy rather than inheriting the short firing-range/device envelope. Defaults keep visible eligible hostiles full-distance audible through 600 world units, fade through 3,500, and become silent at 4,000. The backend applies a default 0.14 combat oscillator gain after semantic distance attenuation. These values do not broaden eligibility: native hostile relationship, living/combat-capable state, viewport presence, and shooting-blocker line of sight remain mandatory.
 
 A scanner is a separate user-enabled query over nearby eligible props; it must not reuse render visibility as its entire semantic model or reveal hidden mission information. Milestone 5 first proved this boundary in Carrington Institute training; F5/F6/F8 now use the same bounded adapter in every mission and one-local-player Combat Simulator match. Each enabled category refreshes a bounded snapshot twice per second and retains up to three nearby targets using a 150-unit membership margin; interactables, doors, pickups, and non-hostile people are independently controlled by F5, F6, F8, and F7. A dedicated centered confirmation lane reports the resulting category state after those gameplay commands: 880-to-1320 Hz means enabled and 880-to-440 Hz means disabled, using two 35 ms beeps separated by 25 ms. It does not reuse the positioned beacon lane or alter the F4 virtual-cane command. Menu, pause, cutscene, death, unsupported-player, and temporary observer loss are output-suppression states rather than implicit toggle commands: the adapter stops the chirp, clears target/schedule snapshots, preserves the four category selections, and performs a fresh scan without an earcon when eligible gameplay resumes. Stage teardown, feature disablement, and explicit F5–F8 commands remain state-changing boundaries. Interactable-object eligibility shares `objIsPotentiallyInteractable` with `objTestForInteract`, covering CI-tagged objects, alarms, thrown laptops, Hacker Central terminals, explicit interactables, lift controls, and movement-state-eligible vehicles/grabbable props. Scanner policy additionally requires healthy, active, non-invisible state without `OBJFLAG_CANNOT_ACTIVATE`; `OBJFLAG_DEACTIVATED` is not an interaction exclusion. The character category is stage-agnostic in one-local-player sessions and admits living, perceptible friendly or neutral `PROPTYPE_CHR` props using engine team comparison and life/visibility state; a camera-to-body-midpoint shooting-blocker ray prevents through-wall disclosure. Combat targeting uses the same one-local-player boundary and native friendliness classification, so hostile simulants enter the existing combat slots while friendly/team simulants remain excluded. Doors and non-hostile people consume the shared active-observer pose, so their origin, rooms, range, bearing, and visibility move to the CamSpy while its camera is active and return to Joanna with the visible perspective. Remote people additionally require `PROPFLAG_ONTHISSCREENTHISTICK`, preventing characters that are room-connected but absent from the CamSpy viewport from sounding; the ordinary player-centered scanner retains its wider spatial-awareness policy. The CamSpy prop is never treated as a person candidate. Body-actionable interactable and pickup categories pause during remote viewing. An observer change immediately stops the old chirp and rebuilds the fixed schedule without changing category toggle state. A global round-robin scheduler interleaves all enabled categories and retriggers one procedural chirp voice, guaranteeing that two beacons never start together. Doors use one 440 Hz chirp, non-hostile people use two rapid 440 Hz chirps, interactable objects use one 880 Hz chirp, and pickups use three quick 880 Hz chirps. The fixed scan holds 64 results and at most three retained identities per category. Split-screen and cooperative output composition remain unsupported.
 

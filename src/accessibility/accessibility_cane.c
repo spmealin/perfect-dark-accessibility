@@ -25,10 +25,6 @@
 #include "accessibility/accessibility_tone.h"
 
 #define ACCESSIBILITY_CANE_PROBE_COUNT 7
-#define ACCESSIBILITY_CANE_MAX_DISTANCE 900.0f
-#define ACCESSIBILITY_CANE_FULL_DISTANCE 112.5f
-#define ACCESSIBILITY_CANE_FADE_DISTANCE 750.0f
-#define ACCESSIBILITY_CANE_SILENT_DISTANCE 975.0f
 #define ACCESSIBILITY_CANE_FREQUENCY_HZ 330.0f
 #define ACCESSIBILITY_CANE_SLOW_CYCLE_TICKS TICKS(120)
 #define ACCESSIBILITY_CANE_FAST_CYCLE_TICKS TICKS(60)
@@ -365,6 +361,10 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 	struct coord start;
 	struct coord end;
 	f32 horizontal;
+	f32 maxdistance;
+	f32 fulldistance;
+	f32 fadedistance;
+	f32 silentdistance;
 	f32 angle;
 	f32 cosine;
 	f32 sine;
@@ -411,9 +411,11 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 	sample->direction.y = 0.0f;
 	sample->direction.z = -sample->forward.x * sine
 			+ sample->forward.z * cosine;
-	end.x = start.x + sample->direction.x * ACCESSIBILITY_CANE_MAX_DISTANCE;
+	accessibilityGetVirtualCaneTuning(&maxdistance, &fulldistance,
+			&fadedistance, &silentdistance);
+	end.x = start.x + sample->direction.x * maxdistance;
 	end.y = start.y;
-	end.z = start.z + sample->direction.z * ACCESSIBILITY_CANE_MAX_DISTANCE;
+	end.z = start.z + sample->direction.z * maxdistance;
 	sample->requestedend = end;
 
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
@@ -502,13 +504,10 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 				* (sample->audiosource.z - start.z));
 	sample->distance = horizontal;
 	sample->volume = psCalculateVolumeFromDistance(horizontal,
-			ACCESSIBILITY_CANE_FULL_DISTANCE,
-			ACCESSIBILITY_CANE_FADE_DISTANCE,
-			ACCESSIBILITY_CANE_SILENT_DISTANCE, AL_VOL_FULL);
+			fulldistance, fadedistance, silentdistance, AL_VOL_FULL);
 	sample->pan = psCalculatePan(&sample->audiosource,
-			ACCESSIBILITY_CANE_FULL_DISTANCE,
-			ACCESSIBILITY_CANE_FADE_DISTANCE,
-			ACCESSIBILITY_CANE_SILENT_DISTANCE, horizontal, false, NULL);
+			fulldistance, fadedistance, silentdistance,
+			horizontal, false, NULL);
 	sample->normalizedvolume = (f32)sample->volume / (f32)AL_VOL_FULL;
 	sample->normalizedpan = ((f32)sample->pan - (f32)AL_PAN_CENTER)
 			/ (f32)AL_PAN_CENTER;

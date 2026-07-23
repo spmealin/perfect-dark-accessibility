@@ -19,5 +19,9 @@ s32 accessibilityIsWeaponFunctionCuesEnabled(void);
 s32 accessibilityIsXrayScannerAudioEnabled(void);
 s32 accessibilityGetVirtualCaneMode(void);
 void accessibilitySetVirtualCaneMode(s32 mode);
+void accessibilityGetVirtualCaneTuning(f32 *reach, f32 *fulldistance,
+		f32 *fadedistance, f32 *silentdistance);
+void accessibilityGetEnemyTuning(f32 *fulldistance, f32 *fadedistance,
+		f32 *silentdistance, f32 *volume);
 
 #endif

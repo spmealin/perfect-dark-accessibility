@@ -1,6 +1,7 @@
 #include <math.h>
 #include <string.h>
 #include <SDL.h>
+#include "accessibility/accessibility.h"
 #include "accessibility/accessibility_tone.h"
 
 #define ACCESSIBILITY_TONE_SAMPLE_RATE 22020.0f
@@ -29,8 +30,6 @@
 #define ACCESSIBILITY_WEAPON_FUNCTION_ATTACK_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.002f))
 #define ACCESSIBILITY_WEAPON_FUNCTION_RELEASE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.005f))
 #define ACCESSIBILITY_HAZARD_VOLUME 0.14f
-#define ACCESSIBILITY_COMBAT_CHIRP_VOLUME 0.14f
-#define ACCESSIBILITY_COMBAT_GAIN_STEP (ACCESSIBILITY_COMBAT_CHIRP_VOLUME / (ACCESSIBILITY_TONE_SAMPLE_RATE * 0.01f))
 #define ACCESSIBILITY_COMBAT_CHIRP_ATTACK_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.004f))
 #define ACCESSIBILITY_COMBAT_CHIRP_RELEASE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.012f))
 #define ACCESSIBILITY_TRACKER_VOLUME 0.065f
@@ -522,6 +521,8 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			: 0.0f;
 	f32 hazardtargetpan = (f32)SDL_AtomicGet(
 			&g_AccessibilityHazardPanMillionths) / 1000000.0f;
+	f32 combatmastervolume;
+	f32 combatgainstep;
 	u32 frames;
 	f32 frequencystep;
 	f32 hazardfrequencystep;
@@ -533,6 +534,11 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			|| len > sizeof(g_AccessibilityToneMixBuffer)) {
 		return input;
 	}
+
+	accessibilityGetEnemyTuning(NULL, NULL, NULL, &combatmastervolume);
+	combatgainstep = (combatmastervolume > 0.01f
+			? combatmastervolume : 0.01f)
+			/ (ACCESSIBILITY_TONE_SAMPLE_RATE * 0.01f);
 
 	for (slot = 0; slot < ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT; slot++) {
 		s32 sequence = SDL_AtomicGet(&g_AccessibilityCombatSequence[slot]);
@@ -938,19 +944,19 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 		for (slot = 0; slot < ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT; slot++) {
 			f32 targetcombatgain = combatenabled[slot] && combatcontinuous[slot]
-					? combatvolume[slot] * ACCESSIBILITY_COMBAT_CHIRP_VOLUME
+					? combatvolume[slot] * combatmastervolume
 					: 0.0f;
 
 			g_AccessibilityCombatPan[slot] += (combatpan[slot]
 					- g_AccessibilityCombatPan[slot]) / (f32)(frames - i);
 
 			if (g_AccessibilityCombatGain[slot] < targetcombatgain) {
-				g_AccessibilityCombatGain[slot] += ACCESSIBILITY_COMBAT_GAIN_STEP;
+				g_AccessibilityCombatGain[slot] += combatgainstep;
 				if (g_AccessibilityCombatGain[slot] > targetcombatgain) {
 					g_AccessibilityCombatGain[slot] = targetcombatgain;
 				}
 			} else if (g_AccessibilityCombatGain[slot] > targetcombatgain) {
-				g_AccessibilityCombatGain[slot] -= ACCESSIBILITY_COMBAT_GAIN_STEP;
+				g_AccessibilityCombatGain[slot] -= combatgainstep;
 				if (g_AccessibilityCombatGain[slot] < targetcombatgain) {
 					g_AccessibilityCombatGain[slot] = targetcombatgain;
 				}
@@ -996,7 +1002,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 					}
 
 					combat = sinf(g_AccessibilityCombatPhase[slot]) * envelope
-							* combatvolume[slot] * ACCESSIBILITY_COMBAT_CHIRP_VOLUME
+							* combatvolume[slot] * combatmastervolume
 							* 32767.0f;
 					combatleft += (s32)(combat * leftpan);
 					combatright += (s32)(combat * rightpan);

@@ -42,7 +42,7 @@ Each sweep samples these camera-relative horizontal angles in this exact order:
 
 The observed sound must move left to right. Do not assume the sign convention from the mathematical rotation alone: verify in the game that `-45` pans left and `+45` pans right, and reverse the rotation signs if the engine coordinate system requires it.
 
-Each probe originally had a maximum horizontal distance of 600 world units. Blind-user acceptance testing increased the implemented reach by 50 percent to 900 world units. A miss produces silence but still consumes its position in the sweep. There is no distance-to-pitch mapping in this prototype.
+Each probe originally had a maximum horizontal distance of 600 world units. Blind-user acceptance testing increased the default reach by 50 percent to 900 world units. Reach and attenuation are now bounded `pd.ini` settings, so later testing can tune them without recompilation. A miss produces silence but still consumes its position in the sweep. There is no distance-to-pitch mapping in this prototype.
 
 ### Timing
 
@@ -70,7 +70,7 @@ Each collision emits a brief procedural oscillator chirp at the spatial impact p
 - Provisional envelope: 3 ms attack and 8 ms release.
 - Lane/master volume: 0.115 before spatial attenuation (a 15% increase from the prototype's 0.10 gain after blind-user acceptance testing).
 - Pan: derived from the actual collision point using the existing spatial-audio calculation.
-- Volume: derived from collision distance. The original provisional thresholds were full volume at 75 units or closer, fading through 500 units, and silent at 650 units. The 900-unit acceptance-testing revision scales them to 112.5, 750, and 975 units respectively.
+- Volume: derived from collision distance. The original provisional thresholds were full volume at 75 units or closer, fading through 500 units, and silent at 650 units. The 900-unit acceptance-testing defaults scale them to 112.5, 750, and 975 units respectively; all four distances are configurable and cross-field validated at runtime.
 
 The 330 Hz frequency is intentionally separated from existing accessibility cues near 220 Hz (laser hazard), 440 Hz (doors and combat), 660 Hz and above (fine aiming), 880 Hz (interactables), and 1000 Hz (weapon-function confirmation). All sound constants are tuning values, not semantic contracts. Put them together in the cane implementation rather than scattering literals across hooks.
 
