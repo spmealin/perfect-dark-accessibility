@@ -585,6 +585,13 @@ static s32 accessibilityTargetingRecordEligible(
 			&& accessibilityTargetingCandidateValid(&record->candidate);
 }
 
+static s32 accessibilityTargetingRecordPresenceEligible(
+		const struct accessibilitytargetingrecord *record)
+{
+	return accessibilityTargetingRecordEligible(record)
+			&& !record->candidate.aimonly;
+}
+
 static s32 accessibilityTargetingFindCombatSlot(
 		const struct accessibilitytargetingidentity *identity)
 {
@@ -654,7 +661,7 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 		}
 
 		recordindex = accessibilityTargetingFindRecord(&voice->identity);
-		if (recordindex < 0 || !accessibilityTargetingRecordEligible(
+		if (recordindex < 0 || !accessibilityTargetingRecordPresenceEligible(
 				&g_AccessibilityTargetingRecords[recordindex])) {
 			accessibilityToneSetCombatSlot(slot, false,
 					ACCESSIBILITY_TARGETING_COMBAT_FREQUENCY_HZ,
@@ -686,7 +693,7 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 		f32 proximity;
 		f32 cuedistance;
 
-		if (!accessibilityTargetingRecordEligible(record)) {
+		if (!accessibilityTargetingRecordPresenceEligible(record)) {
 			continue;
 		}
 

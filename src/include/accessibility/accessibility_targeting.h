@@ -36,6 +36,7 @@ enum accessibilitytargetingrelationship {
 	ACCESSIBILITY_TARGETING_RELATIONSHIP_HOSTILE = 1,
 	ACCESSIBILITY_TARGETING_RELATIONSHIP_FRIENDLY = 2,
 	ACCESSIBILITY_TARGETING_RELATIONSHIP_NEUTRAL = 3,
+	ACCESSIBILITY_TARGETING_RELATIONSHIP_PROTECTED = 4,
 };
 
 enum accessibilitytargetingshootability {
@@ -71,6 +72,7 @@ struct accessibilitytargetingcandidate {
 	s32 hasaimquality;
 	f32 aimquality;
 	f32 aimdistance;
+	s32 aimonly;
 	u32 knowledgeflags;
 	const char *localizedname;
 };

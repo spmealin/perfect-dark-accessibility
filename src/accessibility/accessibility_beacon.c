@@ -271,6 +271,11 @@ static s32 accessibilityBeaconNonHostileEligible(struct prop *prop,
 		return false;
 	}
 
+	if (chr->hidden2 & CHRH2FLAG_BLUESIGHT) {
+		*reason = "protected_character";
+		return true;
+	}
+
 	if (chrCompareTeams(g_Vars.currentplayer->prop->chr, chr, COMPARE_ENEMIES)) {
 		*reason = "character_hostile";
 		return false;

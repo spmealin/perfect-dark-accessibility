@@ -570,6 +570,11 @@ void accessibilityTargetingCaptureGame(struct prop *queryaimedprop,
 
 static s32 accessibilityTargetingGameRelationship(struct prop *prop)
 {
+	if (prop && prop->chr
+			&& (prop->chr->hidden2 & CHRH2FLAG_BLUESIGHT)) {
+		return ACCESSIBILITY_TARGETING_RELATIONSHIP_PROTECTED;
+	}
+
 	if (sightIsPropFriendly(prop)) {
 		return ACCESSIBILITY_TARGETING_RELATIONSHIP_FRIENDLY;
 	}
@@ -674,17 +679,25 @@ static void accessibilityTargetingObserveCombat(
 			if (relationship == ACCESSIBILITY_TARGETING_RELATIONSHIP_FRIENDLY) {
 				eligible = false;
 				reason = "friendly";
-			} else if (relationship != ACCESSIBILITY_TARGETING_RELATIONSHIP_HOSTILE) {
+			} else if (relationship != ACCESSIBILITY_TARGETING_RELATIONSHIP_HOSTILE
+					&& relationship
+						!= ACCESSIBILITY_TARGETING_RELATIONSHIP_PROTECTED) {
 				eligible = false;
 				reason = "not_hostile";
+			} else if (relationship
+					== ACCESSIBILITY_TARGETING_RELATIONSHIP_PROTECTED) {
+				reason = "protected_nonlethal_target";
 			}
 		}
 
 		if (detailed) {
 			accessibilityLogEvent("targeting", "combat_candidate",
-					"frame=%d slot=%d accepted=%d reason=%s aimed=%d relationship=%d prop=%p propnum=%d chr=%p prop_type=%d prop_flags=0x%02x chr_flags=0x%08x chr_hidden=0x%08x action=%d capture_valid=%d projected=%d finite=%d line_of_sight=%d screen=%.3f,%.3f,%.3f,%.3f",
+					"frame=%d slot=%d accepted=%d reason=%s aimed=%d relationship=%d aimonly=%d prop=%p propnum=%d chr=%p prop_type=%d prop_flags=0x%02x chr_flags=0x%08x chr_hidden=0x%08x action=%d capture_valid=%d projected=%d finite=%d line_of_sight=%d screen=%.3f,%.3f,%.3f,%.3f",
 					g_Vars.lvframe60, i, eligible, reason, aimed,
-					relationship, (void *)prop, projection->propnum,
+					relationship,
+					relationship
+						== ACCESSIBILITY_TARGETING_RELATIONSHIP_PROTECTED,
+					(void *)prop, projection->propnum,
 					(void *)chr, prop ? prop->type : -1,
 					prop ? prop->flags : 0, chr ? chr->chrflags : 0,
 					chr ? chr->hidden : 0, chr ? chr->actiontype : -1,
@@ -716,6 +729,8 @@ static void accessibilityTargetingObserveCombat(
 				? ACCESSIBILITY_TARGETING_CATEGORY_PLAYER
 				: ACCESSIBILITY_TARGETING_CATEGORY_CHARACTER;
 		candidate->relationship = relationship;
+		candidate->aimonly = relationship
+				== ACCESSIBILITY_TARGETING_RELATIONSHIP_PROTECTED;
 		candidate->shootability = ACCESSIBILITY_TARGETING_SHOOTABILITY_SHOOTABLE;
 		candidate->position = prop->pos;
 		candidate->position.y = chr->manground + chr->height * 0.5f;
