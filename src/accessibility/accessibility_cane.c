@@ -190,10 +190,10 @@ static const char *accessibilityCaneGameplayScopeReason(void)
 		return "unsupported_movement_mode";
 	}
 
-	if (g_Vars.lvupdate60 <= 0) {
-		return "simulation_stopped";
-	}
-
+	/*
+	 * lvupdate60 can be zero on an ordinary PC render/interpolation frame.
+	 * The explicit gates above distinguish actual pauses and invalid scopes.
+	 */
 	return NULL;
 }
 
