@@ -79,6 +79,7 @@ The pattern has a dedicated fixed oscillator lane and does not consume a game so
 - F5 independently toggles automatic nearby interactable-object beacons.
 - F6 independently toggles automatic nearby door beacons.
 - F8 independently toggles automatic nearby collectible-item beacons.
+- Each F5/F6/F7/F8 gameplay toggle plays a centered two-beep confirmation. Enabling rises from 880 Hz to 1320 Hz; disabling falls from 880 Hz to 440 Hz. Each beep is 35 ms with a 25 ms gap. The virtual cane is intentionally unchanged.
 - Each enabled category tracks up to its three nearest eligible props. The combined target set plays through one global round-robin timeline, interleaving interactables, doors, and pickups so two cues never begin simultaneously.
 - The pulse gap is 750 ms divided by the scheduled target count, with a current minimum of 300 ms. Each category refreshes twice per second, and a 150-unit membership margin prevents borderline targets from repeatedly entering and leaving the rotation.
 - Door and interactable-object candidates require a clear background line of sight from the player on every scan and again before every chirp. Collectible items use the pickup path's door-and-background sight blockers. The selected target does not block itself, while intervening world geometry suppresses targets beyond it.

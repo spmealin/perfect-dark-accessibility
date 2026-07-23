@@ -14,6 +14,14 @@
 #define ACCESSIBILITY_CHIRP_PATTERN_GAP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.025f))
 #define ACCESSIBILITY_CHIRP_PATTERN_ATTACK_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.003f))
 #define ACCESSIBILITY_CHIRP_PATTERN_RELEASE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.007f))
+#define ACCESSIBILITY_TOGGLE_BASE_FREQUENCY_HZ 880.0f
+#define ACCESSIBILITY_TOGGLE_ON_FREQUENCY_HZ 1320.0f
+#define ACCESSIBILITY_TOGGLE_OFF_FREQUENCY_HZ 440.0f
+#define ACCESSIBILITY_TOGGLE_VOLUME 0.10f
+#define ACCESSIBILITY_TOGGLE_BEEP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.035f))
+#define ACCESSIBILITY_TOGGLE_GAP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.025f))
+#define ACCESSIBILITY_TOGGLE_ATTACK_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.002f))
+#define ACCESSIBILITY_TOGGLE_RELEASE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.005f))
 #define ACCESSIBILITY_WEAPON_FUNCTION_FREQUENCY_HZ 1000.0f
 #define ACCESSIBILITY_WEAPON_FUNCTION_VOLUME 0.10f
 #define ACCESSIBILITY_WEAPON_FUNCTION_BEEP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.035f))
@@ -47,6 +55,8 @@ static SDL_atomic_t g_AccessibilityChirpFrequencyMilliHz;
 static SDL_atomic_t g_AccessibilityChirpVolumeMillionths;
 static SDL_atomic_t g_AccessibilityChirpPanMillionths;
 static SDL_atomic_t g_AccessibilityChirpPulses;
+static SDL_atomic_t g_AccessibilityToggleSequence;
+static SDL_atomic_t g_AccessibilityToggleEnabled;
 static SDL_atomic_t g_AccessibilityWeaponFunctionSequence;
 static SDL_atomic_t g_AccessibilityWeaponFunctionPulses;
 static SDL_atomic_t g_AccessibilityHazardEnabled;
@@ -97,6 +107,11 @@ static f32 g_AccessibilityChirpPhase;
 static f32 g_AccessibilityChirpFrequencyHz;
 static f32 g_AccessibilityChirpVolume;
 static f32 g_AccessibilityChirpPan;
+static s32 g_AccessibilityToggleObservedSequence;
+static s32 g_AccessibilityToggleSamplesRemaining;
+static s32 g_AccessibilityToggleSample;
+static s32 g_AccessibilityToggleOn;
+static f32 g_AccessibilityTogglePhase;
 static s32 g_AccessibilityWeaponFunctionObservedSequence;
 static s32 g_AccessibilityWeaponFunctionSamplesRemaining;
 static s32 g_AccessibilityWeaponFunctionSample;
@@ -196,6 +211,12 @@ void accessibilityToneStopChirp(void)
 {
 	SDL_AtomicSet(&g_AccessibilityChirpEnabled, 0);
 	SDL_AtomicAdd(&g_AccessibilityChirpSequence, 1);
+}
+
+void accessibilityTonePlayToggleConfirmation(s32 enabled)
+{
+	SDL_AtomicSet(&g_AccessibilityToggleEnabled, enabled != 0);
+	SDL_AtomicAdd(&g_AccessibilityToggleSequence, 1);
 }
 
 void accessibilityTonePlayWeaponFunction(s32 secondary)
@@ -469,6 +490,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 {
 	s32 enabled = SDL_AtomicGet(&g_AccessibilityToneEnabled);
 	s32 chirpsequence = SDL_AtomicGet(&g_AccessibilityChirpSequence);
+	s32 togglesequence = SDL_AtomicGet(&g_AccessibilityToggleSequence);
 	s32 weaponfunctionsequence = SDL_AtomicGet(
 			&g_AccessibilityWeaponFunctionSequence);
 	s32 hazardenabled = SDL_AtomicGet(&g_AccessibilityHazardEnabled);
@@ -677,9 +699,21 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 				: 0;
 	}
 
+	if (togglesequence != g_AccessibilityToggleObservedSequence) {
+		g_AccessibilityToggleObservedSequence = togglesequence;
+		g_AccessibilityToggleOn = SDL_AtomicGet(
+				&g_AccessibilityToggleEnabled);
+		g_AccessibilityToggleSample = 0;
+		g_AccessibilityTogglePhase = 0.0f;
+		g_AccessibilityToggleSamplesRemaining
+				= ACCESSIBILITY_TOGGLE_BEEP_SAMPLES * 2
+					+ ACCESSIBILITY_TOGGLE_GAP_SAMPLES;
+	}
+
 	if (!enabled && g_AccessibilityToneGain <= 0.0f
 			&& !hazardenabled && g_AccessibilityHazardGain <= 0.0f
 			&& g_AccessibilityChirpSamplesRemaining <= 0
+			&& g_AccessibilityToggleSamplesRemaining <= 0
 			&& g_AccessibilityWeaponFunctionSamplesRemaining <= 0
 			&& !anycombatenabled && !anytrackerenabled && !anycaneactive) {
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
@@ -717,6 +751,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		s32 chirpright = 0;
 		s32 hazardleft = 0;
 		s32 hazardright = 0;
+		s32 toggletone = 0;
 		s32 weaponfunctiontone = 0;
 		s32 combatleft = 0;
 		s32 combatright = 0;
@@ -821,6 +856,49 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 			g_AccessibilityChirpSample++;
 			g_AccessibilityChirpSamplesRemaining--;
+		}
+
+		if (g_AccessibilityToggleSamplesRemaining > 0) {
+			s32 secondsample = g_AccessibilityToggleSample
+					- ACCESSIBILITY_TOGGLE_BEEP_SAMPLES
+					- ACCESSIBILITY_TOGGLE_GAP_SAMPLES;
+			s32 beepsample = g_AccessibilityToggleSample
+					< ACCESSIBILITY_TOGGLE_BEEP_SAMPLES
+						? g_AccessibilityToggleSample : secondsample;
+
+			if (beepsample >= 0
+					&& beepsample < ACCESSIBILITY_TOGGLE_BEEP_SAMPLES) {
+				f32 envelope = 1.0f;
+				f32 frequencyhz = g_AccessibilityToggleSample
+						< ACCESSIBILITY_TOGGLE_BEEP_SAMPLES
+							? ACCESSIBILITY_TOGGLE_BASE_FREQUENCY_HZ
+							: g_AccessibilityToggleOn
+								? ACCESSIBILITY_TOGGLE_ON_FREQUENCY_HZ
+								: ACCESSIBILITY_TOGGLE_OFF_FREQUENCY_HZ;
+
+				if (beepsample < ACCESSIBILITY_TOGGLE_ATTACK_SAMPLES) {
+					envelope = (f32)beepsample
+							/ (f32)ACCESSIBILITY_TOGGLE_ATTACK_SAMPLES;
+				} else if (ACCESSIBILITY_TOGGLE_BEEP_SAMPLES - beepsample
+						< ACCESSIBILITY_TOGGLE_RELEASE_SAMPLES) {
+					envelope = (f32)(ACCESSIBILITY_TOGGLE_BEEP_SAMPLES
+							- beepsample)
+							/ (f32)ACCESSIBILITY_TOGGLE_RELEASE_SAMPLES;
+				}
+
+				toggletone = (s32)(sinf(g_AccessibilityTogglePhase)
+						* envelope * ACCESSIBILITY_TOGGLE_VOLUME * 32767.0f);
+				g_AccessibilityTogglePhase += TWO_PI * frequencyhz
+						/ ACCESSIBILITY_TONE_SAMPLE_RATE;
+				if (g_AccessibilityTogglePhase >= TWO_PI) {
+					g_AccessibilityTogglePhase -= TWO_PI;
+				}
+			} else {
+				g_AccessibilityTogglePhase = 0.0f;
+			}
+
+			g_AccessibilityToggleSample++;
+			g_AccessibilityToggleSamplesRemaining--;
 		}
 
 		if (g_AccessibilityWeaponFunctionSamplesRemaining > 0) {
@@ -1071,11 +1149,11 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		g_AccessibilityToneMixBuffer[index] = accessibilityToneClamp(
 				(s32)g_AccessibilityToneMixBuffer[index] + tone + chirpleft
 						+ hazardleft + combatleft + trackerleft + caneleft
-						+ weaponfunctiontone);
+						+ toggletone + weaponfunctiontone);
 		g_AccessibilityToneMixBuffer[index + 1] = accessibilityToneClamp(
 				(s32)g_AccessibilityToneMixBuffer[index + 1] + tone + chirpright
 						+ hazardright + combatright + trackerright + caneright
-						+ weaponfunctiontone);
+						+ toggletone + weaponfunctiontone);
 
 		g_AccessibilityTonePhase += TWO_PI
 				* g_AccessibilityToneFrequencyHz / ACCESSIBILITY_TONE_SAMPLE_RATE;

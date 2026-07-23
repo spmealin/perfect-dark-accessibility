@@ -172,6 +172,17 @@ static const char *accessibilityBeaconCategoryName(s32 category)
 	}
 }
 
+static void accessibilityBeaconPlayToggleConfirmation(s32 category)
+{
+	s32 active = g_AccessibilityBeaconCategoryActive[category];
+
+	accessibilityTonePlayToggleConfirmation(active);
+	accessibilityLogEvent("beacon", "toggle_confirmation",
+			"tick=%d category=%s active=%d pattern=%s base_frequency_hz=880 second_frequency_hz=%d beep_ms=35 gap_ms=25 lane=toggle_confirmation",
+			g_Vars.lvframe60, accessibilityBeaconCategoryName(category),
+			active, active ? "rising" : "falling", active ? 1320 : 440);
+}
+
 static const char *accessibilityBeaconKindName(s32 kind)
 {
 	switch (kind) {
@@ -1600,6 +1611,8 @@ void accessibilityBeaconTick(void)
 		} else {
 			g_AccessibilityBeaconCategoryActive[ACCESSIBILITY_BEACON_CATEGORY_OBJECT] = true;
 		}
+		accessibilityBeaconPlayToggleConfirmation(
+				ACCESSIBILITY_BEACON_CATEGORY_OBJECT);
 
 		toggled = true;
 	}
@@ -1618,6 +1631,8 @@ void accessibilityBeaconTick(void)
 		} else {
 			g_AccessibilityBeaconCategoryActive[ACCESSIBILITY_BEACON_CATEGORY_DOOR] = true;
 		}
+		accessibilityBeaconPlayToggleConfirmation(
+				ACCESSIBILITY_BEACON_CATEGORY_DOOR);
 
 		toggled = true;
 	}
@@ -1636,6 +1651,8 @@ void accessibilityBeaconTick(void)
 		} else {
 			g_AccessibilityBeaconCategoryActive[ACCESSIBILITY_BEACON_CATEGORY_PICKUP] = true;
 		}
+		accessibilityBeaconPlayToggleConfirmation(
+				ACCESSIBILITY_BEACON_CATEGORY_PICKUP);
 
 		toggled = true;
 	}
@@ -1659,6 +1676,8 @@ void accessibilityBeaconTick(void)
 			g_AccessibilityBeaconCategoryActive[
 					ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE] = true;
 		}
+		accessibilityBeaconPlayToggleConfirmation(
+				ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE);
 
 		toggled = true;
 	}
