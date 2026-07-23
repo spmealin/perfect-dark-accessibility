@@ -20,6 +20,7 @@
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_beacon.h"
 #include "accessibility/accessibility_log.h"
+#include "accessibility/accessibility_observer.h"
 #include "accessibility/accessibility_tone.h"
 #ifndef PLATFORM_N64
 #include "input.h"
@@ -90,6 +91,8 @@ static s32 g_AccessibilityBeaconNextTelemetry60;
 static s32 g_AccessibilityBeaconMemoryBaselineValid;
 static u64 g_AccessibilityBeaconWorkingSetBaseline;
 static u64 g_AccessibilityBeaconPrivateBaseline;
+static uintptr_t g_AccessibilityBeaconObserverProp;
+static s32 g_AccessibilityBeaconObserverRemote;
 
 static void accessibilityBeaconResetTelemetry(void)
 {
@@ -201,7 +204,7 @@ static s32 accessibilityBeaconCharacterCombatCapable(struct chrdata *chr)
 }
 
 static s32 accessibilityBeaconNonHostileEligible(struct prop *prop,
-		const char **reason)
+		s32 remoteobserver, const char **reason)
 {
 	struct chrdata *chr;
 
@@ -217,10 +220,22 @@ static s32 accessibilityBeaconNonHostileEligible(struct prop *prop,
 		return false;
 	}
 
+	if (g_Vars.currentplayer->eyespy
+			&& prop == g_Vars.currentplayer->eyespy->prop) {
+		*reason = "remote_camera_character";
+		return false;
+	}
+
 	chr = prop->chr;
 
 	if (!prop->active || (prop->flags & PROPFLAG_ENABLED) == 0) {
 		*reason = "character_inactive_or_disabled";
+		return false;
+	}
+
+	if (remoteobserver
+			&& (prop->flags & PROPFLAG_ONTHISSCREENTHISTICK) == 0) {
+		*reason = "character_not_rendered_in_remote_view";
 		return false;
 	}
 
@@ -460,11 +475,17 @@ static s32 accessibilityBeaconRequiresLineOfSight(s32 category)
 
 static s32 accessibilityBeaconHasLineOfSight(
 		const struct accessibilitybeaconresult *result,
-		struct prop *playerprop, struct prop *targetprop)
+		const struct accessibilityobserver *observer,
+		struct prop *targetprop)
 {
+	struct coord viewpos = observer->camera;
+	RoomNum camrooms[2];
+
+	camrooms[0] = observer->room;
+	camrooms[1] = -1;
+
 	if (result->kind == ACCESSIBILITY_BEACON_KIND_NON_HOSTILE) {
 		struct coord targetpos;
-		RoomNum camrooms[2];
 
 		if (!targetprop->chr) {
 			return false;
@@ -473,23 +494,21 @@ static s32 accessibilityBeaconHasLineOfSight(
 		targetpos = targetprop->pos;
 		targetpos.y = targetprop->chr->manground
 				+ targetprop->chr->height * 0.5f;
-		camrooms[0] = g_Vars.currentplayer->cam_room;
-		camrooms[1] = -1;
 
-		return cdTestLos03(&g_Vars.currentplayer->cam_pos, camrooms,
+		return cdTestLos03(&viewpos, camrooms,
 				&targetpos,
 				CDTYPE_OBJS | CDTYPE_DOORS | CDTYPE_PATHBLOCKER | CDTYPE_BG,
 				GEOFLAG_BLOCK_SHOOT);
 	}
 
 	if (result->kind == ACCESSIBILITY_BEACON_KIND_PICKUP) {
-		return cdTestLos05(&playerprop->pos, playerprop->rooms,
+		return cdTestLos05(&observer->prop->pos, observer->prop->rooms,
 				&targetprop->pos, targetprop->rooms,
 				CDTYPE_DOORS | CDTYPE_BG,
 				GEOFLAG_WALL | GEOFLAG_BLOCK_SIGHT | GEOFLAG_BLOCK_SHOOT);
 	}
 
-	return cdTestLos06(&playerprop->pos, playerprop->rooms,
+	return cdTestLos06(&viewpos, camrooms,
 			&targetprop->pos, targetprop->rooms, CDTYPE_BG);
 }
 
@@ -527,14 +546,16 @@ static struct prop *accessibilityBeaconCanonicalDoor(struct prop *prop, s32 *sib
 	return bestprop;
 }
 
-static f32 accessibilityBeaconCalculateSpatial(struct prop *prop, struct prop *playerprop,
+static f32 accessibilityBeaconCalculateSpatial(struct prop *prop,
+		const struct accessibilityobserver *observer,
 		f32 *bearing, f32 *vertical)
 {
-	f32 x = prop->pos.x - playerprop->pos.x;
-	f32 y = prop->pos.y - playerprop->pos.y;
-	f32 z = prop->pos.z - playerprop->pos.z;
+	f32 x = prop->pos.x - observer->origin.x;
+	f32 y = prop->pos.y - observer->origin.y;
+	f32 z = prop->pos.z - observer->origin.z;
 	f32 absolute = atan2f(x, z) * (180.0f / M_PI);
-	f32 forward = 360.0f - g_Vars.currentplayer->vv_theta;
+	f32 forward = atan2f(observer->look.x, observer->look.z)
+			* (180.0f / M_PI);
 	f32 relative = absolute - forward;
 
 	while (relative > 180.0f) {
@@ -665,11 +686,19 @@ static void accessibilityBeaconLogProp(struct prop *prop, s32 propnum, const cha
 
 static s32 accessibilityBeaconScan(s32 detailed)
 {
-	struct prop *playerprop = g_Vars.currentplayer->prop;
+	struct accessibilityobserver observer;
+	struct prop *playerprop;
 	struct prop *prop = g_Vars.activeprops;
 	s32 traversed = 0;
 	s32 considered;
 	s32 eligiblecount = 0;
+	f32 heading;
+
+	if (!accessibilityObserverGet(&observer)) {
+		return 0;
+	}
+	playerprop = observer.prop;
+	heading = atan2f(observer.look.x, observer.look.z) * (180.0f / M_PI);
 
 	g_AccessibilityBeaconScanCount++;
 	g_AccessibilityBeaconResultCount = 0;
@@ -680,12 +709,13 @@ static s32 accessibilityBeaconScan(s32 detailed)
 	memset(g_AccessibilityBeaconResults, 0, sizeof(g_AccessibilityBeaconResults));
 
 	accessibilityLogEvent("beacon", "scan_start",
-			"scan=%llu mode=%s stage=%d player=%d player_prop=%p player_propnum=%d position=%.3f,%.3f,%.3f theta=%.3f rooms=%d,%d,%d,%d,%d,%d,%d,%d radius=%.1f capacity=%d",
+			"scan=%llu mode=%s stage=%d player=%d observer_prop=%p observer_propnum=%d observer_remote=%d position=%.3f,%.3f,%.3f heading=%.3f rooms=%d,%d,%d,%d,%d,%d,%d,%d radius=%.1f capacity=%d",
 			(unsigned long long)g_AccessibilityBeaconScanCount,
 			detailed ? "toggle" : "automatic_refresh",
 			g_Vars.stagenum, g_Vars.currentplayernum, (void *)playerprop,
-			accessibilityBeaconPropNum(playerprop), playerprop->pos.x, playerprop->pos.y,
-			playerprop->pos.z, g_Vars.currentplayer->vv_theta,
+			accessibilityBeaconPropNum(playerprop), observer.isremote,
+			observer.origin.x, observer.origin.y,
+			observer.origin.z, heading,
 			playerprop->rooms[0], playerprop->rooms[1], playerprop->rooms[2], playerprop->rooms[3],
 			playerprop->rooms[4], playerprop->rooms[5], playerprop->rooms[6], playerprop->rooms[7],
 			ACCESSIBILITY_BEACON_SCAN_DISTANCE, ACCESSIBILITY_BEACON_CAPACITY);
@@ -726,6 +756,7 @@ static s32 accessibilityBeaconScan(s32 detailed)
 			result.category = ACCESSIBILITY_BEACON_CATEGORY_DOOR;
 			result.kind = ACCESSIBILITY_BEACON_KIND_DOOR;
 		} else if ((prop->type == PROPTYPE_OBJ || prop->type == PROPTYPE_WEAPON)
+				&& !observer.isremote
 				&& g_Vars.stagenum == STAGE_CITRAINING
 				&& (g_AccessibilityBeaconCategoryActive[
 						ACCESSIBILITY_BEACON_CATEGORY_OBJECT]
@@ -754,13 +785,15 @@ static s32 accessibilityBeaconScan(s32 detailed)
 		} else if (prop->type == PROPTYPE_CHR
 				&& g_AccessibilityBeaconCategoryActive[
 						ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE]) {
-			eligible = accessibilityBeaconNonHostileEligible(prop, &reason);
+			eligible = accessibilityBeaconNonHostileEligible(
+					prop, observer.isremote, &reason);
 			result.kind = ACCESSIBILITY_BEACON_KIND_NON_HOSTILE;
 			result.category = ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE;
 		}
 
 		if (eligible) {
-			distance = accessibilityBeaconCalculateSpatial(candidate, playerprop, &bearing, &vertical);
+			distance = accessibilityBeaconCalculateSpatial(
+					candidate, &observer, &bearing, &vertical);
 
 			if (distance * distance > ACCESSIBILITY_BEACON_SCAN_DISTANCE_SQ) {
 				eligible = false;
@@ -770,7 +803,7 @@ static s32 accessibilityBeaconScan(s32 detailed)
 				reason = "outside_room_boundary";
 			} else if (accessibilityBeaconRequiresLineOfSight(result.category)
 					&& !accessibilityBeaconHasLineOfSight(
-						&result, playerprop, candidate)) {
+						&result, &observer, candidate)) {
 				eligible = false;
 				reason = "line_of_sight_blocked";
 			}
@@ -847,12 +880,19 @@ static s32 accessibilityBeaconScan(s32 detailed)
 static struct prop *accessibilityBeaconValidateResult(struct accessibilitybeaconresult *result,
 		const char **reason)
 {
+	struct accessibilityobserver observer;
 	struct prop *prop;
-	struct prop *playerprop = g_Vars.currentplayer->prop;
+	struct prop *playerprop;
 	u32 citag = 0;
 	f32 bearing;
 	f32 vertical;
 	f32 distance;
+
+	if (!accessibilityObserverGet(&observer)) {
+		*reason = "observer_unavailable";
+		return NULL;
+	}
+	playerprop = observer.prop;
 
 	if (result->propnum < 0 || result->propnum >= g_Vars.maxprops || !g_Vars.props) {
 		*reason = "prop_index_invalid";
@@ -870,7 +910,8 @@ static struct prop *accessibilityBeaconValidateResult(struct accessibilitybeacon
 	}
 
 	if (result->kind == ACCESSIBILITY_BEACON_KIND_NON_HOSTILE) {
-		if (!accessibilityBeaconNonHostileEligible(prop, reason)) {
+		if (!accessibilityBeaconNonHostileEligible(
+				prop, observer.isremote, reason)) {
 			return NULL;
 		}
 	} else if (result->kind == ACCESSIBILITY_BEACON_KIND_PICKUP) {
@@ -890,7 +931,8 @@ static struct prop *accessibilityBeaconValidateResult(struct accessibilitybeacon
 		return NULL;
 	}
 
-	distance = accessibilityBeaconCalculateSpatial(prop, playerprop, &bearing, &vertical);
+	distance = accessibilityBeaconCalculateSpatial(
+			prop, &observer, &bearing, &vertical);
 
 	if (distance * distance > ACCESSIBILITY_BEACON_SCAN_DISTANCE_SQ) {
 		*reason = "moved_outside_scan_radius";
@@ -903,7 +945,7 @@ static struct prop *accessibilityBeaconValidateResult(struct accessibilitybeacon
 	}
 
 	if (accessibilityBeaconRequiresLineOfSight(result->category)
-			&& !accessibilityBeaconHasLineOfSight(result, playerprop, prop)) {
+			&& !accessibilityBeaconHasLineOfSight(result, &observer, prop)) {
 		*reason = "line_of_sight_became_blocked";
 		return NULL;
 	}
@@ -1461,6 +1503,7 @@ static const char *accessibilityBeaconScopeReason(void)
 
 void accessibilityBeaconTick(void)
 {
+	struct accessibilityobserver observer;
 	const char *scopereason = accessibilityBeaconScopeReason();
 	s32 objectrequested = false;
 	s32 doorrequested = false;
@@ -1474,6 +1517,26 @@ void accessibilityBeaconTick(void)
 		}
 		return;
 	}
+
+	if (!accessibilityObserverGet(&observer)) {
+		accessibilityBeaconDeactivateAll("observer_unavailable", true);
+		return;
+	}
+
+	if (g_AccessibilityBeaconObserverProp
+			&& (g_AccessibilityBeaconObserverProp != (uintptr_t)observer.prop
+				|| g_AccessibilityBeaconObserverRemote != observer.isremote)) {
+		accessibilityLogEvent("beacon", "observer_change",
+				"tick=%d stage=%d player=%d observer=%p propnum=%d remote=%d active_categories=%d",
+				g_Vars.lvframe60, g_Vars.stagenum, g_Vars.currentplayernum,
+				(void *)observer.prop, accessibilityBeaconPropNum(observer.prop),
+				observer.isremote, accessibilityBeaconAnyActive());
+		if (accessibilityBeaconAnyActive()) {
+			accessibilityBeaconRescanActive("observer_changed");
+		}
+	}
+	g_AccessibilityBeaconObserverProp = (uintptr_t)observer.prop;
+	g_AccessibilityBeaconObserverRemote = observer.isremote;
 
 	if ((!accessibilityIsInteractableBeaconsEnabled()
 			|| g_Vars.stagenum != STAGE_CITRAINING)
@@ -1658,4 +1721,6 @@ void accessibilityBeaconReset(const char *reason)
 	g_AccessibilityBeaconNextScheduledPulse60 = 0;
 	g_AccessibilityBeaconNextRefresh60 = 0;
 	accessibilityBeaconResetTelemetry();
+	g_AccessibilityBeaconObserverProp = 0;
+	g_AccessibilityBeaconObserverRemote = false;
 }

@@ -284,6 +284,7 @@ set(SRC_ACCESSIBILITY
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_hazard.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_log.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_menu.c"
+  "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_observer.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_performance.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_speech.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_targeting.c"

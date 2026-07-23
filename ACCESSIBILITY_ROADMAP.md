@@ -118,6 +118,8 @@ Implementation status: the active weapon/device radial now announces localized h
 - **Risks:** These validity rules exist as setup-script tags rather than a general runtime capability API. The registry supports multiple stage/training-scoped targets per item, but other devices still require independently confirmed semantic contracts before adding rows. The raw query can identify a surface but cannot establish Uplink range or simulate an ECM trajectory.
 - **Explicit non-goals:** No model-name heuristic, broad interactable-as-target rule, trajectory prediction, automatic use/throw, off-aim target beacon, or claim that arbitrary mission devices are covered.
 
+Engineering extension: an active CamSpy now contributes incomplete engine holograph criteria to the same alignment-only device profile. Candidate admission mirrors the photograph rule's health, render/front, 400-unit range, and full-viewport requirements. Since photography is frame-based rather than ray-based, any criterion the game could accept drives the fixed tone; screen-center distance only stabilizes identity if several qualify. Runtime revalidation is pending after correcting the initially over-restrictive center-ray requirement.
+
 ### Prioritized environmental-hazard slice
 
 - **Status:** Generic damaging-laser implementation builds; runtime and blind-user acceptance are pending.
@@ -160,6 +162,8 @@ Implementation status: the active weapon/device radial now announces localized h
 - **Risks:** A neutral relationship can change through scripts after a refresh; two 440 Hz chirps require masking tests against one-chirp doors. A midpoint line-of-sight ray may exclude a partly visible person. The three-target cap prioritizes stable nearby identities rather than exhaustive awareness.
 - **Explicit non-goals:** No spoken identity, through-wall disclosure, hostility prediction, dialogue availability claim, multiplayer policy, or automatic interaction.
 
+Engineering extension: door and non-hostile-character beacon queries now follow the active CamSpy perspective and return to Joanna automatically. Remote people must also be rendered in the CamSpy viewport, after an acceptance log showed room-connected but visually absent characters passing the broader Joanna scanner policy. The same observer boundary leaves body-actionable CI object/pickup categories paused during remote viewing. Runtime and blind-user transition revalidation remain pending.
+
 - **Goal:** Generalize the Carrington Institute beacon proof into a deliberate, knowledge-safe query for a broader set of nearby actionable things.
 - **User-visible result:** A scan summarizes eligible doors, pickups, terminals, characters, and mission objects by direction/distance; results can be stepped or repeated, while positioned beacons remain available for supported categories.
 - **Systems:** Milestone 5 beacon core, prop/object types, generalized interaction eligibility, rooms/visibility, localized object names, spatial formatter, and permanent action bindings.
@@ -171,6 +175,8 @@ Implementation status: the active weapon/device radial now announces localized h
 ## Milestone 11 — Navigation prototype
 
 Implementation status: a general single-player virtual-cane slice is implemented as an orientation experiment, but Milestone 11 remains open. F4 cycles off, a two-second seven-angle sweep, and a one-second seven-angle sweep. Each live player-sized movement-cylinder probe reports the nearest background/object/door/path-blocking collision with a fixed-pitch spatial chirp while excluding characters and drop-offs. Route guidance, landmarks, deviation/recovery semantics, controller/settings UI, runtime validation, and the required blind-user iterations remain pending.
+
+The implemented cane now uses the active player-or-CamSpy observer pose and restarts a partial sweep when the visible perspective changes. CamSpy collision dimensions and rooms replace Joanna's only while its camera mode is effective. This engineering behavior still requires runtime transition, collision, and performance evidence.
 
 - **Goal:** Evaluate nonvisual orientation and route guidance in one bounded Carrington Institute/training route.
 - **User-visible result:** Heading/landmark queries and optional cues support following a short route, detecting deviation, and recovering.

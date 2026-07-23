@@ -21,6 +21,7 @@
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_cane.h"
 #include "accessibility/accessibility_log.h"
+#include "accessibility/accessibility_observer.h"
 #include "accessibility/accessibility_tone.h"
 
 #define ACCESSIBILITY_CANE_PROBE_COUNT 7
@@ -71,6 +72,8 @@ struct accessibilitycanesample {
 	f32 normalizedvolume;
 	f32 normalizedpan;
 	u64 queryus;
+	struct prop *observerprop;
+	s32 observerremote;
 };
 
 static const s32 g_AccessibilityCaneAngles[ACCESSIBILITY_CANE_PROBE_COUNT] = {
@@ -105,6 +108,8 @@ static u64 g_AccessibilityCaneSweeps;
 static u64 g_AccessibilityCaneMissedCycles;
 static u64 g_AccessibilityCaneQueryTotalUs;
 static u64 g_AccessibilityCaneQueryMaxUs;
+static uintptr_t g_AccessibilityCaneObserverProp;
+static s32 g_AccessibilityCaneObserverRemote;
 
 static const char *accessibilityCaneModeName(s32 mode)
 {
@@ -180,7 +185,8 @@ static const char *accessibilityCaneGameplayScopeReason(void)
 		return "player_dead";
 	}
 
-	if (g_Vars.currentplayer->bondmovemode != MOVEMODE_WALK) {
+	if (g_Vars.currentplayer->cameramode != CAMERAMODE_EYESPY
+			&& g_Vars.currentplayer->bondmovemode != MOVEMODE_WALK) {
 		return "unsupported_movement_mode";
 	}
 
@@ -234,11 +240,12 @@ static void accessibilityCaneLogSweep(const char *reason)
 		struct accessibilitycanesample *sample = &g_AccessibilityCaneSamples[i];
 
 		accessibilityCaneAppendLog(
-				"%ss%d={angle:%d state:%s scheduled:%d actual:%d late:%d result:%d pass:%d origin:%.2f,%.2f,%.2f forward:%.5f,%.5f direction:%.5f,%.5f end:%.2f,%.2f,%.2f bbox:%.2f,%.2f,%.2f raw:%.2f,%.2f,%.2f audio:%.2f,%.2f,%.2f distance:%.2f obstacle:%p type:%d geoflags:0x%08x normal:%.5f,%.5f,%.5f edge:%.2f,%.2f,%.2f,%.2f volume:%d pan:%d normalized:%.5f,%.5f query_us:%" PRIu64 "}",
+				"%ss%d={angle:%d state:%s scheduled:%d actual:%d late:%d result:%d pass:%d observer:%p remote:%d origin:%.2f,%.2f,%.2f forward:%.5f,%.5f direction:%.5f,%.5f end:%.2f,%.2f,%.2f bbox:%.2f,%.2f,%.2f raw:%.2f,%.2f,%.2f audio:%.2f,%.2f,%.2f distance:%.2f obstacle:%p type:%d geoflags:0x%08x normal:%.5f,%.5f,%.5f edge:%.2f,%.2f,%.2f,%.2f volume:%d pan:%d normalized:%.5f,%.5f query_us:%" PRIu64 "}",
 				i ? " " : "", i, sample->angledegrees,
 				accessibilityCaneSampleStateName(sample->state),
 				sample->scheduledtick, sample->actualtick, sample->lateness,
 				sample->result, sample->collisionpass,
+				(void *)sample->observerprop, sample->observerremote,
 				sample->origin.x, sample->origin.y,
 				sample->origin.z, sample->forward.x, sample->forward.z,
 				sample->direction.x, sample->direction.z,
@@ -352,6 +359,7 @@ static void accessibilityCaneNormalFromEdge(const struct coord *origin,
 
 static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 {
+	struct accessibilityobserver observer;
 	RoomNum dstrooms[8];
 	RoomNum morerooms[22];
 	struct coord start;
@@ -370,11 +378,19 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 	u64 querystart;
 #endif
 
-	start = g_Vars.currentplayer->prop->pos;
+	if (!accessibilityObserverGet(&observer)) {
+		sample->state = ACCESSIBILITY_CANE_SAMPLE_ERROR;
+		sample->result = CDRESULT_ERROR;
+		return CDRESULT_ERROR;
+	}
+
+	start = observer.origin;
+	sample->observerprop = observer.prop;
+	sample->observerremote = observer.isremote;
 	sample->origin = start;
-	sample->forward.x = g_Vars.currentplayer->cam_look.x;
+	sample->forward.x = observer.look.x;
 	sample->forward.y = 0.0f;
-	sample->forward.z = g_Vars.currentplayer->cam_look.z;
+	sample->forward.z = observer.look.z;
 	horizontal = sqrtf(sample->forward.x * sample->forward.x
 			+ sample->forward.z * sample->forward.z);
 
@@ -403,27 +419,32 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 	querystart = sysGetMicroseconds();
 #endif
-	playerGetBbox(g_Vars.currentplayer->prop, &sample->radius,
-			&sample->ymax, &sample->ymin);
-	func0f065dfc(&start, g_Vars.currentplayer->prop->rooms,
+	sample->radius = observer.radius;
+	sample->ymax = observer.ymax;
+	sample->ymin = observer.ymin;
+	func0f065dfc(&start, observer.prop->rooms,
 			&end, dstrooms, morerooms, 20);
 
 #if VERSION < VERSION_NTSC_1_0
-	for (i = 0; dstrooms[i] != -1; i++) {
-		if (dstrooms[i] == g_Vars.currentplayer->floorroom) {
-			dstrooms[0] = g_Vars.currentplayer->floorroom;
-			dstrooms[1] = -1;
-			break;
+	if (!observer.isremote) {
+		for (i = 0; dstrooms[i] != -1; i++) {
+			if (dstrooms[i] == g_Vars.currentplayer->floorroom) {
+				dstrooms[0] = g_Vars.currentplayer->floorroom;
+				dstrooms[1] = -1;
+				break;
+			}
 		}
 	}
 #endif
 
-	bmoveFindEnteredRoomsByPos(g_Vars.currentplayer, &end, dstrooms);
+	if (!observer.isremote) {
+		bmoveFindEnteredRoomsByPos(g_Vars.currentplayer, &end, dstrooms);
+	}
 	types = g_Vars.bondcollisions
 			? CDTYPE_BG | CDTYPE_OBJS | CDTYPE_DOORS | CDTYPE_PATHBLOCKER
 			: CDTYPE_BG;
 
-	result = cdExamCylMove06(&start, g_Vars.currentplayer->prop->rooms,
+	result = cdExamCylMove06(&start, observer.prop->rooms,
 			&end, dstrooms, sample->radius, types, 1,
 			sample->ymax - start.y, sample->ymin - start.y);
 
@@ -474,7 +495,7 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 		sample->geoflags = GEOFLAG_WALL;
 	}
 	sample->audiosource = sample->rawhit;
-	sample->audiosource.y = g_Vars.currentplayer->cam_pos.y;
+	sample->audiosource.y = observer.camera.y;
 	horizontal = sqrtf((sample->audiosource.x - start.x)
 				* (sample->audiosource.x - start.x)
 			+ (sample->audiosource.z - start.z)
@@ -522,6 +543,8 @@ static void accessibilityCaneStop(const char *reason, s32 logscope)
 	g_AccessibilityCaneSweepActive = false;
 	g_AccessibilityCaneCursor = 0;
 	g_AccessibilityCaneLastQueryTick = -1;
+	g_AccessibilityCaneObserverProp = 0;
+	g_AccessibilityCaneObserverRemote = false;
 }
 
 static void accessibilityCaneCycleMode(void)
@@ -540,6 +563,7 @@ static void accessibilityCaneCycleMode(void)
 
 void accessibilityCaneTick(void)
 {
+	struct accessibilityobserver observer;
 	const char *scopereason = accessibilityCaneGameplayScopeReason();
 	s32 mode;
 	s32 now;
@@ -556,6 +580,23 @@ void accessibilityCaneTick(void)
 		accessibilityCaneStop(scopereason, true);
 		return;
 	}
+
+	if (!accessibilityObserverGet(&observer)) {
+		accessibilityCaneStop("observer_unavailable", true);
+		return;
+	}
+
+	if (g_AccessibilityCaneObserverProp
+			&& (g_AccessibilityCaneObserverProp != (uintptr_t)observer.prop
+				|| g_AccessibilityCaneObserverRemote != observer.isremote)) {
+		accessibilityCaneStop("observer_changed", false);
+		accessibilityLogEvent("cane", "observer_change",
+				"tick=%d stage=%d player=%d observer=%p remote=%d",
+				g_Vars.lvframe60, g_Vars.stagenum, g_Vars.currentplayernum,
+				(void *)observer.prop, observer.isremote);
+	}
+	g_AccessibilityCaneObserverProp = (uintptr_t)observer.prop;
+	g_AccessibilityCaneObserverRemote = observer.isremote;
 
 	if (!g_AccessibilityCaneScopeActive) {
 		g_AccessibilityCaneScopeActive = true;
