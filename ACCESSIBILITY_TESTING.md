@@ -121,6 +121,7 @@ NonHostileBeacons=1
 TargetingFeedback=1
 WeaponFunctionCues=1
 VirtualCaneMode=1
+RTrackerAudio=1
 ```
 
 Then launch `build/pd.x86_64.exe --accessibility-speech-test`. The flag never enables accessibility or speech by itself. The exact request is `Perfect Dark accessibility speech test.` With speech enabled but no flag, backend detection occurs without an output request. Development output must contain `Tolk.dll` and the architecture-matching NVDA controller beside the executable; notices are copied to `build/licenses/tolk/`.
@@ -354,6 +355,16 @@ Automated tests should cover pure formatting, queue priority/replacement/dedupli
 ## Rollback and reproducibility
 
 Before risky runtime tests, preserve user configuration and saves. Each experimental feature needs one obvious off switch; native backend failure should fall back to the null/disabled path. Keep semantic hooks tiny so reverting the accessibility module and its ledgered calls restores baseline behaviour.
+
+### R-Tracker nonvisual-interface acceptance
+
+Build with `Accessibility.RTrackerAudio=1`. In CI device training, equip and activate the R-Tracker and confirm the screen reader says `R-Tracker on`. The IR Scanner should produce one yellow-object 700 Hz voice. Turn through a full circle to verify stereo bearing and the clean-front/modulated-rear distinction; approach and retreat to verify faster nearby and slower distant cadence. Where controlled elevation is available, verify level is one chirp, above is a rising pair, and below is a falling pair without rapid threshold chatter.
+
+Collect the tracked scanner and confirm the voice disappears. Deactivate the device and confirm `R-Tracker off`. Activate it in an empty context and confirm `No tracked targets` is spoken once after the brief settling delay, not repeatedly. Pause, open a menu, enter a cutscene, die, restart, and leave the stage where practical: audio must stop while suppressed and rebuild from current native state without a false off announcement.
+
+In Skedar Ruins, verify all three tracked pillars sound at once and disappear individually when their native markers clear. On Attack Ship, verify simultaneous yellow objects and red tracked characters, including removal of a dead or cloaked tracked character. With the native R-Tracker cheat enabled, verify blue items use the distinct 1000 Hz category and coexist with the other categories. The audited maximum is eight markers; logs must report any overflow beyond the ten fixed slots.
+
+Correlate perceived output with `rtracker/announcement`, `scope`, `slot_assign`, `candidate`, `slot_release`, `overflow`, and `scan_summary` events. With `ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS=ON`, also inspect `tracker_enabled_slots`, R-Tracker scan timing, frame gaps, memory deltas, and mixer activity over repeated sessions. Investigate scans above the specification's thresholds or any sustained growth/choppiness. The complete semantic and acoustic contract is `ACCESSIBILITY_RTRACKER_AUDIO_SPEC.md`.
 
 A reproducible report includes the commit/patch, config values relevant to accessibility, start state, steps, expected/actual result, timestamps/session ID, and whether the result reproduces after a clean restart. Do not require another developer to possess the tester's save; provide a lawful setup route when possible.
 

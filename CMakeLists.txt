@@ -289,6 +289,7 @@ set(SRC_ACCESSIBILITY
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_speech.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_targeting.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_targeting_game.c"
+  "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_tracker.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_weapon.c"
 )
 

@@ -78,6 +78,7 @@
 #include "accessibility/accessibility_cane.h"
 #include "accessibility/accessibility_hazard.h"
 #include "accessibility/accessibility_targeting.h"
+#include "accessibility/accessibility_tracker.h"
 
 extern u8 *g_MempHeap;
 extern u32 g_MempHeapSize;
@@ -519,6 +520,7 @@ void mainLoop(void)
 		accessibilityCaneReset("stage_stop");
 		accessibilityHazardReset("stage_stop");
 		accessibilityTargetingReset("stage_stop");
+		accessibilityTrackerReset("stage_stop");
 		lvStop();
 		mempDisablePool(MEMPOOL_STAGE);
 		mempDisablePool(MEMPOOL_7);
@@ -556,6 +558,7 @@ void mainTick(void)
 			accessibilityBeaconTick();
 			accessibilityCaneTick();
 			accessibilityHazardTick();
+			accessibilityTrackerTick();
 			playermgrShuffle();
 
 			if (g_StageNum < STAGE_TITLE) {

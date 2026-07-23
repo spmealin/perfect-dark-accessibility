@@ -120,6 +120,18 @@ Implementation status: the active weapon/device radial now announces localized h
 
 Engineering extension: an active CamSpy now contributes incomplete engine holograph criteria to the same alignment-only device profile. Candidate admission mirrors the photograph rule's health, render/front, 400-unit range, and full-viewport requirements. Since photography is frame-based rather than ray-based, any criterion the game could accept drives the fixed tone; screen-center distance only stabilizes identity if several qualify. Runtime revalidation is pending after correcting the initially over-restrictive center-ray requirement.
 
+### Prioritized R-Tracker nonvisual-interface slice
+
+- **Status:** Detailed specification and engineering implementation added; runtime and blind-user acceptance are pending.
+- **Detailed specification:** `ACCESSIBILITY_RTRACKER_AUDIO_SPEC.md` defines the authoritative semantic, acoustic, lifecycle, performance, and acceptance contract.
+- **Goal:** Provide equal nonvisual access to every marker exposed by the native R-Tracker without inventing line-of-sight, navigation, identity, or objective information.
+- **Systems:** Shared radar classification, active-prop traversal, native device/cheat state, ten fixed procedural mixer voices, screen-reader state announcements, configuration, lifecycle reset, structured logging, and optional performance diagnostics.
+- **Initial behavior:** Device changes speak `R-Tracker on` and `R-Tracker off`; an empty activation speaks `No tracked targets` once. All admitted targets sound concurrently with stable, staggered slots. Yellow objects use 700 Hz, red tracked characters 520 Hz, and blue cheat items 1000 Hz. Stereo pan conveys bearing, rear modulation conveys front/back, cadence ramps from 1.2 seconds at 4,000 units to 0.2 seconds nearby, and single/rising-double/falling-double patterns convey level/above/below.
+- **Acceptance:** Verify the CI IR Scanner; empty activation; all three Skedar Ruins pillars and individual completion removal; Attack Ship's mixed tracked objects/characters and death/cloak removal; blue cheat markers; full-circle bearing; distance and height transitions; pause/menu/cutscene/death/stage/reset cleanup; repeated-session stability; and feature disable.
+- **Evidence:** Correlate `rtracker` activation, scope, candidate, slot, overflow, and scan-summary events with perceived audio. With advanced diagnostics enabled, inspect active tracker voices, scan times, frame gaps, mixer activity, and process-memory deltas.
+- **Risks:** Ten concurrent voices may mask speech or other cues; stereo plus modulation may not make front/rear sufficiently distinct; vertical and cadence thresholds require blind-user tuning; the current single-player policy leaves cooperative composition unresolved. A scan above 0.5 ms sustained or 2 ms once requires investigation.
+- **Explicit non-goals:** No target names, objective status, route guidance, line-of-sight filtering, aim automation, multiplayer radar, ordinary scenario/player radar elements, runtime allocation, or game sound-channel consumption.
+
 ### Prioritized environmental-hazard slice
 
 - **Status:** Generic damaging-laser implementation builds; runtime and blind-user acceptance are pending.

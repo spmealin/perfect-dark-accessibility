@@ -5,6 +5,7 @@
 
 #define ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT 10
 #define ACCESSIBILITY_TONE_CANE_SLOT_COUNT 7
+#define ACCESSIBILITY_TONE_TRACKER_SLOT_COUNT 10
 
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 struct accessibilitytonediagnostics {
@@ -15,6 +16,7 @@ struct accessibilitytonediagnostics {
 	s32 weaponfunctionpulses;
 	s32 hazardenabled;
 	s32 combatenabledslots;
+	s32 trackerenabledslots;
 	s32 canerequestedmask;
 	s32 caneactivemask;
 	s32 canecommands;
@@ -42,6 +44,10 @@ void accessibilityToneSetCombatSlot(s32 slot, s32 enabled, f32 frequencyhz,
 		f32 volume, f32 pan, s32 periodms, s32 durationms, s32 continuous,
 		s32 restart, s32 triggernow);
 void accessibilityToneStopCombat(void);
+void accessibilityToneSetTrackerSlot(s32 slot, s32 enabled, f32 frequencyhz,
+		f32 volume, f32 pan, s32 periodms, s32 height, s32 rear,
+		s32 restart);
+void accessibilityToneStopTracker(void);
 void accessibilityTonePlayCaneSlot(s32 slot, f32 frequencyhz,
 		f32 volume, f32 pan);
 void accessibilityToneStopCane(void);

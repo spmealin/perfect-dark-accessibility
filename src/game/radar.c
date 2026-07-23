@@ -445,43 +445,31 @@ Gfx *radarRenderRTrackedProps(Gfx *gdl)
 {
 	struct prop *prop = g_Vars.activeprops;
 	struct coord *playerpos = &g_Vars.currentplayer->prop->pos;
-	struct defaultobj *obj;
-	struct chrdata *chr;
 	u32 stack1;
 	struct coord dist1;
 	u32 stack2;
 	struct coord dist2;
 
 	while (prop) {
-		switch (prop->type) {
-		case PROPTYPE_OBJ:
-		case PROPTYPE_DOOR:
-		case PROPTYPE_WEAPON:
-			obj = prop->obj;
+		s32 trackedtype = radarGetRTrackedType(prop);
 
-			if ((obj->flags3 & OBJFLAG3_RTRACKED_YELLOW) ||
-					(cheatIsActive(CHEAT_RTRACKER) && (obj->flags3 & OBJFLAG3_RTRACKED_BLUE))) {
-				dist1.x = prop->pos.x - playerpos->x;
-				dist1.y = prop->pos.y - playerpos->y;
-				dist1.z = prop->pos.z - playerpos->z;
+		switch (trackedtype) {
+		case RADAR_TRACKED_YELLOW:
+		case RADAR_TRACKED_BLUE:
+			dist1.x = prop->pos.x - playerpos->x;
+			dist1.y = prop->pos.y - playerpos->y;
+			dist1.z = prop->pos.z - playerpos->z;
 
-				gdl = radarDrawDot(gdl, prop, &dist1,
-						(obj->flags3 & OBJFLAG3_RTRACKED_YELLOW) ? 0xffff0000 : 0x0000ff00,
-						0, 0);
-			}
+			gdl = radarDrawDot(gdl, prop, &dist1,
+					trackedtype == RADAR_TRACKED_YELLOW
+							? 0xffff0000 : 0x0000ff00,
+					0, 0);
 			break;
-		case PROPTYPE_CHR:
-			chr = prop->chr;
-
-			if (chr && chr->rtracked
-					&& chr->actiontype != ACT_DIE
-					&& chr->actiontype != ACT_DEAD
-					&& (chr->hidden & CHRHFLAG_CLOAKED) == 0) {
-				dist2.x = prop->pos.x - playerpos->x;
-				dist2.y = prop->pos.y - playerpos->y;
-				dist2.z = prop->pos.z - playerpos->z;
-				gdl = radarDrawDot(gdl, prop, &dist2, 0xff000000, 0, 0);
-			}
+		case RADAR_TRACKED_CHARACTER:
+			dist2.x = prop->pos.x - playerpos->x;
+			dist2.y = prop->pos.y - playerpos->y;
+			dist2.z = prop->pos.z - playerpos->z;
+			gdl = radarDrawDot(gdl, prop, &dist2, 0xff000000, 0, 0);
 			break;
 		}
 
@@ -489,4 +477,36 @@ Gfx *radarRenderRTrackedProps(Gfx *gdl)
 	}
 
 	return gdl;
+}
+
+s32 radarGetRTrackedType(struct prop *prop)
+{
+	if (!prop) {
+		return RADAR_TRACKED_NONE;
+	}
+
+	switch (prop->type) {
+	case PROPTYPE_OBJ:
+	case PROPTYPE_DOOR:
+	case PROPTYPE_WEAPON:
+		if (prop->obj->flags3 & OBJFLAG3_RTRACKED_YELLOW) {
+			return RADAR_TRACKED_YELLOW;
+		}
+
+		if (cheatIsActive(CHEAT_RTRACKER)
+				&& (prop->obj->flags3 & OBJFLAG3_RTRACKED_BLUE)) {
+			return RADAR_TRACKED_BLUE;
+		}
+		break;
+	case PROPTYPE_CHR:
+		if (prop->chr && prop->chr->rtracked
+				&& prop->chr->actiontype != ACT_DIE
+				&& prop->chr->actiontype != ACT_DEAD
+				&& (prop->chr->hidden & CHRHFLAG_CLOAKED) == 0) {
+			return RADAR_TRACKED_CHARACTER;
+		}
+		break;
+	}
+
+	return RADAR_TRACKED_NONE;
 }
