@@ -218,10 +218,20 @@ static s32 accessibilityMenuGetDialogSummary(struct menudialogdef *dialogdef,
 	dst[0] = '\0';
 
 	for (item = dialogdef->items; item->type != MENUITEMTYPE_END; item++) {
-		if ((item->flags & MENUITEMFLAG_ACCESSIBILITYSUMMARY)
-				&& accessibilityMenuGetProviderText(item, MENUACCESSIBILITYPART_SUMMARY,
-				-1, dst, dstlen)) {
-			return true;
+		if (item->flags & MENUITEMFLAG_ACCESSIBILITYSUMMARY) {
+			if (accessibilityMenuGetProviderText(item,
+					MENUACCESSIBILITYPART_SUMMARY, -1, dst, dstlen)) {
+				return true;
+			}
+
+			if (item->type == MENUITEMTYPE_LABEL) {
+				accessibilityMenuCopyNormalized(dst, dstlen,
+						menuResolveParam2Text(item));
+
+				if (dst[0]) {
+					return true;
+				}
+			}
 		}
 	}
 
