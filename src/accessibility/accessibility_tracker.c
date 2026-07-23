@@ -7,6 +7,7 @@
 #include "bss.h"
 #include "data.h"
 #include "game/lv.h"
+#include "game/propobj.h"
 #include "game/propsnd.h"
 #include "game/radar.h"
 #include "system.h"
@@ -32,6 +33,16 @@ enum accessibilitytrackerheight {
 	ACCESSIBILITY_TRACKER_HEIGHT_BELOW,
 };
 
+enum accessibilitytrackersource {
+	ACCESSIBILITY_TRACKER_SOURCE_NONE,
+	ACCESSIBILITY_TRACKER_SOURCE_RTRACKER,
+	ACCESSIBILITY_TRACKER_SOURCE_INFRARED,
+	ACCESSIBILITY_TRACKER_SOURCE_XRAY,
+};
+
+#define ACCESSIBILITY_TRACKER_CATEGORY_INFRARED 4
+#define ACCESSIBILITY_TRACKER_CATEGORY_XRAY 5
+
 struct accessibilitytrackercandidate {
 	uintptr_t identity;
 	struct prop *prop;
@@ -40,6 +51,7 @@ struct accessibilitytrackercandidate {
 	struct coord position;
 	f32 distance;
 	f32 clampeddistance;
+	f32 sourcedistance;
 	f32 heightdelta;
 	s32 nativepan;
 	f32 pan;
@@ -62,6 +74,9 @@ static struct accessibilitytrackerslot
 		g_AccessibilityTrackerSlots[ACCESSIBILITY_TRACKER_SLOT_COUNT];
 static s32 g_AccessibilityTrackerCandidateCount;
 static s32 g_AccessibilityTrackerDeviceActive;
+static s32 g_AccessibilityTrackerInfraredActive;
+static s32 g_AccessibilityTrackerXrayActive;
+static s32 g_AccessibilityTrackerSource;
 static s32 g_AccessibilityTrackerAudioSuppressed;
 static s32 g_AccessibilityTrackerEmptyPending;
 static s32 g_AccessibilityTrackerEmptyDeadline;
@@ -105,6 +120,10 @@ static const char *accessibilityTrackerCategoryName(s32 category)
 		return "blue_cheat_object";
 	case RADAR_TRACKED_CHARACTER:
 		return "red_character";
+	case ACCESSIBILITY_TRACKER_CATEGORY_INFRARED:
+		return "infrared_highlight";
+	case ACCESSIBILITY_TRACKER_CATEGORY_XRAY:
+		return "xray_highlight";
 	}
 
 	return "none";
@@ -118,9 +137,25 @@ static f32 accessibilityTrackerCategoryFrequency(s32 category)
 	case RADAR_TRACKED_BLUE:
 		return 1000.0f;
 	case RADAR_TRACKED_YELLOW:
+	case ACCESSIBILITY_TRACKER_CATEGORY_INFRARED:
+	case ACCESSIBILITY_TRACKER_CATEGORY_XRAY:
 	default:
 		return 700.0f;
 	}
+}
+
+static const char *accessibilityTrackerSourceName(s32 source)
+{
+	switch (source) {
+	case ACCESSIBILITY_TRACKER_SOURCE_RTRACKER:
+		return "rtracker";
+	case ACCESSIBILITY_TRACKER_SOURCE_INFRARED:
+		return "ir_scanner";
+	case ACCESSIBILITY_TRACKER_SOURCE_XRAY:
+		return "xray_scanner";
+	}
+
+	return "none";
 }
 
 static const char *accessibilityTrackerHeightName(s32 height)
@@ -189,9 +224,37 @@ static s32 accessibilityTrackerNativeActive(void)
 					& DEVICE_RTRACKER);
 }
 
-static const char *accessibilityTrackerScopeReason(void)
+static s32 accessibilityTrackerInfraredNativeActive(void)
 {
-	if (!accessibilityIsRTrackerAudioEnabled()) {
+	return g_Vars.currentplayer
+			&& (g_Vars.currentplayer->devicesactive
+					& ~g_Vars.currentplayer->devicesinhibit
+					& DEVICE_IRSCANNER);
+}
+
+static s32 accessibilityTrackerXrayNativeActive(void)
+{
+	return g_Vars.currentplayer
+			&& (g_Vars.currentplayer->devicesactive
+					& ~g_Vars.currentplayer->devicesinhibit
+					& DEVICE_XRAYSCANNER)
+			&& g_Vars.currentplayer->visionmode == VISIONMODE_XRAY;
+}
+
+static const char *accessibilityTrackerScopeReason(s32 source)
+{
+	if (source == ACCESSIBILITY_TRACKER_SOURCE_RTRACKER
+			&& !accessibilityIsRTrackerAudioEnabled()) {
+		return "feature_disabled";
+	}
+
+	if (source == ACCESSIBILITY_TRACKER_SOURCE_INFRARED
+			&& !accessibilityIsIrScannerAudioEnabled()) {
+		return "feature_disabled";
+	}
+
+	if (source == ACCESSIBILITY_TRACKER_SOURCE_XRAY
+			&& !accessibilityIsXrayScannerAudioEnabled()) {
 		return "feature_disabled";
 	}
 
@@ -223,10 +286,10 @@ static const char *accessibilityTrackerScopeReason(void)
 		return "player_dead";
 	}
 
-	if (g_Vars.lvupdate60 <= 0) {
-		return "logical_time_stopped";
-	}
-
+	/*
+	 * lvupdate60 can be zero on an ordinary PC render/interpolation frame.
+	 * The explicit gates above distinguish actual pauses and invalid scopes.
+	 */
 	return NULL;
 }
 
@@ -281,7 +344,7 @@ static s32 accessibilityTrackerFindSlot(uintptr_t identity)
 	return -1;
 }
 
-static void accessibilityTrackerScan(void)
+static void accessibilityTrackerScan(s32 source)
 {
 	struct prop *prop = g_Vars.activeprops;
 	struct coord *playerpos = &g_Vars.currentplayer->prop->pos;
@@ -305,18 +368,62 @@ static void accessibilityTrackerScan(void)
 	}
 
 	while (prop) {
-		s32 category = radarGetRTrackedType(prop);
+		s32 category = RADAR_TRACKED_NONE;
+		f32 sourcedistance = -1.0f;
+
+		if (source == ACCESSIBILITY_TRACKER_SOURCE_RTRACKER) {
+			category = radarGetRTrackedType(prop);
+		} else if (source == ACCESSIBILITY_TRACKER_SOURCE_INFRARED
+				&& (prop->flags & PROPFLAG_ONANYSCREENPREVTICK)
+				&& (prop->type == PROPTYPE_OBJ
+					|| prop->type == PROPTYPE_DOOR
+					|| prop->type == PROPTYPE_WEAPON)
+				&& objIsHighlightedByInfrared(prop->obj)) {
+			category = ACCESSIBILITY_TRACKER_CATEGORY_INFRARED;
+		} else if (source == ACCESSIBILITY_TRACKER_SOURCE_XRAY
+				&& (prop->flags & PROPFLAG_ONANYSCREENPREVTICK)
+				&& (prop->type == PROPTYPE_OBJ
+					|| prop->type == PROPTYPE_DOOR
+					|| prop->type == PROPTYPE_WEAPON)
+				&& objGetXrayHighlightDistance(prop, &sourcedistance)) {
+			category = ACCESSIBILITY_TRACKER_CATEGORY_XRAY;
+		}
 
 		if (category != RADAR_TRACKED_NONE) {
+			struct accessibilitytrackercandidate *candidate = NULL;
+			f32 dx = prop->pos.x - playerpos->x;
+			f32 dz = prop->pos.z - playerpos->z;
+			f32 distance = sqrtf(dx * dx + dz * dz);
+
 			if (g_AccessibilityTrackerCandidateCount
 					< ACCESSIBILITY_TRACKER_SLOT_COUNT) {
-				struct accessibilitytrackercandidate *candidate
-						= &g_AccessibilityTrackerCandidates[
-								g_AccessibilityTrackerCandidateCount++];
-				f32 dx = prop->pos.x - playerpos->x;
-				f32 dz = prop->pos.z - playerpos->z;
-				f32 distance = sqrtf(dx * dx + dz * dz);
+				candidate = &g_AccessibilityTrackerCandidates[
+						g_AccessibilityTrackerCandidateCount++];
+			} else {
+				overflow++;
 
+				if (source == ACCESSIBILITY_TRACKER_SOURCE_XRAY) {
+					s32 i;
+					s32 farthest = 0;
+
+					for (i = 1; i < ACCESSIBILITY_TRACKER_SLOT_COUNT; i++) {
+						if (g_AccessibilityTrackerCandidates[i].sourcedistance
+								> g_AccessibilityTrackerCandidates[
+										farthest].sourcedistance) {
+							farthest = i;
+						}
+					}
+
+					if (sourcedistance
+							< g_AccessibilityTrackerCandidates[
+									farthest].sourcedistance) {
+						candidate = &g_AccessibilityTrackerCandidates[
+								farthest];
+					}
+				}
+			}
+
+			if (candidate) {
 				memset(candidate, 0, sizeof(*candidate));
 				candidate->identity = (uintptr_t)prop;
 				candidate->prop = prop;
@@ -324,6 +431,7 @@ static void accessibilityTrackerScan(void)
 				candidate->category = category;
 				candidate->position = prop->pos;
 				candidate->distance = distance;
+				candidate->sourcedistance = sourcedistance;
 				candidate->clampeddistance = distance
 						< ACCESSIBILITY_TRACKER_RADAR_DISTANCE
 							? distance : ACCESSIBILITY_TRACKER_RADAR_DISTANCE;
@@ -347,8 +455,6 @@ static void accessibilityTrackerScan(void)
 								- ACCESSIBILITY_TRACKER_NEAR_PERIOD_MS)
 								* candidate->clampeddistance
 								/ ACCESSIBILITY_TRACKER_RADAR_DISTANCE);
-			} else {
-				overflow++;
 			}
 		}
 
@@ -357,8 +463,9 @@ static void accessibilityTrackerScan(void)
 
 	if (overflow) {
 		accessibilityLogEvent("rtracker", "overflow",
-				"frame=%d capacity=%d retained=%d suppressed=%d",
-				g_Vars.lvframe60, ACCESSIBILITY_TRACKER_SLOT_COUNT,
+				"frame=%d source=%s capacity=%d retained=%d suppressed=%d",
+				g_Vars.lvframe60, accessibilityTrackerSourceName(source),
+				ACCESSIBILITY_TRACKER_SLOT_COUNT,
 				g_AccessibilityTrackerCandidateCount, overflow);
 	}
 
@@ -374,7 +481,7 @@ static void accessibilityTrackerScan(void)
 #endif
 }
 
-static void accessibilityTrackerUpdateSlots(void)
+static void accessibilityTrackerUpdateSlots(s32 source)
 {
 	s32 i;
 
@@ -384,8 +491,9 @@ static void accessibilityTrackerUpdateSlots(void)
 		if (slot->identity
 				&& accessibilityTrackerFindCandidate(slot->identity) < 0) {
 			accessibilityLogEvent("rtracker", "slot_release",
-					"frame=%d slot=%d identity=%p propnum=%d category=%s reason=target_unavailable",
-					g_Vars.lvframe60, i, (void *)slot->identity, slot->propnum,
+					"frame=%d source=%s slot=%d identity=%p propnum=%d category=%s reason=target_unavailable",
+					g_Vars.lvframe60, accessibilityTrackerSourceName(source),
+					i, (void *)slot->identity, slot->propnum,
 					accessibilityTrackerCategoryName(slot->category));
 			accessibilityToneSetTrackerSlot(i, false, 1.0f, 0.0f, 0.0f,
 					ACCESSIBILITY_TRACKER_FAR_PERIOD_MS,
@@ -438,8 +546,9 @@ static void accessibilityTrackerUpdateSlots(void)
 							: ACCESSIBILITY_TRACKER_HEIGHT_LEVEL;
 			slot->rear = candidate->forwarddot < 0.0f;
 			accessibilityLogEvent("rtracker", "slot_assign",
-					"frame=%d slot=%d identity=%p propnum=%d prop_type=%d category=%s position=%.3f,%.3f,%.3f",
-					g_Vars.lvframe60, slotnum, (void *)slot->identity,
+					"frame=%d source=%s slot=%d identity=%p propnum=%d prop_type=%d category=%s position=%.3f,%.3f,%.3f",
+					g_Vars.lvframe60, accessibilityTrackerSourceName(source),
+					slotnum, (void *)slot->identity,
 					slot->propnum, candidate->prop->type,
 					accessibilityTrackerCategoryName(slot->category),
 					candidate->position.x, candidate->position.y,
@@ -460,14 +569,16 @@ static void accessibilityTrackerUpdateSlots(void)
 		if (restart || oldheight != slot->height || oldrear != slot->rear
 				|| g_AccessibilityTrackerScanCount % 60 == 0) {
 			accessibilityLogEvent("rtracker", "candidate",
-					"frame=%d scan=%" PRIu64 " slot=%d identity=%p propnum=%d prop_type=%d category=%s position=%.3f,%.3f,%.3f distance=%.3f clamped_distance=%.3f height_delta=%.3f height=%s native_pan=%d pan=%.5f forward_dot=%.5f rear=%d frequency_hz=%.1f period_ms=%d restart=%d",
+					"frame=%d scan=%" PRIu64 " source=%s slot=%d identity=%p propnum=%d prop_type=%d category=%s position=%.3f,%.3f,%.3f distance=%.3f source_distance=%.3f clamped_distance=%.3f height_delta=%.3f height=%s native_pan=%d pan=%.5f forward_dot=%.5f rear=%d frequency_hz=%.1f period_ms=%d restart=%d",
 					g_Vars.lvframe60,
-					(uint64_t)g_AccessibilityTrackerScanCount, slotnum,
+					(uint64_t)g_AccessibilityTrackerScanCount,
+					accessibilityTrackerSourceName(source), slotnum,
 					(void *)candidate->identity, candidate->propnum,
 					candidate->prop->type,
 					accessibilityTrackerCategoryName(candidate->category),
 					candidate->position.x, candidate->position.y,
 					candidate->position.z, candidate->distance,
+					candidate->sourcedistance,
 					candidate->clampeddistance, candidate->heightdelta,
 					accessibilityTrackerHeightName(slot->height),
 					candidate->nativepan, candidate->pan,
@@ -481,6 +592,9 @@ void accessibilityTrackerTick(void)
 {
 	const char *scopereason;
 	s32 nativeactive;
+	s32 infraredactive;
+	s32 xrayactive;
+	s32 source;
 	s32 i;
 	s32 occupied;
 
@@ -490,6 +604,8 @@ void accessibilityTrackerTick(void)
 	}
 
 	nativeactive = accessibilityTrackerNativeActive();
+	infraredactive = accessibilityTrackerInfraredNativeActive();
+	xrayactive = accessibilityTrackerXrayNativeActive();
 
 	if (nativeactive != g_AccessibilityTrackerDeviceActive) {
 		g_AccessibilityTrackerDeviceActive = nativeactive;
@@ -505,22 +621,62 @@ void accessibilityTrackerTick(void)
 						true);
 			}
 			g_AccessibilityTrackerEmptyPending = false;
-			accessibilityTrackerStopAudio("device_deactivated");
 		}
 	}
 
-	scopereason = accessibilityTrackerScopeReason();
+	if (infraredactive != g_AccessibilityTrackerInfraredActive) {
+		g_AccessibilityTrackerInfraredActive = infraredactive;
+		accessibilityLogEvent("rtracker", "infrared_state",
+				"frame=%d active=%d", g_Vars.lvframe60, infraredactive);
+	}
 
-	if (!nativeactive) {
+	if (xrayactive != g_AccessibilityTrackerXrayActive) {
+		g_AccessibilityTrackerXrayActive = xrayactive;
+		accessibilityLogEvent("rtracker", "xray_state",
+				"frame=%d active=%d eraser_position=%.3f,%.3f,%.3f eraser_prop_distance=%.3f",
+				g_Vars.lvframe60, xrayactive,
+				g_Vars.currentplayer ? g_Vars.currentplayer->eraserpos.x : 0.0f,
+				g_Vars.currentplayer ? g_Vars.currentplayer->eraserpos.y : 0.0f,
+				g_Vars.currentplayer ? g_Vars.currentplayer->eraserpos.z : 0.0f,
+				g_Vars.currentplayer
+						? g_Vars.currentplayer->eraserpropdist : 0.0f);
+	}
+
+	source = nativeactive ? ACCESSIBILITY_TRACKER_SOURCE_RTRACKER
+			: infraredactive ? ACCESSIBILITY_TRACKER_SOURCE_INFRARED
+			: xrayactive ? ACCESSIBILITY_TRACKER_SOURCE_XRAY
+			: ACCESSIBILITY_TRACKER_SOURCE_NONE;
+
+	if (source != g_AccessibilityTrackerSource) {
+		accessibilityLogEvent("rtracker", "source_changed",
+				"frame=%d previous=%s current=%s", g_Vars.lvframe60,
+				accessibilityTrackerSourceName(g_AccessibilityTrackerSource),
+				accessibilityTrackerSourceName(source));
+		accessibilityTrackerStopAudio("source_changed");
+		g_AccessibilityTrackerSource = source;
+		g_AccessibilityTrackerAudioSuppressed = false;
+		g_AccessibilityTrackerLastScopeReason = NULL;
+		g_AccessibilityTrackerScanCount = 0;
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+		g_AccessibilityTrackerScanCurrentUs = 0;
+		g_AccessibilityTrackerScanTotalUs = 0;
+		g_AccessibilityTrackerScanMaxUs = 0;
+#endif
+	}
+
+	if (source == ACCESSIBILITY_TRACKER_SOURCE_NONE) {
 		return;
 	}
+
+	scopereason = accessibilityTrackerScopeReason(source);
 
 	if (scopereason) {
 		if (!g_AccessibilityTrackerAudioSuppressed
 				|| g_AccessibilityTrackerLastScopeReason != scopereason) {
 			accessibilityLogEvent("rtracker", "scope",
-					"frame=%d active=0 reason=%s", g_Vars.lvframe60,
-					scopereason);
+					"frame=%d source=%s active=0 reason=%s",
+					g_Vars.lvframe60,
+					accessibilityTrackerSourceName(source), scopereason);
 			accessibilityTrackerStopAudio(scopereason);
 		}
 		g_AccessibilityTrackerAudioSuppressed = true;
@@ -530,13 +686,23 @@ void accessibilityTrackerTick(void)
 
 	if (g_AccessibilityTrackerAudioSuppressed) {
 		accessibilityLogEvent("rtracker", "scope",
-				"frame=%d active=1 reason=eligible", g_Vars.lvframe60);
+				"frame=%d source=%s active=1 reason=eligible",
+				g_Vars.lvframe60,
+				accessibilityTrackerSourceName(source));
 		g_AccessibilityTrackerAudioSuppressed = false;
 		g_AccessibilityTrackerLastScopeReason = NULL;
 	}
 
-	accessibilityTrackerScan();
-	accessibilityTrackerUpdateSlots();
+	/*
+	 * Retain the current voices on an interpolation-only render frame, but do
+	 * not rescan unchanged logical state or advance diagnostic scan counters.
+	 */
+	if (g_Vars.lvupdate60 <= 0) {
+		return;
+	}
+
+	accessibilityTrackerScan(source);
+	accessibilityTrackerUpdateSlots(source);
 
 	if (g_AccessibilityTrackerScanCount % 60 == 0) {
 		occupied = 0;
@@ -549,8 +715,8 @@ void accessibilityTrackerTick(void)
 
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 		accessibilityLogEvent("rtracker", "scan_summary",
-				"frame=%d scans=%" PRIu64 " candidates=%d occupied=%d scan_us=%" PRIu64 " scan_total_us=%" PRIu64 " scan_max_us=%" PRIu64,
-				g_Vars.lvframe60,
+				"frame=%d source=%s scans=%" PRIu64 " candidates=%d occupied=%d scan_us=%" PRIu64 " scan_total_us=%" PRIu64 " scan_max_us=%" PRIu64,
+				g_Vars.lvframe60, accessibilityTrackerSourceName(source),
 				(uint64_t)g_AccessibilityTrackerScanCount,
 				g_AccessibilityTrackerCandidateCount, occupied,
 				(uint64_t)g_AccessibilityTrackerScanCurrentUs,
@@ -558,16 +724,18 @@ void accessibilityTrackerTick(void)
 				(uint64_t)g_AccessibilityTrackerScanMaxUs);
 #else
 		accessibilityLogEvent("rtracker", "scan_summary",
-				"frame=%d scans=%" PRIu64 " candidates=%d occupied=%d",
-				g_Vars.lvframe60,
+				"frame=%d source=%s scans=%" PRIu64 " candidates=%d occupied=%d",
+				g_Vars.lvframe60, accessibilityTrackerSourceName(source),
 				(uint64_t)g_AccessibilityTrackerScanCount,
 				g_AccessibilityTrackerCandidateCount, occupied);
 #endif
 	}
 
-	if (g_AccessibilityTrackerCandidateCount > 0) {
+	if (source == ACCESSIBILITY_TRACKER_SOURCE_RTRACKER
+			&& g_AccessibilityTrackerCandidateCount > 0) {
 		g_AccessibilityTrackerEmptyPending = false;
-	} else if (g_AccessibilityTrackerEmptyPending
+	} else if (source == ACCESSIBILITY_TRACKER_SOURCE_RTRACKER
+			&& g_AccessibilityTrackerEmptyPending
 			&& g_Vars.lvframe60 >= g_AccessibilityTrackerEmptyDeadline) {
 		accessibilityTrackerSpeak("empty", "No tracked targets", false);
 		g_AccessibilityTrackerEmptyPending = false;
@@ -581,6 +749,9 @@ void accessibilityTrackerReset(const char *reason)
 			sizeof(g_AccessibilityTrackerCandidates));
 	g_AccessibilityTrackerCandidateCount = 0;
 	g_AccessibilityTrackerDeviceActive = false;
+	g_AccessibilityTrackerInfraredActive = false;
+	g_AccessibilityTrackerXrayActive = false;
+	g_AccessibilityTrackerSource = ACCESSIBILITY_TRACKER_SOURCE_NONE;
 	g_AccessibilityTrackerAudioSuppressed = false;
 	g_AccessibilityTrackerEmptyPending = false;
 	g_AccessibilityTrackerEmptyDeadline = 0;

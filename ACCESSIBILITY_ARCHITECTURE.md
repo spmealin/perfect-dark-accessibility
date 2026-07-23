@@ -95,6 +95,8 @@ Targeting uses a two-phase observation. It captures fixed-size projected bounds 
 
 The R-Tracker is a separate semantic radar rather than an extension of combat targeting. `radarGetRTrackedType` is the single eligibility boundary used by both the native renderer and the accessibility adapter: yellow/blue object flags, the blue-marker cheat gate, and tracked-character life/cloak state remain native policy. The adapter scans active props only while the native device is active, assigns stable identities to ten fixed oscillator voices, and communicates category, bearing, front/rear, horizontal distance, and relative height. It intentionally preserves the visual radar's lack of line-of-sight, room, and render restrictions.
 
+The mutually exclusive IR and X-Ray Scanners reuse those ten voices for viewport-bound sources. `objIsHighlightedByInfrared` is shared with `objRender`, so IR admits only conditional-scenery and explicit-infrared objects that receive the special white highlight. X-Ray has no target flag: `objGetXrayHighlightDistance` shares the renderer's eraser-origin/radius calculation, and the adapter retains the nearest ten rendered object/door/weapon props. Single-player `PROPFLAG_ONANYSCREENPREVTICK` supplies stable evidence from the preceding rendered frame after `lvTick` clears the current-screen bit. This creates one frame of deliberate latency while avoiding another projection pass, render-hook state, or off-screen disclosure. Device-bit gating excludes the Farsight's separate X-Ray vision mode.
+
 ### Input, audio, native platform, and repository boundaries
 
 `port/src/input.c` and `port/include/input.h` implement SDL keyboard, mouse, and controller input, binding persistence, and direct key/button queries. Existing bindings primarily represent emulated game controls. Accessibility commands such as repeat, cancel, status, and scan need a collision-free action design rather than scattered hard-coded keys.
@@ -231,9 +233,11 @@ Accessibility.MenuNarration=1
 Accessibility.HudMessages=1
 Accessibility.EnvironmentalHazards=1
 Accessibility.InteractableBeacons=1
+Accessibility.IRScannerAudio=1
 Accessibility.NonHostileBeacons=1
 Accessibility.TargetingFeedback=1
 Accessibility.WeaponFunctionCues=1
+Accessibility.XRayScannerAudio=1
 Accessibility.VirtualCaneMode=1
 Accessibility.RTrackerAudio=1
 ```
@@ -333,7 +337,7 @@ This table records implemented and anticipated changes to established files so f
 | `src/game/prop.c` and `src/include/game/prop.h` | Offer an optional hit-coordinate result from the existing non-shooting aim query | Selected query prop and its already-calculated collision point | Fine aim cannot truthfully use projected bounds, and repeating the collision query would duplicate expensive work | `propFindAimingAtWithHit` wraps the unchanged query path; ordinary callers and shot behavior remain unchanged |
 | `src/game/sight.c` | Expose sight-validity/friendliness helpers to adapter | Eligibility and relationship | Avoid duplicating sight rules | Question; prefer existing public APIs if sufficient |
 | `src/game/radar.c`, `src/include/game/radar.h` | Expose one read-only R-Tracker marker classification and make the native renderer consume it | None/yellow/blue/character category for an active prop | A second copy of cheat, cloak, death, and flag rules could drift from the visual radar and disclose different targets | Implemented for the nonvisual R-Tracker slice; rendering output is otherwise unchanged |
-| `src/game/propobj.c` | Expose the smallest pure/read-only CI object and door eligibility/grouping helpers only if existing public queries are insufficient | Semantic eligibility, CI tag, door canonical identity, and state | Existing immediate interaction tests mix actionability with render/facing/range checks and mutate the selected interaction path | No hook needed in Milestone 5; the core combines existing `propobjGetCiTagId`, `objIsHealthy`, flags, and door data without calling action tests |
+| `src/game/propobj.c`, `src/include/game/propobj.h` | Expose the renderer's pure IR classification and X-Ray eraser-range query while retaining existing beacon eligibility locally | Conditional-scenery/infrared visual-highlight state and X-Ray distance/range | Copied flag or eraser math could drift from rendering and announce a different object set | `objIsHighlightedByInfrared` and `objGetXrayHighlightDistance` are shared by rendering and scanner audio; beacon eligibility still needs no game hook |
 | `src/game/propsnd.c` | Reuse public read-only distance-volume and pan calculations for procedural spatial cues | World position, distance, range, volume, and pan | Procedural cues should retain the tested spatial behavior without allocating or stopping gameplay channels | No hook needed; beacon and hazard cores call `psCalculateVolumeFromDistance` and `psCalculatePan` |
 | `src/include/constants.h` | Reserve `PSTYPE_ACCESSIBILITY_TARGETING` | Prop-sound ownership for target-presence cues only | Targeting must stop/reuse only its own positioned sample, never gameplay sounds | Targeting owner added in the Milestone 9 firing-range slice; the obsolete beacon owner was removed when beacons moved to the procedural chirp lane |
 | `port/include/input.h` | Use provisional context-sensitive PC F4/F5/F6/F7/F8 accessibility keys and expose both Alt modifier bits | Development-only action identifiers | Gameplay uses F4 for virtual-cane mode, F5/F6/F8 for CI interactable/door/pickup beacons, and F7 for non-hostile people; menus retain their F5/F6 contexts; Alt+F4 must not change cane state | F7 was previously absent from the virtual-key enum and unbound in the default PC input path; replacement by Milestone 6 actions/settings remains required |

@@ -4,7 +4,7 @@
 
 This work aims to make the Perfect Dark PC port meaningfully playable by blind and low-vision players, starting with nonvisual access to menus and essential game state and progressing through small, testable gameplay slices.
 
-The current branch contains the accessibility coordinator/logger, Tolk/NVDA speech backend, menu-agnostic focus narration, non-subtitle HUD-message speech, Carrington Institute interaction/door/pickup beacons, non-hostile-character beacons, damaging-laser hazard cues, firing-range, hostile-character, and initial device-target feedback, weapon-function state cues, a seven-direction virtual-cane prototype, and a nonvisual R-Tracker interface. All implemented feature backends default to enabled for blind-user acceptance testing; the cane defaults to Slow mode. Menu narration has passed project-owner blind-user acceptance, while the newer gameplay slices retain the narrower evidence and pending tests documented below and in `ACCESSIBILITY_TESTING.md`. Broader navigation/route guidance, combat categories beyond characters, and full-game accessibility are not implemented.
+The current branch contains the accessibility coordinator/logger, Tolk/NVDA speech backend, menu-agnostic focus narration, non-subtitle HUD-message speech, Carrington Institute interaction/door/pickup beacons, non-hostile-character beacons, damaging-laser hazard cues, firing-range, hostile-character, and initial device-target feedback, weapon-function state cues, a seven-direction virtual-cane prototype, a nonvisual R-Tracker interface, and on-screen IR/X-Ray Scanner object audio. All implemented feature backends default to enabled for blind-user acceptance testing; the cane defaults to Slow mode. Menu narration has passed project-owner blind-user acceptance, while the newer gameplay slices retain the narrower evidence and pending tests documented below and in `ACCESSIBILITY_TESTING.md`. Broader navigation/route guidance, combat categories beyond characters, and full-game accessibility are not implemented.
 
 The firing-range weapon list announces the same completed bronze, silver, and gold proficiency stars rendered beside each weapon. It reads only the filled stars represented by the saved score and does not infer incomplete progress or expose state absent from the visual row.
 
@@ -39,6 +39,22 @@ The audio adapter shares one classification function with the native radar. It t
 Ten preallocated voices let all audited base-game markers sound concurrently without consuming game sound channels. Yellow, red, and blue markers use 700, 520, and 1000 Hz respectively. The engine's established property-sound pan calculation communicates left/right bearing; a light 30 Hz amplitude modulation distinguishes markers behind the player. Distance changes the interval smoothly from approximately 1.2 seconds at the radar edge to 0.2 seconds nearby without reducing volume. A level marker uses one chirp, an above marker uses a rising double chirp, and a below marker uses a falling double chirp. Slot phases are staggered and identities remain stable until the native marker disappears.
 
 Menus, pause, cutscenes, death, unsupported multiplayer, stage teardown, feature disable, and shutdown silence the fixed voices. Temporary suppression does not falsely announce device deactivation. The full contract, audited marker counts, performance thresholds, and test matrix are in `ACCESSIBILITY_RTRACKER_AUDIO_SPEC.md`.
+
+### IR Scanner highlight audio
+
+`Accessibility.IRScannerAudio` defaults to `1` and is subordinate to `Accessibility.Enabled`. While the native IR Scanner is active, an object that received the visual scanner highlight in the preceding rendered frame uses the R-Tracker's yellow-object 700 Hz spatial pattern. Up to ten highlighted objects can sound concurrently through the same fixed voice pool; the game does not permit the R-Tracker and IR Scanner to be active together.
+
+Eligibility shares `objIsHighlightedByInfrared` with the object renderer, covering `OBJHFLAG_CONDITIONALSCENERY` and `OBJFLAG3_INFRARED` objects such as the CI training secret door. The accessibility adapter additionally requires `PROPFLAG_ONANYSCREENPREVTICK` in single-player, which is the engine's retained evidence that the object was rendered on the player's preceding frame. Turning away removes the sound after that one-frame observation delay. Ordinary objects merely recolored by the overall IR palette and characters rendered in the scanner's global red treatment are not classified as special highlighted-object targets.
+
+The cue inherits R-Tracker bearing, rear modulation, distance cadence, relative-height pattern, lifecycle suppression, fixed capacity, and allocation-free mixer behavior. It adds no line-of-sight scan, projection estimate, object name, or off-screen awareness. Logs identify `source=ir_scanner` and `category=infrared_highlight`.
+
+### X-Ray Scanner object audio
+
+`Accessibility.XRayScannerAudio` defaults to `1` and is subordinate to `Accessibility.Enabled`. Unlike IR, the native X-Ray renderer has no special target flag: it recolors every rendered object inside the stage's X-Ray eraser radius. The accessibility adapter mirrors that contract for object, door, and weapon props observed on the preceding rendered frame and accepted by the same `objGetXrayHighlightDistance` range calculation used by `objRender`.
+
+The nearest ten eligible objects receive the same 700 Hz R-Tracker pattern. Nearest-first capacity protects the bounded mixer from dense scenes; overflow is logged. Characters are excluded from this generic object lane because hostile, non-hostile, and targeting systems already provide relationship-aware character cues. The feature is tied specifically to the X-Ray Scanner device, so the Farsight's separate use of `VISIONMODE_XRAY` does not activate it.
+
+Turning or moving automatically refreshes membership. The cue inherits the shared voice pool, spatial pattern, lifecycle suppression, and one-rendered-frame observation delay. It does not identify which visible shape is an exercise switch, announce object names, or expose anything outside the native X-Ray render radius. Logs identify `source=xray_scanner`, `category=xray_highlight`, the native eraser distance, capacity overflow, and slot changes.
 
 ### Hostile-character targeting
 

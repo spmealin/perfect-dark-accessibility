@@ -132,6 +132,28 @@ Engineering extension: an active CamSpy now contributes incomplete engine hologr
 - **Risks:** Ten concurrent voices may mask speech or other cues; stereo plus modulation may not make front/rear sufficiently distinct; vertical and cadence thresholds require blind-user tuning; the current single-player policy leaves cooperative composition unresolved. A scan above 0.5 ms sustained or 2 ms once requires investigation.
 - **Explicit non-goals:** No target names, objective status, route guidance, line-of-sight filtering, aim automation, multiplayer radar, ordinary scenario/player radar elements, runtime allocation, or game sound-channel consumption.
 
+### Prioritized IR Scanner highlighted-object slice
+
+- **Status:** Engineering implementation added; runtime and blind-user acceptance are pending.
+- **Goal:** Give nonvisual access to the special objects visually highlighted by the IR Scanner, limited to the player's rendered viewport.
+- **Systems:** Shared object-renderer highlight predicate, previous-frame onscreen state, native IR device state, R-Tracker fixed voices, independent default-on configuration, lifecycle suppression, and structured logs.
+- **Initial behavior:** While the IR Scanner is active, up to ten preceding-frame onscreen objects carrying conditional-scenery or infrared-highlight state use the R-Tracker yellow-object 700 Hz pattern. Ordinary palette-treated scenery and characters are excluded. Turning away removes a cue automatically, and the mutually exclusive scanners share rather than duplicate the ten-voice pool.
+- **Acceptance:** In CI training, verify the highlighted secret door appears only while on-screen; then verify turning, distance, elevation, menu/pause/device/stage transitions, feature disable, repeated sessions, and at least one equivalent mission object.
+- **Evidence:** Correlate native IR activation and `source=ir_scanner`, `category=infrared_highlight` candidate/slot records with the visible highlight; audit overflow, scan duration, active voice count, memory, and frame cadence.
+- **Risks:** `PROPFLAG_ONANYSCREENPREVTICK` intentionally introduces one rendered-frame latency; dense scenes can exceed ten highlighted objects; the special-highlight flag contract may cover linked scenery whose visible state changes during destruction.
+- **Explicit non-goals:** No sound for the scanner's general red palette, ordinary characters, off-screen objects, names, line-of-sight inference, hidden route guidance, or additional mixer allocation.
+
+### Prioritized X-Ray Scanner object slice
+
+- **Status:** Engineering implementation added alongside the IR Scanner slice; combined runtime and blind-user acceptance are pending.
+- **Goal:** Sonify the object/door/weapon props recolored by the native X-Ray Scanner while preserving its viewport and eraser-radius limits.
+- **Systems:** Shared renderer eraser-distance query, previous-frame onscreen state, native device versus Farsight distinction, nearest-ten bounded selection, R-Tracker fixed voices, independent default-on configuration, lifecycle suppression, and logging.
+- **Initial behavior:** The nearest ten X-Ray-rendered object/door/weapon props use the 700 Hz R-Tracker pattern and update automatically as the player turns or moves. Characters are excluded from this generic lane. The Farsight's use of X-Ray vision does not activate the scanner feature.
+- **Acceptance:** In CI training, use cues to locate both hidden switches while confirming ordinary rendered props can also sound; verify viewport/radius entry and exit, nearest-ten overflow, stable direction, device/menu/pause/stage cleanup, configuration disable, repeated sessions, and a later non-CI scanner context.
+- **Evidence:** Correlate X-Ray device/vision state, eraser origin/radius, native source distance, candidate/slot/overflow records, active voice counts, frame cadence, and memory over repeated tests.
+- **Risks:** The native view highlights all in-range objects rather than a semantic target subset, so dense audio and ten-slot omission need blind-user evaluation. Nearest-first selection may still mask a desired switch behind closer furniture, and one-frame viewport evidence adds deliberate latency.
+- **Explicit non-goals:** No exercise-tag special case, target/actionability claim, character duplication, Farsight support, names, off-screen awareness, automated interaction, or extra allocation.
+
 ### Prioritized environmental-hazard slice
 
 - **Status:** Generic damaging-laser implementation builds; runtime and blind-user acceptance are pending.

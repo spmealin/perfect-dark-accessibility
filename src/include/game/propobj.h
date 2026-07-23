@@ -28,6 +28,8 @@ void countdownTimerTick(void);
 bool doorCallLift(struct prop *doorprop, bool allowclose);
 bool doorIsPadlockFree(struct doorobj *door);
 bool objCanPickupFromSafe(struct defaultobj *obj);
+bool objIsHighlightedByInfrared(const struct defaultobj *obj);
+bool objGetXrayHighlightDistance(const struct prop *prop, f32 *distance);
 void objUpdateLinkedScenery(struct defaultobj *obj, struct prop *prop);
 f32 objGetLocalXMin(struct modelrodata_bbox *bbox);
 f32 objGetLocalXMax(struct modelrodata_bbox *bbox);

@@ -23,10 +23,12 @@ static s32 g_AccessibilityMenuNarrationEnabledConfig = 1;
 static s32 g_AccessibilityHudMessagesEnabledConfig = 1;
 static s32 g_AccessibilityEnvironmentalHazardsEnabledConfig = 1;
 static s32 g_AccessibilityInteractableBeaconsEnabledConfig = 1;
+static s32 g_AccessibilityIrScannerAudioEnabledConfig = 1;
 static s32 g_AccessibilityNonHostileBeaconsEnabledConfig = 1;
 static s32 g_AccessibilityRTrackerAudioEnabledConfig = 1;
 static s32 g_AccessibilityTargetingFeedbackEnabledConfig = 1;
 static s32 g_AccessibilityWeaponFunctionCuesEnabledConfig = 1;
+static s32 g_AccessibilityXrayScannerAudioEnabledConfig = 1;
 static s32 g_AccessibilityVirtualCaneModeConfig = 1;
 static s32 g_AccessibilityInitialized = 0;
 static s32 g_AccessibilityEnabled = 0;
@@ -53,21 +55,23 @@ void accessibilityInit(void)
 		return;
 	}
 
-	sysLogPrintf(LOG_NOTE, "accessibility: enabled (logging %s, speech %s, HUD messages %s, environmental hazards %s, interactable beacons %s, non-hostile beacons %s, R-Tracker audio %s, targeting feedback %s, weapon function cues %s, virtual cane mode %d)",
+	sysLogPrintf(LOG_NOTE, "accessibility: enabled (logging %s, speech %s, HUD messages %s, environmental hazards %s, interactable beacons %s, IR Scanner audio %s, non-hostile beacons %s, R-Tracker audio %s, targeting feedback %s, weapon function cues %s, X-Ray Scanner audio %s, virtual cane mode %d)",
 			g_AccessibilityLoggingEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilitySpeechEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityHudMessagesEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityEnvironmentalHazardsEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityInteractableBeaconsEnabledConfig ? "enabled" : "disabled",
+			g_AccessibilityIrScannerAudioEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityNonHostileBeaconsEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityRTrackerAudioEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityTargetingFeedbackEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityWeaponFunctionCuesEnabledConfig ? "enabled" : "disabled",
+			g_AccessibilityXrayScannerAudioEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityVirtualCaneModeConfig);
 
 	if (g_AccessibilityLoggingEnabledConfig && accessibilityLogInit()) {
 		accessibilityLogEvent("lifecycle", "session_start",
-				"enabled=%d logging=%d speech=%d menu_narration=%d hud_messages=%d environmental_hazards=%d interactable_beacons=%d non_hostile_beacons=%d rtracker_audio=%d targeting_feedback=%d weapon_function_cues=%d virtual_cane_mode=%d performance_diagnostics=%d performance_interval_us=%d speech_test=%d path=%s",
+				"enabled=%d logging=%d speech=%d menu_narration=%d hud_messages=%d environmental_hazards=%d interactable_beacons=%d ir_scanner_audio=%d non_hostile_beacons=%d rtracker_audio=%d targeting_feedback=%d weapon_function_cues=%d xray_scanner_audio=%d virtual_cane_mode=%d performance_diagnostics=%d performance_interval_us=%d speech_test=%d path=%s",
 				g_AccessibilityEnabledConfig,
 				g_AccessibilityLoggingEnabledConfig,
 				g_AccessibilitySpeechEnabledConfig,
@@ -75,10 +79,12 @@ void accessibilityInit(void)
 				g_AccessibilityHudMessagesEnabledConfig,
 				g_AccessibilityEnvironmentalHazardsEnabledConfig,
 				g_AccessibilityInteractableBeaconsEnabledConfig,
+				g_AccessibilityIrScannerAudioEnabledConfig,
 				g_AccessibilityNonHostileBeaconsEnabledConfig,
 				g_AccessibilityRTrackerAudioEnabledConfig,
 				g_AccessibilityTargetingFeedbackEnabledConfig,
 				g_AccessibilityWeaponFunctionCuesEnabledConfig,
+				g_AccessibilityXrayScannerAudioEnabledConfig,
 				g_AccessibilityVirtualCaneModeConfig,
 				ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS,
 				ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS ? 1000000 : 0,
@@ -162,6 +168,12 @@ s32 accessibilityIsInteractableBeaconsEnabled(void)
 	return g_AccessibilityEnabled && g_AccessibilityInteractableBeaconsEnabledConfig;
 }
 
+s32 accessibilityIsIrScannerAudioEnabled(void)
+{
+	return g_AccessibilityEnabled
+			&& g_AccessibilityIrScannerAudioEnabledConfig;
+}
+
 s32 accessibilityIsNonHostileBeaconsEnabled(void)
 {
 	return g_AccessibilityEnabled
@@ -183,6 +195,12 @@ s32 accessibilityIsWeaponFunctionCuesEnabled(void)
 {
 	return g_AccessibilityEnabled
 			&& g_AccessibilityWeaponFunctionCuesEnabledConfig;
+}
+
+s32 accessibilityIsXrayScannerAudioEnabled(void)
+{
+	return g_AccessibilityEnabled
+			&& g_AccessibilityXrayScannerAudioEnabledConfig;
 }
 
 s32 accessibilityGetVirtualCaneMode(void)
@@ -214,9 +232,11 @@ PD_CONSTRUCTOR static void accessibilityConfigInit(void)
 	configRegisterInt("Accessibility.HudMessages", &g_AccessibilityHudMessagesEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.EnvironmentalHazards", &g_AccessibilityEnvironmentalHazardsEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.InteractableBeacons", &g_AccessibilityInteractableBeaconsEnabledConfig, 0, 1);
+	configRegisterInt("Accessibility.IRScannerAudio", &g_AccessibilityIrScannerAudioEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.NonHostileBeacons", &g_AccessibilityNonHostileBeaconsEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.RTrackerAudio", &g_AccessibilityRTrackerAudioEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.TargetingFeedback", &g_AccessibilityTargetingFeedbackEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.WeaponFunctionCues", &g_AccessibilityWeaponFunctionCuesEnabledConfig, 0, 1);
+	configRegisterInt("Accessibility.XRayScannerAudio", &g_AccessibilityXrayScannerAudioEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.VirtualCaneMode", &g_AccessibilityVirtualCaneModeConfig, 0, 2);
 }

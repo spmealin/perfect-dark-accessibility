@@ -222,10 +222,10 @@ static const char *accessibilityTargetingGameScopeReason(void)
 		return "player_dead";
 	}
 
-	if (g_Vars.lvupdate60 <= 0) {
-		return "logical_time_stopped";
-	}
-
+	/*
+	 * lvupdate60 can be zero on an ordinary PC render/interpolation frame.
+	 * The explicit gates above distinguish actual pauses and invalid scopes.
+	 */
 	return NULL;
 }
 

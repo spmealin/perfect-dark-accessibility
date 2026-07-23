@@ -259,6 +259,24 @@ bool objCanPickupFromSafe(struct defaultobj *obj)
 	return true;
 }
 
+bool objIsHighlightedByInfrared(const struct defaultobj *obj)
+{
+	return obj && ((obj->hidden & OBJHFLAG_CONDITIONALSCENERY)
+			|| (obj->flags3 & OBJFLAG3_INFRARED));
+}
+
+bool objGetXrayHighlightDistance(const struct prop *prop, f32 *distance)
+{
+	if (!prop || !distance || !g_Vars.currentplayer
+			|| g_Vars.currentplayer->visionmode != VISIONMODE_XRAY) {
+		return false;
+	}
+
+	*distance = sqrtf(ERASERSQDIST(prop->pos.f));
+
+	return !(*distance > g_Vars.currentplayer->eraserpropdist);
+}
+
 void objUpdateLinkedScenery(struct defaultobj *obj, struct prop *prop)
 {
 	if ((obj->hidden & OBJHFLAG_CONDITIONALSCENERY) && (obj->flags & OBJFLAG_INVINCIBLE) == 0) {
@@ -13682,10 +13700,7 @@ Gfx *objRender(struct prop *prop, Gfx *gdl, bool xlupass)
 			return gdl;
 		}
 	} else if (g_Vars.currentplayer->visionmode == VISIONMODE_XRAY) {
-		fadedist;
-		objdist = sqrtf(ERASERSQDIST(prop->pos.f));
-
-		if (objdist > g_Vars.currentplayer->eraserpropdist) {
+		if (!objGetXrayHighlightDistance(prop, &objdist)) {
 			return gdl;
 		}
 
@@ -13847,7 +13862,7 @@ Gfx *objRender(struct prop *prop, Gfx *gdl, bool xlupass)
 			colour[3] = var8009caee;
 		}
 	} else if (USINGDEVICE(DEVICE_IRSCANNER)) {
-		if ((obj->hidden & OBJHFLAG_CONDITIONALSCENERY) || (obj->flags3 & OBJFLAG3_INFRARED)) {
+		if (objIsHighlightedByInfrared(obj)) {
 			colour[0] = 0xff;
 			colour[1] = 0xff;
 			colour[2] = 0xff;

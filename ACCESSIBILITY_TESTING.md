@@ -117,9 +117,11 @@ MenuNarration=1
 HudMessages=1
 EnvironmentalHazards=1
 InteractableBeacons=1
+IRScannerAudio=1
 NonHostileBeacons=1
 TargetingFeedback=1
 WeaponFunctionCues=1
+XRayScannerAudio=1
 VirtualCaneMode=1
 RTrackerAudio=1
 ```
@@ -305,11 +307,11 @@ For the current Carrington Institute firing-range proof, first verify that the p
 
 #### Virtual cane prototype
 
-Confirm the effective session-start record contains `virtual_cane_mode=1`. During unobscured single-player walking gameplay, press F4 repeatedly and verify the order is Slow to Fast to Off to Slow. There must be no speech or separate confirmation earcon. Left Alt+F4 and Right Alt+F4 must not change cane state; if the operating system leaves the game running, releasing Alt while F4 remains held must not produce a delayed mode change. Menus, pause, cutscenes, death, stopped simulation, non-walking movement, and multiplayer must suppress the command and stop all cane audio.
+Confirm the effective session-start record contains `virtual_cane_mode=1`. During unobscured single-player walking gameplay, press F4 repeatedly and verify the order is Slow to Fast to Off to Slow. There must be no speech or separate confirmation earcon. Left Alt+F4 and Right Alt+F4 must not change cane state; if the operating system leaves the game running, releasing Alt while F4 remains held must not produce a delayed mode change. Menus, pause, cutscenes, death, non-walking movement, and multiplayer must suppress the command and stop all cane audio.
 
 Use controlled geometry for the first pass. Face a flat wall, an angled wall, an inside and outside corner, a doorway, a narrow opening, a pillar/crate, a closed/partly open/open door, a small traversable step, a low obstruction while standing and crouching, a pickup/non-solid decoration, and open space. Verify the audible sequence always travels left to right through -45, -30, -15, 0, 15, 30, and 45 degrees; a miss is silent; characters are not cane targets; door/object collision follows whether the player can currently move through it; and open space produces a silent cycle rather than a confirmation cue. Correlate each observation with the aggregate `cane/sweep` sample fields, especially raw collision point, normal, obstacle/type, bbox, distance, pan, and result. Validate that the returned collision point sounds like the barrier surface rather than the stopped center of the player cylinder.
 
-Measure Slow as 120 logical ticks including a 30-tick end pause and Fast as 60 logical ticks including a 15-tick end pause in the default NTSC-final build. Walk and turn continuously during both modes: each scheduled sample must use its own live origin and camera direction, and movement must not restart the sequence. Induce a hitch where practical and confirm no more than one query occurs in a logical tick, overdue samples increment `skipped`, and no catch-up burst is heard. Repeat across room and stage transitions and confirm all seven requested/active mixer bits clear on stop.
+Measure Slow as 120 logical ticks including a 30-tick end pause and Fast as 60 logical ticks including a 15-tick end pause in the default NTSC-final build. Walk and turn continuously during both modes: each scheduled sample must use its own live origin and camera direction, and movement must not restart the sequence. Ordinary PC render/interpolation frames with `lvupdate60=0` must preserve the in-progress sweep rather than stopping and restarting at the leftmost sample; verify this at a steady 60 fps and while IR/X-Ray scanner audio or targeting feedback is active. Induce a hitch where practical and confirm no more than one query occurs in a logical tick, overdue samples increment `skipped`, and no catch-up burst is heard. Repeat across room and stage transitions and confirm all seven requested/active mixer bits clear on stop.
 
 Deploy a CamSpy while a cane sweep is active. On the same perspective transition, the incomplete Joanna sweep must stop and a fresh sweep must begin from the CamSpy position, rooms, look direction, and collision cylinder; it must not wait for movement or an F4 toggle. Fly toward walls, angled surfaces, doors, and openings that are remote from Joanna and compare the cue sequence with the CamSpy image. Return to Joanna and confirm an immediate fresh body-origin sweep with the selected Slow/Fast mode preserved. Correlate `cane/observer_change` and each sample's `observer`/`remote` fields; test rapid switches and CamSpy destruction for stale mixer bits, collision errors, or a frame-time regression.
 
@@ -365,6 +367,20 @@ Collect the tracked scanner and confirm the voice disappears. Deactivate the dev
 In Skedar Ruins, verify all three tracked pillars sound at once and disappear individually when their native markers clear. On Attack Ship, verify simultaneous yellow objects and red tracked characters, including removal of a dead or cloaked tracked character. With the native R-Tracker cheat enabled, verify blue items use the distinct 1000 Hz category and coexist with the other categories. The audited maximum is eight markers; logs must report any overflow beyond the ten fixed slots.
 
 Correlate perceived output with `rtracker/announcement`, `scope`, `slot_assign`, `candidate`, `slot_release`, `overflow`, and `scan_summary` events. With `ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS=ON`, also inspect `tracker_enabled_slots`, R-Tracker scan timing, frame gaps, memory deltas, and mixer activity over repeated sessions. Investigate scans above the specification's thresholds or any sustained growth/choppiness. The complete semantic and acoustic contract is `ACCESSIBILITY_RTRACKER_AUDIO_SPEC.md`.
+
+### IR Scanner highlighted-object acceptance
+
+With `Accessibility.IRScannerAudio=1`, start the CI IR Scanner exercise and activate the scanner. Face the native highlighted secret door and confirm one 700 Hz R-Tracker-style spatial pattern appears after it has rendered on-screen. Turn until the object leaves the viewport and confirm the voice stops after no more than the expected one-frame observation delay; turn back and confirm automatic reacquisition. Verify left/right direction against the accepted engine panner, front/rear modulation, distance cadence, and relative-height pattern.
+
+Approach ordinary doors, props, and characters that receive only the scanner's general palette treatment and confirm they do not gain this special target cue. Deactivate or inhibit the IR Scanner, open a menu, pause, complete/abort the exercise, and leave the stage; every voice must stop. Repeat with `IRScannerAudio=0` while leaving other accessibility features enabled. Correlate `rtracker/infrared_state`, `source_changed`, `scope`, `slot_assign`, `candidate source=ir_scanner category=infrared_highlight`, `slot_release`, and `scan_summary` records with the visible target. Test a later mission object carrying `OBJFLAG3_INFRARED` or conditional-scenery state to confirm the behavior is not CI-tag-specific.
+
+### X-Ray Scanner object acceptance
+
+With `Accessibility.XRayScannerAudio=1`, start the CI X-Ray exercise and activate the scanner. Every object, door, or weapon that the X-Ray renderer recolors inside its eraser radius and that appeared in the preceding rendered frame is eligible; the nearest ten receive the shared 700 Hz spatial pattern. Turn away and back to verify automatic removal/reacquisition after the one-frame observation delay. Move toward and away from several shapes to verify nearest-ten replacement, stable slots, direction, cadence, and elevation without stuck voices.
+
+Locate both hidden exercise switches using the audio and confirm their cues remain available when the X-Ray view renders them through intervening geometry. The cue represents a rendered object, not actionability: ordinary furniture and doors may also sound, and activating a switch remains governed by the game. Confirm characters do not receive this generic object cue. Deactivate/inhibit the scanner, open a menu, pause, complete/abort the exercise, leave the stage, and repeat with `XRayScannerAudio=0`; all owned voices must stop. Equip and aim a Farsight and confirm its X-Ray vision mode does not activate this device feature.
+
+Correlate `rtracker/xray_state`, `source_changed`, `scope`, `candidate source=xray_scanner category=xray_highlight`, `slot_assign`, `slot_release`, `overflow`, and `scan_summary` records with the rendered objects. Check `source_distance` against the logged eraser origin/radius and confirm overflow retains the nearest ten. Repeat in a mission where the scanner is available to verify the source is not CI-tag-specific.
 
 A reproducible report includes the commit/patch, config values relevant to accessibility, start state, steps, expected/actual result, timestamps/session ID, and whether the result reproduces after a clean restart. Do not require another developer to possess the tester's save; provide a lawful setup route when possible.
 
