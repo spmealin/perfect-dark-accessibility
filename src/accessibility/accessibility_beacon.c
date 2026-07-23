@@ -378,15 +378,14 @@ static s32 accessibilityBeaconObjectEligible(struct prop *prop, u32 *citag, cons
 		return false;
 	}
 
-	tag = propobjGetCiTagId(prop);
-
-	if (!tag && !(obj->flags3 & (OBJFLAG3_HTMTERMINAL | OBJFLAG3_INTERACTABLE))) {
+	if (!objIsPotentiallyInteractable(prop)) {
 		*reason = "object_not_deliberately_interactable";
 		return false;
 	}
 
+	tag = propobjGetCiTagId(prop);
 	*citag = tag;
-	*reason = tag ? "ci_tag" : "interaction_flag";
+	*reason = tag ? "ci_tag" : "native_interaction_semantics";
 	return true;
 }
 
@@ -760,7 +759,6 @@ static s32 accessibilityBeaconScan(s32 detailed)
 		memset(&result, 0, sizeof(result));
 
 		if (prop->type == PROPTYPE_DOOR
-				&& g_Vars.stagenum == STAGE_CITRAINING
 				&& g_AccessibilityBeaconCategoryActive[
 						ACCESSIBILITY_BEACON_CATEGORY_DOOR]) {
 			eligible = accessibilityBeaconDoorEligible(prop, &reason);
@@ -779,7 +777,6 @@ static s32 accessibilityBeaconScan(s32 detailed)
 			result.kind = ACCESSIBILITY_BEACON_KIND_DOOR;
 		} else if ((prop->type == PROPTYPE_OBJ || prop->type == PROPTYPE_WEAPON)
 				&& !observer.isremote
-				&& g_Vars.stagenum == STAGE_CITRAINING
 				&& (g_AccessibilityBeaconCategoryActive[
 						ACCESSIBILITY_BEACON_CATEGORY_OBJECT]
 					|| g_AccessibilityBeaconCategoryActive[
@@ -890,9 +887,11 @@ static s32 accessibilityBeaconScan(s32 detailed)
 	}
 
 	accessibilityLogEvent("beacon", "scan_complete",
-			"scan=%llu mode=%s traversed=%d eligible=%d stored=%d truncated=%d",
+			"scan=%llu mode=%s gameplay=%s traversed=%d eligible=%d stored=%d truncated=%d",
 			(unsigned long long)g_AccessibilityBeaconScanCount,
-			detailed ? "toggle" : "automatic_refresh", considered,
+			detailed ? "toggle" : "automatic_refresh",
+			g_Vars.normmplayerisrunning ? "combat_sim" : "mission",
+			considered,
 			eligiblecount, g_AccessibilityBeaconResultCount,
 			eligiblecount > g_AccessibilityBeaconResultCount);
 
@@ -1628,8 +1627,7 @@ void accessibilityBeaconTick(void)
 		}
 	}
 
-	if ((!accessibilityIsInteractableBeaconsEnabled()
-			|| g_Vars.stagenum != STAGE_CITRAINING)
+	if (!accessibilityIsInteractableBeaconsEnabled()
 			&& (g_AccessibilityBeaconCategoryActive[
 					ACCESSIBILITY_BEACON_CATEGORY_OBJECT]
 				|| g_AccessibilityBeaconCategoryActive[
@@ -1655,8 +1653,7 @@ void accessibilityBeaconTick(void)
 	}
 
 #ifndef PLATFORM_N64
-	if (accessibilityIsInteractableBeaconsEnabled()
-			&& g_Vars.stagenum == STAGE_CITRAINING) {
+	if (accessibilityIsInteractableBeaconsEnabled()) {
 		objectrequested = inputKeyJustPressed(VK_F5);
 		doorrequested = inputKeyJustPressed(VK_F6);
 		pickuprequested = inputKeyJustPressed(VK_F8);

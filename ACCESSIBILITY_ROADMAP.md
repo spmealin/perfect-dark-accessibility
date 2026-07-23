@@ -49,17 +49,17 @@ This roadmap orders work by user task and evidence. Milestones are not promises 
 - **Risks and unknowns:** Dynamic callback lifetimes, custom-rendered rows, compound controls, localization/control codes, multiple local players, and provisional input collisions need measured evidence.
 - **Explicit non-goals:** Structural support for all current focusable control families is not a claim that every menu or briefing has been blind-user validated. Rich briefing/objective reading and permanent configurable actions remain later milestones.
 
-## Milestone 5 — Carrington Institute interactable beacons
+## Milestone 5 — Interactable beacons
 
 - **Status:** The original existing-sample implementation, automatic refresh, and multi-target scheduling passed blind-user acceptance. The procedural-chirp cue revision builds successfully and is pending runtime acceptance.
 - **Detailed plan:** `milestones/ACCESSIBILITY_MILESTONE_05_PLAN.md` is the authoritative implementation handoff.
-- **Goal:** Let a blind player deliberately select and spatially locate useful classes of nearby Carrington Institute props: interactable objects, collectible items, and doors.
+- **Goal:** Let a blind player deliberately select and spatially locate useful classes of nearby props: interactable objects, collectible items, and doors.
 - **User-visible result:** F5 toggles one positioned 880 Hz chirp on eligible interactable objects, F6 independently toggles one 440 Hz chirp on eligible doors, and F8 independently toggles three quick positioned 880 Hz chirps on collectible items. Any combination can run; all patterns are staggered and require no new audio asset.
 - **Systems:** Accessibility gameplay coordinator, read-only prop eligibility, active-prop traversal, door sibling canonicalization, player-relative ordering, procedural stereo audio, provisional PC actions, configuration, and structured logging.
-- **Acceptance:** In Carrington Institute training, results are stable and range-limited; cues remain attached to their props; collected/invisible/uncollectable items and open/closed/locked/destroyed/deactivated props update safely; menu/pause/cutscene/death transitions silence the beacon; a blind tester can distinguish the patterns and independently locate a designated laptop or terminal, collectible Data Uplink, and designated door.
+- **Acceptance:** Carrington Institute evidence remains the initial baseline. Repeat through the first DataDyne missions and a one-local-player Combat Simulator match: results are stable and range-limited; cues remain attached to their props; alarms, lift controls, terminals, grabbable objects, pickups, and open/closed/locked/destroyed/deactivated doors update safely; menu/pause/cutscene/death transitions silence and resume selected categories; a blind tester can distinguish the patterns and independently locate designated objects.
 - **Logging/evidence:** Record every scan and per-category toggle, player pose/rooms, every considered prop and raw identity, inclusion/exclusion reason, canonical door group, exact distance/bearing/order, each category's selected target, chirp frequency/volume/pan/pulse lifecycle, invalidation, and timing.
 - **Risks and unknowns:** Interaction checks currently mix actionability with on-screen/facing constraints; closed doors require different knowledge checks than ordinary objects; prop lifetimes and linked doors need safe handling; stereo panning may require turning to resolve front from rear; chirp duration, level, and category contrast need runtime validation.
-- **Explicit non-goals:** No external audio, HRTF, global radar, automatic movement/interaction, other stages, other prop categories, permanent bindings/options UI, or claim of a generalized scanner.
+- **Explicit non-goals:** No external audio, HRTF, automatic movement/interaction, split-screen/cooperative composition, permanent bindings/options UI, or claim that CI acceptance proves campaign-wide coverage.
 
 ## Milestone 6 — Discoverable accessibility settings
 

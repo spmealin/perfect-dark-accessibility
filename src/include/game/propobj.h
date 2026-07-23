@@ -239,6 +239,7 @@ void objTestHit(struct prop *prop, struct shotdata *shotdata);
 void objHit(struct shotdata *shotdata, struct hit *hit);
 u32 propobjGetCiTagId(struct prop *prop);
 bool objIsHealthy(struct defaultobj *obj);
+bool objIsPotentiallyInteractable(struct prop *prop);
 bool objTestForInteract(struct prop *prop);
 bool currentPlayerTryMountHoverbike(struct prop *prop);
 bool propobjInteract(struct prop *prop);

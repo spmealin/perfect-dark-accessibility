@@ -4,7 +4,7 @@
 
 This work aims to make the Perfect Dark PC port meaningfully playable by blind and low-vision players, starting with nonvisual access to menus and essential game state and progressing through small, testable gameplay slices.
 
-The current branch contains the accessibility coordinator/logger, Tolk/NVDA speech backend, menu-agnostic focus narration, non-subtitle HUD-message speech, Carrington Institute interaction/door/pickup beacons, non-hostile-character beacons, damaging-laser hazard cues, firing-range, hostile-character, and initial device-target feedback, weapon-function state cues, a seven-direction virtual-cane prototype, a nonvisual R-Tracker interface, and on-screen IR/X-Ray Scanner object audio. All implemented feature backends default to enabled for blind-user acceptance testing; the cane defaults to Slow mode. Menu narration has passed project-owner blind-user acceptance, while the newer gameplay slices retain the narrower evidence and pending tests documented below and in `ACCESSIBILITY_TESTING.md`. Broader navigation/route guidance, combat categories beyond characters, and full-game accessibility are not implemented.
+The current branch contains the accessibility coordinator/logger, Tolk/NVDA speech backend, menu-agnostic focus narration, non-subtitle HUD-message speech, single-player interaction/door/pickup beacons, non-hostile-character beacons, damaging-laser hazard cues, firing-range, hostile-character, and initial device-target feedback, weapon-function state cues, a seven-direction virtual-cane prototype, a nonvisual R-Tracker interface, and on-screen IR/X-Ray Scanner object audio. All implemented feature backends default to enabled for blind-user acceptance testing; the cane defaults to Slow mode. Menu narration has passed project-owner blind-user acceptance, while the newer gameplay slices retain the narrower evidence and pending tests documented below and in `ACCESSIBILITY_TESTING.md`. Broader navigation/route guidance, combat categories beyond characters, and full-game accessibility are not implemented.
 
 The firing-range weapon list announces the same completed bronze, silver, and gold proficiency stars rendered beside each weapon. It reads only the filled stars represented by the saved score and does not infer incomplete progress or expose state absent from the visual row.
 
@@ -72,9 +72,9 @@ Pointing directly at an admitted hostile starts the responsive alignment tone, i
 
 The pattern has a dedicated fixed oscillator lane and does not consume a game sound channel, allocate at runtime, or interrupt door/object chirps. Any input path that changes the same semantic state receives the cue, including the dedicated controller command and active-menu selection. Temporary alternate functions are reported when their visual state actually changes. Multiplayer arbitration and usefulness remain to be acceptance-tested.
 
-### Carrington Institute beacon prototype
+### Single-player world scanners
 
-`Accessibility.InteractableBeacons` defaults to `1` for project-owner blind-user acceptance testing. It remains configurable in `pd.ini`. Enabling the setting does not start a sound automatically; use F5, F6, and F8 during Carrington Institute gameplay.
+`Accessibility.InteractableBeacons` defaults to `1` for project-owner blind-user acceptance testing. It remains configurable in `pd.ini`. Enabling the setting does not start a sound automatically; use F5, F6, and F8 during any single-player mission or one-local-player Combat Simulator match.
 
 - F5 independently toggles automatic nearby interactable-object beacons.
 - F6 independently toggles automatic nearby door beacons.
@@ -86,11 +86,11 @@ The pattern has a dedicated fixed oscillator lane and does not consume a game so
 - While a menu is open, F5 retains its menu-narration repeat action and F6 retains its speech-cancel action; gameplay beacons stop and do not process those presses. The selected F5/F6/F7/F8 category states are preserved and automatically resume with a fresh scan when ordinary gameplay returns.
 - Interactable objects use one short positioned 880 Hz sine chirp; collectible items use three 35 ms 880 Hz chirps separated by 25 ms; doors use one short positioned 440 Hz chirp. The patterns retain the existing distance attenuation and stereo direction while avoiding game/menu sound meanings.
 - Pickups are recognized from the same object-type and collectible/uncollectable flags used by the collection path, including temporarily spawned device-training objects such as the Data Uplink. Invisible, inactive, deleted, and temporarily reserved/in-flight projectile items are excluded. The item disappears from the next bounded refresh after collection.
-- The implementation is limited to single-player Carrington Institute training and a 1,200-unit radius. F5, F6, and F8 each retain up to three nearby targets for their independently enabled category.
+- The implementation supports one-local-player missions and Combat Simulator matches within a 1,200-unit radius. F5, F6, and F8 each retain up to three nearby targets for their independently enabled category; split-screen and cooperative multi-local-player composition remain unsupported.
 - Menus, pause, cutscenes, death, unsupported player counts, stage changes, invalid props, and audio allocation failures stop beacon audio. Temporary gameplay-scope loss preserves category selections; stage teardown, configuration disablement, and explicit user toggles clear or change them.
 - The current stereo positional system primarily conveys left/right and distance. Front/rear and vertical usefulness require runtime and blind-user evidence and are not yet claimed.
 
-When the active camera is a deployed CamSpy, door scanning transfers to the CamSpy prop, rooms, position, and camera heading on the same logical tick as the visible perspective change. Returning to Joanna transfers it back without requiring F6 to be toggled. CI interactable and pickup categories deliberately pause while viewing through the CamSpy because those cues describe things Joanna can physically use or collect, then resume from her position after returning.
+When the active camera is a deployed CamSpy, door scanning transfers to the CamSpy prop, rooms, position, and camera heading on the same logical tick as the visible perspective change. Returning to Joanna transfers it back without requiring F6 to be toggled. Interactable and pickup categories deliberately pause while viewing through the CamSpy because those cues describe things Joanna can physically use or collect, then resume from her position after returning.
 
 ### Non-hostile-character beacons
 

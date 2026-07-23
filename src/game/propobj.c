@@ -16019,11 +16019,16 @@ bool objIsHealthy(struct defaultobj *obj)
 	return objGetDestroyedLevel(obj) == 0;
 }
 
-bool objTestForInteract(struct prop *prop)
+bool objIsPotentiallyInteractable(struct prop *prop)
 {
-	u32 stack;
-	struct defaultobj *obj = prop->obj;
+	struct defaultobj *obj;
 	bool maybe = false;
+
+	if (!prop || !prop->obj) {
+		return false;
+	}
+
+	obj = prop->obj;
 
 	if (propobjGetCiTagId(prop)) {
 		maybe = true;
@@ -16032,7 +16037,7 @@ bool objTestForInteract(struct prop *prop)
 			|| (obj->flags3 & (OBJFLAG3_HTMTERMINAL | OBJFLAG3_INTERACTABLE))
 			|| (obj->hidden & (OBJHFLAG_LIFTDOOR | OBJHFLAG_00000002))) {
 		maybe = true;
-	} else if (obj->type == OBJTYPE_HOVERBIKE) {
+	} else if (obj->type == OBJTYPE_HOVERBIKE && g_Vars.currentplayer) {
 		if (g_Vars.currentplayer->bondmovemode == MOVEMODE_GRAB) {
 			maybe = true;
 		} else if (g_Vars.currentplayer->bondmovemode == MOVEMODE_WALK
@@ -16040,16 +16045,28 @@ bool objTestForInteract(struct prop *prop)
 				&& g_Vars.currentplayer->crouchoffset == 0.0f) {
 			maybe = true;
 		}
-	} else if ((obj->flags3 & OBJFLAG3_GRABBABLE)
+	} else if (g_Vars.currentplayer
+			&& (obj->flags3 & OBJFLAG3_GRABBABLE)
 			&& g_Vars.currentplayer->bondmovemode == MOVEMODE_WALK
 			&& bmoveGetCrouchPos() == CROUCHPOS_STAND
 			&& g_Vars.currentplayer->crouchoffset == 0.0f) {
 		maybe = true;
 	}
 
-	if (maybe && (obj->hidden & OBJHFLAG_MOUNTED) && prop == bmoveGetHoverbike()) {
+	if (maybe && g_Vars.currentplayer
+			&& (obj->hidden & OBJHFLAG_MOUNTED)
+			&& prop == bmoveGetHoverbike()) {
 		maybe = false;
 	}
+
+	return maybe;
+}
+
+bool objTestForInteract(struct prop *prop)
+{
+	u32 stack;
+	struct defaultobj *obj = prop->obj;
+	bool maybe = objIsPotentiallyInteractable(prop);
 
 	if (maybe
 			&& (prop->flags & PROPFLAG_ONTHISSCREENTHISTICK)
