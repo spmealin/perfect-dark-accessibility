@@ -14,6 +14,8 @@ The pre-mission Overview announces every objective visibly applicable to the sel
 
 The pause Inventory list announces the focused item's visible name, manufacturer when present, primary and secondary functions, complete marquee description, and the checked state shown for active or inactive devices. Mission- and device-dependent description variants use the same resolver as the visual panel. Pause Briefing narration retains the complete localized source, including all background, Carrington, and objective sections, rather than truncating it to a short control-value field. The pause Abort confirmation also announces its visible question before the focused Cancel or Abort button.
 
+Mission-completion and mission-failure screens announce the full visible results panel on entry: mission and agent status, elapsed and target time where shown, difficulty, newly unlocked cheat where shown, weapon of choice, kills, accuracy, and the visible shot breakdown. Their sibling Objectives screens announce every displayed objective and localized completion state. Retry and Next Mission objective pages announce the objectives before the focused action.
+
 ### Active weapon menu narration
 
 With `Accessibility.MenuNarration=1`, holding the active-menu control and selecting a weapon or device announces the exact localized short label rendered in the highlighted radial slot. This includes `Unarmed`. Speech occurs only when a non-center slot becomes selected; returning to the center, holding a selection, or renderer animation does not repeat it. Returning to center and deliberately selecting the same item again announces it again. Closing the radial menu resets selection state without cancelling an already-started short item announcement.

@@ -143,10 +143,10 @@ struct menuitem g_RetryMissionMenuItems[] = {
 	{
 		MENUITEMTYPE_OBJECTIVES,
 		1,
+		MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		0,
 		0,
-		0,
-		NULL,
+		menuhandlerMissionObjectives,
 	},
 	{
 		MENUITEMTYPE_SELECTABLE,
@@ -180,10 +180,10 @@ struct menuitem g_NextMissionMenuItems[] = {
 	{
 		MENUITEMTYPE_OBJECTIVES,
 		1,
+		MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		0,
 		0,
-		0,
-		NULL,
+		menuhandlerMissionObjectives,
 	},
 	{
 		MENUITEMTYPE_SELECTABLE,
@@ -412,6 +412,138 @@ char *endscreenMenuTextMissionTime(struct menuitem *item)
 	return g_StringPointer;
 }
 
+static void endscreenAccessibilityAppend(char *buffer, u32 bufferlen,
+		const char *label, const char *value)
+{
+	u32 used;
+
+	if (!buffer || bufferlen == 0 || !label || !label[0]
+			|| !value || !value[0]) {
+		return;
+	}
+
+	used = strlen(buffer);
+
+	if (used < bufferlen - 1) {
+		snprintf(buffer + used, bufferlen - used, "%s%s %s",
+				used ? ". " : "", label, value);
+	}
+}
+
+static MenuItemHandlerResult endscreenHandleMissionSummary(s32 operation,
+		struct menuitem *item, union handlerdata *data)
+{
+	char value[128];
+
+	if (operation != MENUOP_GETACCESSIBILITYTEXT
+			|| data->accessibility.part != MENUACCESSIBILITYPART_SUMMARY
+			|| !data->accessibility.buffer
+			|| data->accessibility.bufferlen == 0) {
+		return 0;
+	}
+
+	data->accessibility.buffer[0] = '\0';
+
+#define APPEND_ENDSCREEN_FIELD(labelid, expression) \
+	do { \
+		const char *fieldvalue = (expression); \
+		snprintf(value, sizeof(value), "%s", fieldvalue ? fieldvalue : ""); \
+		endscreenAccessibilityAppend(data->accessibility.buffer, \
+				data->accessibility.bufferlen, langGet(labelid), value); \
+	} while (0)
+
+	APPEND_ENDSCREEN_FIELD(L_OPTIONS_278, endscreenMenuTextMissionStatus(item));
+	APPEND_ENDSCREEN_FIELD(L_OPTIONS_279, endscreenMenuTextAgentStatus(item));
+	APPEND_ENDSCREEN_FIELD(L_OPTIONS_280, endscreenMenuTextMissionTime(item));
+#if VERSION >= VERSION_NTSC_1_0
+	if ((g_Menus[g_MpPlayerNum].endscreen.cheatinfo & 0x100)
+			&& !(g_Menus[g_MpPlayerNum].endscreen.cheatinfo & 0x800)) {
+		APPEND_ENDSCREEN_FIELD(L_MPWEAPONS_242,
+				endscreenMenuTextTargetTime(item));
+	}
+#endif
+	APPEND_ENDSCREEN_FIELD(L_MPWEAPONS_129, soloMenuTextDifficulty(item));
+
+#if VERSION >= VERSION_NTSC_1_0
+	if (g_Menus[g_MpPlayerNum].endscreen.cheatinfo & 0xa00) {
+		const char *cheatname = NULL;
+
+		if (g_Menus[g_MpPlayerNum].endscreen.cheatinfo & 0x200) {
+			cheatname = endscreenMenuTextTimedCheatName(item);
+		} else if (g_Menus[g_MpPlayerNum].endscreen.cheatinfo & 0x800) {
+			cheatname = endscreenMenuTextCompletionCheatName(item);
+		}
+
+		endscreenAccessibilityAppend(data->accessibility.buffer,
+				data->accessibility.bufferlen,
+				langGet(L_MPWEAPONS_243), cheatname);
+	}
+#endif
+
+	APPEND_ENDSCREEN_FIELD(L_OPTIONS_281, mpMenuTextWeaponOfChoiceName(item));
+	APPEND_ENDSCREEN_FIELD(L_OPTIONS_282, endscreenMenuTextNumKills(item));
+	APPEND_ENDSCREEN_FIELD(L_OPTIONS_283, endscreenMenuTextAccuracy(item));
+	APPEND_ENDSCREEN_FIELD(L_OPTIONS_284, endscreenMenuTextNumShots(item));
+	APPEND_ENDSCREEN_FIELD(L_OPTIONS_285, endscreenMenuTextNumHeadShots(item));
+	APPEND_ENDSCREEN_FIELD(L_OPTIONS_286, endscreenMenuTextNumBodyShots(item));
+#if VERSION < VERSION_NTSC_1_0
+	APPEND_ENDSCREEN_FIELD(L_OPTIONS_287, endscreenMenuTextNumLimbShots(item));
+	APPEND_ENDSCREEN_FIELD(L_OPTIONS_288, endscreenMenuTextNumOtherShots(item));
+#else
+	if ((g_Menus[g_MpPlayerNum].endscreen.cheatinfo & 0xa00) != 0xa00) {
+		APPEND_ENDSCREEN_FIELD(L_OPTIONS_287, endscreenMenuTextNumLimbShots(item));
+	}
+
+	if (!(g_Menus[g_MpPlayerNum].endscreen.cheatinfo & 0xa00)) {
+		APPEND_ENDSCREEN_FIELD(L_OPTIONS_288, endscreenMenuTextNumOtherShots(item));
+	}
+#endif
+
+#undef APPEND_ENDSCREEN_FIELD
+
+	return data->accessibility.buffer[0] != '\0';
+}
+
+static MenuItemHandlerResult endscreenHandle2PMissionSummary(s32 operation,
+		struct menuitem *item, union handlerdata *data)
+{
+	char value[128];
+
+	if (operation != MENUOP_GETACCESSIBILITYTEXT
+			|| data->accessibility.part != MENUACCESSIBILITYPART_SUMMARY
+			|| !data->accessibility.buffer
+			|| data->accessibility.bufferlen == 0) {
+		return 0;
+	}
+
+	data->accessibility.buffer[0] = '\0';
+
+#define APPEND_2P_ENDSCREEN_FIELD(labelid, expression) \
+	do { \
+		const char *fieldvalue = (expression); \
+		snprintf(value, sizeof(value), "%s", fieldvalue ? fieldvalue : ""); \
+		endscreenAccessibilityAppend(data->accessibility.buffer, \
+				data->accessibility.bufferlen, langGet(labelid), value); \
+	} while (0)
+
+	APPEND_2P_ENDSCREEN_FIELD(L_OPTIONS_278, endscreenMenuTextMissionStatus(item));
+	APPEND_2P_ENDSCREEN_FIELD(L_OPTIONS_279, endscreenMenuTextAgentStatus(item));
+	APPEND_2P_ENDSCREEN_FIELD(L_OPTIONS_280, endscreenMenuTextMissionTime(item));
+	APPEND_2P_ENDSCREEN_FIELD(L_MPWEAPONS_129, soloMenuTextDifficulty(item));
+	APPEND_2P_ENDSCREEN_FIELD(L_OPTIONS_281, mpMenuTextWeaponOfChoiceName(item));
+	APPEND_2P_ENDSCREEN_FIELD(L_OPTIONS_282, endscreenMenuTextNumKills(item));
+	APPEND_2P_ENDSCREEN_FIELD(L_OPTIONS_283, endscreenMenuTextAccuracy(item));
+	APPEND_2P_ENDSCREEN_FIELD(L_OPTIONS_284, endscreenMenuTextNumShots(item));
+	APPEND_2P_ENDSCREEN_FIELD(L_OPTIONS_285, endscreenMenuTextNumHeadShots(item));
+	APPEND_2P_ENDSCREEN_FIELD(L_OPTIONS_286, endscreenMenuTextNumBodyShots(item));
+	APPEND_2P_ENDSCREEN_FIELD(L_OPTIONS_287, endscreenMenuTextNumLimbShots(item));
+	APPEND_2P_ENDSCREEN_FIELD(L_OPTIONS_288, endscreenMenuTextNumOtherShots(item));
+
+#undef APPEND_2P_ENDSCREEN_FIELD
+
+	return data->accessibility.buffer[0] != '\0';
+}
+
 struct menudialogdef *endscreenAdvance(void)
 {
 #if VERSION < VERSION_NTSC_1_0
@@ -463,10 +595,10 @@ struct menuitem g_2PMissionEndscreenObjectivesVMenuItems[] = {
 	{
 		MENUITEMTYPE_OBJECTIVES,
 		2,
+		MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		0,
 		0,
-		0,
-		NULL,
+		menuhandlerMissionObjectives,
 	},
 	{
 		MENUITEMTYPE_SEPARATOR,
@@ -491,10 +623,10 @@ struct menuitem g_SoloEndscreenObjectivesMenuItems[] = {
 	{
 		MENUITEMTYPE_OBJECTIVES,
 		0,
+		MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		0,
 		0,
-		0,
-		NULL,
+		menuhandlerMissionObjectives,
 	},
 	{
 		MENUITEMTYPE_SEPARATOR,
@@ -807,10 +939,11 @@ struct menuitem g_2PMissionEndscreenVMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		MENUITEMFLAG_LESSLEFTPADDING | MENUITEMFLAG_SMALLFONT,
+		MENUITEMFLAG_LESSLEFTPADDING | MENUITEMFLAG_SMALLFONT
+			| MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		L_OPTIONS_278, // "Mission Status:"
 		0,
-		NULL,
+		endscreenHandle2PMissionSummary,
 	},
 	{
 		MENUITEMTYPE_LABEL,
@@ -1065,10 +1198,10 @@ struct menuitem g_MissionEndscreenMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		0,
+		MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		L_OPTIONS_278, // "Mission Status:"
 		(uintptr_t)&endscreenMenuTextMissionStatus,
-		NULL,
+		endscreenHandleMissionSummary,
 	},
 	{
 		MENUITEMTYPE_LABEL,

@@ -43,6 +43,7 @@ MenuDialogHandlerResult soloMenuDialogPauseStatus(s32 operation, struct menudial
 MenuItemHandlerResult menuhandler001024dc(s32 operation, struct menuitem *item, union handlerdata *data);
 MenuItemHandlerResult menuhandler001024fc(s32 operation, struct menuitem *item, union handlerdata *data);
 MenuItemHandlerResult menuhandlerAcceptMission(s32 operation, struct menuitem *item, union handlerdata *data);
+MenuItemHandlerResult menuhandlerMissionObjectives(s32 operation, struct menuitem *item, union handlerdata *data);
 MenuItemHandlerResult menuhandlerAcceptPdModeSettings(s32 operation, struct menuitem *item, union handlerdata *data);
 MenuItemHandlerResult menuhandlerBuddyOptionsContinue(s32 operation, struct menuitem *item, union handlerdata *data);
 MenuItemHandlerResult menuhandlerCoopDifficulty(s32 operation, struct menuitem *item, union handlerdata *data);

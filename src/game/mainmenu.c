@@ -801,7 +801,7 @@ MenuDialogHandlerResult menudialog00103608(s32 operation, struct menudialogdef *
 	return 0;
 }
 
-static MenuItemHandlerResult menuhandlerMissionObjectives(s32 operation,
+MenuItemHandlerResult menuhandlerMissionObjectives(s32 operation,
 		struct menuitem *item, union handlerdata *data)
 {
 	u32 used = 0;
