@@ -42,7 +42,7 @@ Each sweep samples these camera-relative horizontal angles in this exact order:
 
 The observed sound must move left to right. Do not assume the sign convention from the mathematical rotation alone: verify in the game that `-45` pans left and `+45` pans right, and reverse the rotation signs if the engine coordinate system requires it.
 
-Each probe has a maximum horizontal distance of 600 world units. A miss produces silence but still consumes its position in the sweep. There is no distance-to-pitch mapping in this prototype.
+Each probe originally had a maximum horizontal distance of 600 world units. Blind-user acceptance testing increased the implemented reach by 50 percent to 900 world units. A miss produces silence but still consumes its position in the sweep. There is no distance-to-pitch mapping in this prototype.
 
 ### Timing
 
@@ -70,11 +70,11 @@ Each collision emits a brief procedural oscillator chirp at the spatial impact p
 - Provisional envelope: 3 ms attack and 8 ms release.
 - Lane/master volume: 0.115 before spatial attenuation (a 15% increase from the prototype's 0.10 gain after blind-user acceptance testing).
 - Pan: derived from the actual collision point using the existing spatial-audio calculation.
-- Volume: derived from collision distance, with provisional thresholds of full volume at 75 units or closer, fading through 500 units, and silent at 650 units.
+- Volume: derived from collision distance. The original provisional thresholds were full volume at 75 units or closer, fading through 500 units, and silent at 650 units. The 900-unit acceptance-testing revision scales them to 112.5, 750, and 975 units respectively.
 
 The 330 Hz frequency is intentionally separated from existing accessibility cues near 220 Hz (laser hazard), 440 Hz (doors and combat), 660 Hz and above (fine aiming), 880 Hz (interactables), and 1000 Hz (weapon-function confirmation). All sound constants are tuning values, not semantic contracts. Put them together in the cane implementation rather than scattering literals across hooks.
 
-Because the probe stops at 600 units, the attenuation curve's silent threshold must be farther than 600 so a maximum-range hit remains faintly audible. Use the collision X/Z coordinates for direction and distance. For playback, use camera/player ear height as the audio source Y coordinate so crouching or a collision polygon's vertical coordinate does not accidentally encode elevation in this horizontal-only prototype. Preserve both the raw collision position and final audio-source position in diagnostics.
+Because the revised probe stops at 900 units, the attenuation curve's silent threshold must be farther than 900 so a maximum-range hit remains faintly audible. Use the collision X/Z coordinates for direction and distance. For playback, use camera/player ear height as the audio source Y coordinate so crouching or a collision polygon's vertical coordinate does not accidentally encode elevation in this horizontal-only prototype. Preserve both the raw collision position and final audio-source position in diagnostics.
 
 The user requested one dedicated channel for each angle. Implement this as seven preallocated virtual-cane voices in the accessibility procedural mixer, not seven scarce native game sound channels. Ordinarily only one short voice will be audible because samples are scheduled sequentially. Fixed slot ownership prevents one probe from stealing another probe's voice and isolates the cane from beacons, hazards, combat cues, fine aim, and weapon-function feedback.
 
@@ -128,7 +128,7 @@ Obtain the radius and vertical extents through the existing `playerGetBbox` path
 The target horizontal position for a sample is:
 
 ```text
-end = start + rotate(normalize(camera_forward_xz), sample_angle) * 600
+end = start + rotate(normalize(camera_forward_xz), sample_angle) * 900
 end.y = start.y
 ```
 
@@ -142,7 +142,7 @@ Instead, build a small read-only cane collision adapter using the same collision
 
 1. Capture the current player start position and rooms.
 2. Call `playerGetBbox` for current radius and vertical bounds.
-3. Build room traversal for the 600-unit horizontal destination with `func0f065dfc`.
+3. Build room traversal for the 900-unit horizontal destination with `func0f065dfc`.
 4. Resolve entered destination rooms with `bmoveFindEnteredRoomsByPos`.
 5. Run the same long-move cylinder checks used by `bwalkCalculateNewPosition`: first `cdExamCylMove06`, and, if clear, `cdExamCylMove02`.
 6. Use `CDTYPE_BG | CDTYPE_OBJS | CDTYPE_DOORS | CDTYPE_PATHBLOCKER`; deliberately omit character and player types.
