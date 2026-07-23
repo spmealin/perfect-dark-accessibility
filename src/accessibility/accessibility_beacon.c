@@ -351,7 +351,17 @@ static s32 accessibilityBeaconObjectEligible(struct prop *prop, u32 *citag, cons
 		return false;
 	}
 
-	if (obj->flags & (OBJFLAG_CANNOT_ACTIVATE | OBJFLAG_DEACTIVATED)) {
+	if (obj->flags2 & OBJFLAG2_INVISIBLE) {
+		*reason = "object_invisible";
+		return false;
+	}
+
+	/*
+	 * Match objTestForInteract here. Setup data uses OBJFLAG_DEACTIVATED on
+	 * objects that remain player-activatable, including the CI Night Vision
+	 * light switch. OBJFLAG_CANNOT_ACTIVATE is the authoritative exclusion.
+	 */
+	if (obj->flags & OBJFLAG_CANNOT_ACTIVATE) {
 		*reason = "object_activation_disabled";
 		return false;
 	}
