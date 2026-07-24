@@ -44,7 +44,6 @@
 #define ACCESSIBILITY_TRACKER_ATTACK_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.003f))
 #define ACCESSIBILITY_TRACKER_RELEASE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.008f))
 #define ACCESSIBILITY_TRACKER_REAR_MODULATION_HZ 30.0f
-#define ACCESSIBILITY_CANE_VOLUME 0.115f
 #define ACCESSIBILITY_CANE_ATTACK_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.003f))
 #define ACCESSIBILITY_CANE_RELEASE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.008f))
 #define ACCESSIBILITY_TONE_MIX_BUFFER_SAMPLES 2048
@@ -56,6 +55,7 @@ static SDL_atomic_t g_AccessibilityChirpSequence;
 static SDL_atomic_t g_AccessibilityChirpEnabled;
 static SDL_atomic_t g_AccessibilityChirpFrequencyMilliHz;
 static SDL_atomic_t g_AccessibilityChirpVolumeMillionths;
+static SDL_atomic_t g_AccessibilityChirpGainMillionths;
 static SDL_atomic_t g_AccessibilityChirpPanMillionths;
 static SDL_atomic_t g_AccessibilityChirpPulses;
 static SDL_atomic_t g_AccessibilityTargetPresenceSequence;
@@ -116,6 +116,7 @@ static s32 g_AccessibilityChirpPulseCount;
 static f32 g_AccessibilityChirpPhase;
 static f32 g_AccessibilityChirpFrequencyHz;
 static f32 g_AccessibilityChirpVolume;
+static f32 g_AccessibilityChirpGain;
 static f32 g_AccessibilityChirpPan;
 static s32 g_AccessibilityTargetPresenceObservedSequence;
 static s32 g_AccessibilityTargetPresenceSamplesRemaining;
@@ -193,11 +194,11 @@ void accessibilityToneSet(s32 enabled, f32 frequencyhz)
 
 void accessibilityTonePlayChirp(f32 frequencyhz, f32 volume, f32 pan)
 {
-	accessibilityTonePlayChirpPattern(frequencyhz, volume, pan, 1);
+	accessibilityTonePlayChirpPattern(frequencyhz, volume, pan, 1, 1.0f);
 }
 
 void accessibilityTonePlayChirpPattern(f32 frequencyhz, f32 volume, f32 pan,
-		s32 pulses)
+		s32 pulses, f32 gain)
 {
 	if (frequencyhz < 1.0f) {
 		frequencyhz = 1.0f;
@@ -221,10 +222,18 @@ void accessibilityTonePlayChirpPattern(f32 frequencyhz, f32 volume, f32 pan,
 		pulses = 8;
 	}
 
+	if (gain < 0.0f) {
+		gain = 0.0f;
+	} else if (gain > 2.0f) {
+		gain = 2.0f;
+	}
+
 	SDL_AtomicSet(&g_AccessibilityChirpFrequencyMilliHz,
 			(s32)(frequencyhz * 1000.0f));
 	SDL_AtomicSet(&g_AccessibilityChirpVolumeMillionths,
 			(s32)(volume * 1000000.0f));
+	SDL_AtomicSet(&g_AccessibilityChirpGainMillionths,
+			(s32)(gain * 1000000.0f));
 	SDL_AtomicSet(&g_AccessibilityChirpPanMillionths,
 			(s32)(pan * 1000000.0f));
 	SDL_AtomicSet(&g_AccessibilityChirpPulses, pulses);
@@ -756,6 +765,8 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 					&g_AccessibilityChirpFrequencyMilliHz) / 1000.0f;
 			g_AccessibilityChirpVolume = (f32)SDL_AtomicGet(
 					&g_AccessibilityChirpVolumeMillionths) / 1000000.0f;
+			g_AccessibilityChirpGain = (f32)SDL_AtomicGet(
+					&g_AccessibilityChirpGainMillionths) / 1000000.0f;
 			g_AccessibilityChirpPan = (f32)SDL_AtomicGet(
 					&g_AccessibilityChirpPanMillionths) / 1000000.0f;
 			g_AccessibilityChirpPulseCount = SDL_AtomicGet(
@@ -961,7 +972,8 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			}
 
 			chirp = chirpactive ? sinf(g_AccessibilityChirpPhase) * envelope
-					* g_AccessibilityChirpVolume * ACCESSIBILITY_CHIRP_VOLUME
+					* g_AccessibilityChirpVolume * g_AccessibilityChirpGain
+					* ACCESSIBILITY_CHIRP_VOLUME
 					* 32767.0f : 0.0f;
 			chirpleft = (s32)(chirp * leftpan);
 			chirpright = (s32)(chirp * rightpan);
@@ -1289,8 +1301,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 					}
 
 					cane = sinf(g_AccessibilityCanePhase[slot]) * envelope
-							* g_AccessibilityCaneVolume[slot]
-							* ACCESSIBILITY_CANE_VOLUME * 32767.0f;
+							* g_AccessibilityCaneVolume[slot] * 32767.0f;
 					caneleft += (s32)(cane * leftpan);
 					caneright += (s32)(cane * rightpan);
 					g_AccessibilityCanePhase[slot] += TWO_PI

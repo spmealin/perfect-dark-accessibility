@@ -35,7 +35,7 @@ struct accessibilitytonediagnostics {
 void accessibilityToneSet(s32 enabled, f32 frequencyhz);
 void accessibilityTonePlayChirp(f32 frequencyhz, f32 volume, f32 pan);
 void accessibilityTonePlayChirpPattern(f32 frequencyhz, f32 volume, f32 pan,
-		s32 pulses);
+		s32 pulses, f32 gain);
 void accessibilityToneStopChirp(void);
 void accessibilityTonePlayTargetPresence(f32 frequencyhz,
 		f32 volume, f32 pan);

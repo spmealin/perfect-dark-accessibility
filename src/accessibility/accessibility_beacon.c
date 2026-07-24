@@ -35,6 +35,7 @@
 #define ACCESSIBILITY_BEACON_SILENT_DISTANCE 1400.0f
 #define ACCESSIBILITY_BEACON_DOOR_FREQUENCY_HZ 440.0f
 #define ACCESSIBILITY_BEACON_OBJECT_FREQUENCY_HZ 880.0f
+#define ACCESSIBILITY_BEACON_NON_HOSTILE_GAIN 2.0f
 #define ACCESSIBILITY_BEACON_PULSE_TICKS TICKS(45)
 #define ACCESSIBILITY_BEACON_REFRESH_TICKS TICKS(30)
 #define ACCESSIBILITY_BEACON_SWITCH_MARGIN 150.0f
@@ -1489,13 +1490,15 @@ static void accessibilityBeaconPulse(s32 category,
 			/ (f32)AL_PAN_CENTER;
 	s32 pulses = selected->kind == ACCESSIBILITY_BEACON_KIND_PICKUP ? 3
 			: selected->kind == ACCESSIBILITY_BEACON_KIND_NON_HOSTILE ? 2 : 1;
+	f32 gain = selected->kind == ACCESSIBILITY_BEACON_KIND_NON_HOSTILE
+			? ACCESSIBILITY_BEACON_NON_HOSTILE_GAIN : 1.0f;
 
 	accessibilityTonePlayChirpPattern(frequencyhz, normalizedvolume,
-			normalizedpan, pulses);
+			normalizedpan, pulses, gain);
 	g_AccessibilityBeaconPulseCount++;
 
 	accessibilityLogEvent("beacon", "pulse",
-			"pulse=%llu tick=%d next_tick=%d index=%d category=%s kind=%s pulse_count=%d frequency_hz=%.1f lane=procedural_chirp prop=%p propnum=%d position=%.3f,%.3f,%.3f distance=%.3f bearing=%.3f vertical=%.3f volume=%d normalized_volume=%.4f pan=%d normalized_pan=%.4f ranges=%.1f,%.1f,%.1f result=started",
+			"pulse=%llu tick=%d next_tick=%d index=%d category=%s kind=%s pulse_count=%d frequency_hz=%.1f lane=procedural_chirp prop=%p propnum=%d position=%.3f,%.3f,%.3f distance=%.3f bearing=%.3f vertical=%.3f volume=%d normalized_volume=%.4f gain=%.3f pan=%d normalized_pan=%.4f ranges=%.1f,%.1f,%.1f result=started",
 			(unsigned long long)g_AccessibilityBeaconPulseCount,
 			g_Vars.lvframe60, g_AccessibilityBeaconNextScheduledPulse60,
 			g_AccessibilityBeaconSelectedIndex[category],
@@ -1503,7 +1506,7 @@ static void accessibilityBeaconPulse(s32 category,
 			accessibilityBeaconKindName(selected->kind), pulses, frequencyhz,
 			(void *)prop, selected->propnum, prop->pos.x, prop->pos.y, prop->pos.z,
 			selected->distance, selected->bearing, selected->vertical,
-			volume, normalizedvolume, pan, normalizedpan,
+			volume, normalizedvolume, gain, pan, normalizedpan,
 			ACCESSIBILITY_BEACON_FULL_DISTANCE, ACCESSIBILITY_BEACON_FADE_DISTANCE,
 			ACCESSIBILITY_BEACON_SILENT_DISTANCE);
 }

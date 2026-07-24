@@ -81,6 +81,8 @@ struct accessibilitycanesample {
 	s32 volume;
 	s32 pan;
 	f32 normalizedvolume;
+	f32 mastervolume;
+	f32 effectivevolume;
 	f32 normalizedpan;
 	u64 queryus;
 	struct prop *observerprop;
@@ -255,7 +257,7 @@ static void accessibilityCaneLogSweep(const char *reason)
 		struct accessibilitycanesample *sample = &g_AccessibilityCaneSamples[i];
 
 		accessibilityCaneAppendLog(
-				"%ss%d={angle:%d state:%s scheduled:%d actual:%d late:%d result:%d pass:%d observer:%p remote:%d origin:%.2f,%.2f,%.2f forward:%.5f,%.5f direction:%.5f,%.5f end:%.2f,%.2f,%.2f bbox:%.2f,%.2f,%.2f raw:%.2f,%.2f,%.2f audio:%.2f,%.2f,%.2f distance:%.2f frequency_hz:%.2f end_frequency_hz:%.2f duration_ms:%d terrain:%d terrain_ground:%.2f terrain_height:%.2f terrain_distance:%.2f terrain_room:%d terrain_flags:0x%04x terrain_queries:%d obstacle:%p type:%d geoflags:0x%08x normal:%.5f,%.5f,%.5f edge:%.2f,%.2f,%.2f,%.2f volume:%d pan:%d normalized:%.5f,%.5f query_us:%" PRIu64 "}",
+				"%ss%d={angle:%d state:%s scheduled:%d actual:%d late:%d result:%d pass:%d observer:%p remote:%d origin:%.2f,%.2f,%.2f forward:%.5f,%.5f direction:%.5f,%.5f end:%.2f,%.2f,%.2f bbox:%.2f,%.2f,%.2f raw:%.2f,%.2f,%.2f audio:%.2f,%.2f,%.2f distance:%.2f frequency_hz:%.2f end_frequency_hz:%.2f duration_ms:%d terrain:%d terrain_ground:%.2f terrain_height:%.2f terrain_distance:%.2f terrain_room:%d terrain_flags:0x%04x terrain_queries:%d obstacle:%p type:%d geoflags:0x%08x normal:%.5f,%.5f,%.5f edge:%.2f,%.2f,%.2f,%.2f volume:%d pan:%d normalized:%.5f,%.5f master_volume:%.5f effective_volume:%.5f query_us:%" PRIu64 "}",
 				i ? " " : "", i, sample->angledegrees,
 				accessibilityCaneSampleStateName(sample->state),
 				sample->scheduledtick, sample->actualtick, sample->lateness,
@@ -281,7 +283,8 @@ static void accessibilityCaneLogSweep(const char *reason)
 				sample->edge1.x, sample->edge1.z,
 				sample->edge2.x, sample->edge2.z, sample->volume,
 				sample->pan, sample->normalizedvolume,
-				sample->normalizedpan, (uint64_t)sample->queryus);
+				sample->normalizedpan, sample->mastervolume,
+				sample->effectivevolume, (uint64_t)sample->queryus);
 	}
 
 	accessibilityLogEventMessage("cane", "sweep",
@@ -676,12 +679,14 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 			fulldistance, fadedistance, silentdistance,
 			horizontal, false, NULL);
 	sample->normalizedvolume = (f32)sample->volume / (f32)AL_VOL_FULL;
+	sample->mastervolume = accessibilityGetVirtualCaneVolume();
+	sample->effectivevolume = sample->normalizedvolume * sample->mastervolume;
 	sample->normalizedpan = ((f32)sample->pan - (f32)AL_PAN_CENTER)
 			/ (f32)AL_PAN_CENTER;
 
 	accessibilityTonePlayCaneSlot(sample - g_AccessibilityCaneSamples,
 			sample->frequency, sample->endfrequency,
-			sample->normalizedvolume,
+			sample->effectivevolume,
 			sample->normalizedpan, sample->durationms);
 
 	return result;
