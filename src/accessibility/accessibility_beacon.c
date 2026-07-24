@@ -572,6 +572,39 @@ static struct prop *accessibilityBeaconCanonicalDoor(struct prop *prop, s32 *sib
 	return bestprop;
 }
 
+static struct prop *accessibilityBeaconVisibleDoor(struct prop *prop)
+{
+	struct doorobj *door = prop ? prop->door : NULL;
+	struct doorobj *sibling;
+	struct prop *bestprop = NULL;
+	s32 bestnum = -1;
+	s32 guard = 0;
+
+	if (!door) {
+		return NULL;
+	}
+
+	sibling = door;
+
+	do {
+		struct prop *siblingprop = sibling->base.prop;
+		s32 siblingnum = accessibilityBeaconPropNum(siblingprop);
+
+		if (siblingprop
+				&& (siblingprop->flags & PROPFLAG_ONTHISSCREENTHISTICK)
+				&& siblingnum >= 0
+				&& (bestnum < 0 || siblingnum < bestnum)) {
+			bestprop = siblingprop;
+			bestnum = siblingnum;
+		}
+
+		sibling = sibling->sibling;
+	} while (sibling && sibling != door
+			&& guard++ < ACCESSIBILITY_BEACON_MAX_DOOR_SIBLINGS);
+
+	return bestprop;
+}
+
 static f32 accessibilityBeaconCalculateSpatial(struct prop *prop,
 		const struct accessibilityobserver *observer,
 		f32 *bearing, f32 *vertical)
@@ -769,12 +802,17 @@ static s32 accessibilityBeaconScan(s32 detailed)
 			eligible = accessibilityBeaconDoorEligible(prop, &reason);
 
 			if (eligible) {
-				candidate = accessibilityBeaconCanonicalDoor(prop, &siblingcount);
-				canonicalpropnum = accessibilityBeaconPropNum(candidate);
+				struct prop *canonical = accessibilityBeaconCanonicalDoor(
+						prop, &siblingcount);
 
-				if (!accessibilityBeaconDoorEligible(candidate, &reason)) {
-					candidate = prop;
-					canonicalpropnum = propnum;
+				canonicalpropnum = accessibilityBeaconPropNum(canonical);
+				candidate = accessibilityBeaconVisibleDoor(prop);
+
+				if (!candidate) {
+					eligible = false;
+					reason = "door_not_rendered_this_tick";
+				} else if (!accessibilityBeaconDoorEligible(candidate, &reason)) {
+					eligible = false;
 				}
 			}
 
@@ -950,6 +988,10 @@ static struct prop *accessibilityBeaconValidateResult(struct accessibilitybeacon
 		}
 	} else if (result->category == ACCESSIBILITY_BEACON_CATEGORY_DOOR) {
 		if (!accessibilityBeaconDoorEligible(prop, reason)) {
+			return NULL;
+		}
+		if ((prop->flags & PROPFLAG_ONTHISSCREENTHISTICK) == 0) {
+			*reason = "door_no_longer_rendered";
 			return NULL;
 		}
 	} else {
