@@ -32,7 +32,7 @@
 #define ACCESSIBILITY_CANE_TERRAIN_DURATION_MS 140
 #define ACCESSIBILITY_CANE_SLOW_CYCLE_TICKS TICKS(120)
 #define ACCESSIBILITY_CANE_FAST_CYCLE_TICKS TICKS(60)
-#define ACCESSIBILITY_CANE_LOG_BUFFER_SIZE 8192
+#define ACCESSIBILITY_CANE_LOG_BUFFER_SIZE 16384
 #define ACCESSIBILITY_CANE_DEGREES_TO_RADIANS 0.01745329251994329577f
 
 enum accessibilitycanesamplestate {
@@ -42,6 +42,25 @@ enum accessibilitycanesamplestate {
 	ACCESSIBILITY_CANE_SAMPLE_MISS,
 	ACCESSIBILITY_CANE_SAMPLE_ERROR,
 	ACCESSIBILITY_CANE_SAMPLE_SKIPPED,
+};
+
+enum accessibilitycaneterrainprobereason {
+	ACCESSIBILITY_CANE_TERRAIN_PROBE_NONE,
+	ACCESSIBILITY_CANE_TERRAIN_PROBE_NO_FLOOR,
+	ACCESSIBILITY_CANE_TERRAIN_PROBE_VERTICAL_RANGE,
+	ACCESSIBILITY_CANE_TERRAIN_PROBE_BELOW_THRESHOLD,
+	ACCESSIBILITY_CANE_TERRAIN_PROBE_SELECTED,
+};
+
+struct accessibilitycaneterrainprobe {
+	struct coord point;
+	f32 distance;
+	f32 ground;
+	f32 delta;
+	RoomNum room;
+	RoomNum rooms[8];
+	u16 flags;
+	s32 reason;
 };
 
 struct accessibilitycanesample {
@@ -72,6 +91,8 @@ struct accessibilitycanesample {
 	RoomNum terrainroom;
 	u16 terrainflags;
 	s32 terrainqueries;
+	struct accessibilitycaneterrainprobe
+			terrainprobes[ACCESSIBILITY_CANE_TERRAIN_SAMPLE_COUNT];
 	struct prop *obstacle;
 	s32 obstacletype;
 	u32 geoflags;
@@ -152,6 +173,22 @@ static const char *accessibilityCaneSampleStateName(s32 state)
 		return "skipped";
 	default:
 		return "pending";
+	}
+}
+
+static const char *accessibilityCaneTerrainProbeReasonName(s32 reason)
+{
+	switch (reason) {
+	case ACCESSIBILITY_CANE_TERRAIN_PROBE_NO_FLOOR:
+		return "no_floor";
+	case ACCESSIBILITY_CANE_TERRAIN_PROBE_VERTICAL_RANGE:
+		return "vertical_range";
+	case ACCESSIBILITY_CANE_TERRAIN_PROBE_BELOW_THRESHOLD:
+		return "below_threshold";
+	case ACCESSIBILITY_CANE_TERRAIN_PROBE_SELECTED:
+		return "selected";
+	default:
+		return "none";
 	}
 }
 
@@ -257,7 +294,7 @@ static void accessibilityCaneLogSweep(const char *reason)
 		struct accessibilitycanesample *sample = &g_AccessibilityCaneSamples[i];
 
 		accessibilityCaneAppendLog(
-				"%ss%d={angle:%d state:%s scheduled:%d actual:%d late:%d result:%d pass:%d observer:%p remote:%d origin:%.2f,%.2f,%.2f forward:%.5f,%.5f direction:%.5f,%.5f end:%.2f,%.2f,%.2f bbox:%.2f,%.2f,%.2f raw:%.2f,%.2f,%.2f audio:%.2f,%.2f,%.2f distance:%.2f frequency_hz:%.2f end_frequency_hz:%.2f duration_ms:%d terrain:%d terrain_ground:%.2f terrain_height:%.2f terrain_distance:%.2f terrain_room:%d terrain_flags:0x%04x terrain_queries:%d obstacle:%p type:%d geoflags:0x%08x normal:%.5f,%.5f,%.5f edge:%.2f,%.2f,%.2f,%.2f volume:%d pan:%d normalized:%.5f,%.5f master_volume:%.5f effective_volume:%.5f query_us:%" PRIu64 "}",
+				"%ss%d={angle:%d state:%s scheduled:%d actual:%d late:%d result:%d pass:%d observer:%p remote:%d origin:%.2f,%.2f,%.2f forward:%.5f,%.5f direction:%.5f,%.5f end:%.2f,%.2f,%.2f bbox:%.2f,%.2f,%.2f raw:%.2f,%.2f,%.2f audio:%.2f,%.2f,%.2f distance:%.2f frequency_hz:%.2f end_frequency_hz:%.2f duration_ms:%d terrain:%d terrain_ground:%.2f terrain_height:%.2f terrain_distance:%.2f terrain_room:%d terrain_flags:0x%04x terrain_queries:%d obstacle:%p type:%d geoflags:0x%08x normal:%.5f,%.5f,%.5f edge:%.2f,%.2f,%.2f,%.2f volume:%d pan:%d normalized:%.5f,%.5f master_volume:%.5f effective_volume:%.5f query_us:%" PRIu64 " probes=[",
 				i ? " " : "", i, sample->angledegrees,
 				accessibilityCaneSampleStateName(sample->state),
 				sample->scheduledtick, sample->actualtick, sample->lateness,
@@ -285,6 +322,31 @@ static void accessibilityCaneLogSweep(const char *reason)
 				sample->pan, sample->normalizedvolume,
 				sample->normalizedpan, sample->mastervolume,
 				sample->effectivevolume, (uint64_t)sample->queryus);
+
+		{
+			s32 j;
+
+			for (j = 0; j < sample->terrainqueries
+					&& j < ACCESSIBILITY_CANE_TERRAIN_SAMPLE_COUNT; j++) {
+				struct accessibilitycaneterrainprobe *probe
+						= &sample->terrainprobes[j];
+
+				accessibilityCaneAppendLog(
+						"%sp%d={distance:%.2f point:%.2f,%.2f,%.2f rooms:%d,%d,%d,%d,%d,%d,%d,%d floor_room:%d ground:%.2f delta:%.2f flags:0x%04x reason:%s}",
+						j ? " " : "", j, probe->distance,
+						probe->point.x, probe->point.y, probe->point.z,
+						probe->rooms[0], probe->rooms[1],
+						probe->rooms[2], probe->rooms[3],
+						probe->rooms[4], probe->rooms[5],
+						probe->rooms[6], probe->rooms[7],
+						probe->room, probe->ground, probe->delta,
+						probe->flags,
+						accessibilityCaneTerrainProbeReasonName(
+								probe->reason));
+			}
+		}
+
+		accessibilityCaneAppendLog("]}");
 	}
 
 	accessibilityLogEventMessage("cane", "sweep",
@@ -406,6 +468,7 @@ static s32 accessibilityCaneFindTerrain(
 	RoomNum rooms[8];
 	RoomNum morerooms[22];
 	struct coord origin;
+	struct coord roompoint;
 	struct coord point;
 	f32 reach;
 	f32 threshold;
@@ -430,17 +493,37 @@ static s32 accessibilityCaneFindTerrain(
 	}
 
 	for (i = 1; i <= ACCESSIBILITY_CANE_TERRAIN_SAMPLE_COUNT; i++) {
+		struct accessibilitycaneterrainprobe *probe
+				= &sample->terrainprobes[i - 1];
+		s32 j;
+
 		distance = limit * (f32)i
 				/ (f32)ACCESSIBILITY_CANE_TERRAIN_SAMPLE_COUNT;
-		point.x = observer->origin.x + sample->direction.x * distance;
-		point.y = observer->ground
-				+ ACCESSIBILITY_CANE_TERRAIN_VERTICAL_RANGE;
-		point.z = observer->origin.z + sample->direction.z * distance;
+		roompoint.x = observer->origin.x + sample->direction.x * distance;
+		roompoint.y = observer->origin.y;
+		roompoint.z = observer->origin.z + sample->direction.z * distance;
+
+		for (j = 0; j < 8; j++) {
+			rooms[j] = -1;
+		}
+
 		func0f065dfc(&origin, observer->prop->rooms,
-				&point, rooms, morerooms, 20);
+				&roompoint, rooms, morerooms, 20);
 
 		if (!observer->isremote) {
-			bmoveFindEnteredRoomsByPos(g_Vars.currentplayer, &point, rooms);
+			bmoveFindEnteredRoomsByPos(
+					g_Vars.currentplayer, &roompoint, rooms);
+		}
+
+		point = roompoint;
+		point.y = observer->ground
+				+ ACCESSIBILITY_CANE_TERRAIN_VERTICAL_RANGE;
+		probe->point = point;
+		probe->distance = distance;
+		probe->room = -1;
+
+		for (j = 0; j < 8; j++) {
+			probe->rooms[j] = rooms[j];
 		}
 
 		flags = 0;
@@ -452,19 +535,26 @@ static s32 accessibilityCaneFindTerrain(
 				&point, rooms, &ground, NULL);
 #endif
 		sample->terrainqueries++;
+		probe->room = room;
+		probe->flags = flags;
 
 		if (room < 0) {
+			probe->reason = ACCESSIBILITY_CANE_TERRAIN_PROBE_NO_FLOOR;
 			continue;
 		}
 
 		delta = ground - observer->ground;
+		probe->ground = ground;
+		probe->delta = delta;
 
 		if (delta > ACCESSIBILITY_CANE_TERRAIN_VERTICAL_RANGE
 				|| delta < -ACCESSIBILITY_CANE_TERRAIN_VERTICAL_RANGE) {
+			probe->reason = ACCESSIBILITY_CANE_TERRAIN_PROBE_VERTICAL_RANGE;
 			continue;
 		}
 
 		if (fabsf(delta) >= threshold) {
+			probe->reason = ACCESSIBILITY_CANE_TERRAIN_PROBE_SELECTED;
 			sample->terrain = delta > 0.0f ? 1 : -1;
 			sample->terrainground = ground;
 			sample->terrainheight = delta;
@@ -475,6 +565,8 @@ static s32 accessibilityCaneFindTerrain(
 			sample->audiosource.y = observer->camera.y;
 			return true;
 		}
+
+		probe->reason = ACCESSIBILITY_CANE_TERRAIN_PROBE_BELOW_THRESHOLD;
 	}
 
 	return false;
