@@ -724,11 +724,14 @@ static void accessibilityCaneCycleMode(void)
 
 	accessibilityCaneStop("mode_change", false);
 	accessibilitySetVirtualCaneMode(newmode);
+	accessibilityTonePlayCaneModeConfirmation(newmode);
 	accessibilityLogEvent("cane", "command",
-			"action=cycle key=F4 old_mode=%s old_value=%d new_mode=%s new_value=%d tick=%d stage=%d player=%d alt=0",
+			"action=cycle key=F4 old_mode=%s old_value=%d new_mode=%s new_value=%d tick=%d stage=%d player=%d alt=0 earcon=%s base_frequency_hz=880 changed_frequency_hz=%d pulses=%d beep_ms=35 gap_ms=25 lane=toggle_confirmation",
 			accessibilityCaneModeName(oldmode), oldmode,
 			accessibilityCaneModeName(newmode), newmode,
-			g_Vars.lvframe60, g_Vars.stagenum, g_Vars.currentplayernum);
+			g_Vars.lvframe60, g_Vars.stagenum, g_Vars.currentplayernum,
+			newmode == 0 ? "falling" : "rising",
+			newmode == 0 ? 440 : 1320, newmode == 2 ? 3 : 2);
 }
 
 void accessibilityCaneTick(void)

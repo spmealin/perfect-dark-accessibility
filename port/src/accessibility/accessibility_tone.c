@@ -23,6 +23,9 @@
 #define ACCESSIBILITY_TOGGLE_GAP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.025f))
 #define ACCESSIBILITY_TOGGLE_ATTACK_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.002f))
 #define ACCESSIBILITY_TOGGLE_RELEASE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.005f))
+#define ACCESSIBILITY_TOGGLE_PATTERN_OFF 0
+#define ACCESSIBILITY_TOGGLE_PATTERN_ON 1
+#define ACCESSIBILITY_TOGGLE_PATTERN_FAST 2
 #define ACCESSIBILITY_WEAPON_FUNCTION_FREQUENCY_HZ 1000.0f
 #define ACCESSIBILITY_WEAPON_FUNCTION_VOLUME 0.10f
 #define ACCESSIBILITY_WEAPON_FUNCTION_BEEP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.035f))
@@ -64,7 +67,7 @@ static SDL_atomic_t g_AccessibilityTargetPresenceFrequencyMilliHz;
 static SDL_atomic_t g_AccessibilityTargetPresenceVolumeMillionths;
 static SDL_atomic_t g_AccessibilityTargetPresencePanMillionths;
 static SDL_atomic_t g_AccessibilityToggleSequence;
-static SDL_atomic_t g_AccessibilityToggleEnabled;
+static SDL_atomic_t g_AccessibilityTogglePattern;
 static SDL_atomic_t g_AccessibilityWeaponFunctionSequence;
 static SDL_atomic_t g_AccessibilityWeaponFunctionPulses;
 static SDL_atomic_t g_AccessibilityHazardEnabled;
@@ -128,7 +131,7 @@ static f32 g_AccessibilityTargetPresencePan;
 static s32 g_AccessibilityToggleObservedSequence;
 static s32 g_AccessibilityToggleSamplesRemaining;
 static s32 g_AccessibilityToggleSample;
-static s32 g_AccessibilityToggleOn;
+static s32 g_AccessibilityToggleCurrentPattern;
 static f32 g_AccessibilityTogglePhase;
 static s32 g_AccessibilityWeaponFunctionObservedSequence;
 static s32 g_AccessibilityWeaponFunctionSamplesRemaining;
@@ -282,7 +285,23 @@ void accessibilityToneStopTargetPresence(void)
 
 void accessibilityTonePlayToggleConfirmation(s32 enabled)
 {
-	SDL_AtomicSet(&g_AccessibilityToggleEnabled, enabled != 0);
+	SDL_AtomicSet(&g_AccessibilityTogglePattern,
+			enabled ? ACCESSIBILITY_TOGGLE_PATTERN_ON
+					: ACCESSIBILITY_TOGGLE_PATTERN_OFF);
+	SDL_AtomicAdd(&g_AccessibilityToggleSequence, 1);
+}
+
+void accessibilityTonePlayCaneModeConfirmation(s32 mode)
+{
+	s32 pattern = mode;
+
+	if (pattern < ACCESSIBILITY_TOGGLE_PATTERN_OFF) {
+		pattern = ACCESSIBILITY_TOGGLE_PATTERN_OFF;
+	} else if (pattern > ACCESSIBILITY_TOGGLE_PATTERN_FAST) {
+		pattern = ACCESSIBILITY_TOGGLE_PATTERN_FAST;
+	}
+
+	SDL_AtomicSet(&g_AccessibilityTogglePattern, pattern);
 	SDL_AtomicAdd(&g_AccessibilityToggleSequence, 1);
 }
 
@@ -827,14 +846,18 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 	}
 
 	if (togglesequence != g_AccessibilityToggleObservedSequence) {
+		s32 pulses;
+
 		g_AccessibilityToggleObservedSequence = togglesequence;
-		g_AccessibilityToggleOn = SDL_AtomicGet(
-				&g_AccessibilityToggleEnabled);
+		g_AccessibilityToggleCurrentPattern = SDL_AtomicGet(
+				&g_AccessibilityTogglePattern);
+		pulses = g_AccessibilityToggleCurrentPattern
+						== ACCESSIBILITY_TOGGLE_PATTERN_FAST ? 3 : 2;
 		g_AccessibilityToggleSample = 0;
 		g_AccessibilityTogglePhase = 0.0f;
 		g_AccessibilityToggleSamplesRemaining
-				= ACCESSIBILITY_TOGGLE_BEEP_SAMPLES * 2
-					+ ACCESSIBILITY_TOGGLE_GAP_SAMPLES;
+				= ACCESSIBILITY_TOGGLE_BEEP_SAMPLES * pulses
+					+ ACCESSIBILITY_TOGGLE_GAP_SAMPLES * (pulses - 1);
 	}
 
 	if (!enabled && g_AccessibilityToneGain <= 0.0f
@@ -1024,22 +1047,19 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		}
 
 		if (g_AccessibilityToggleSamplesRemaining > 0) {
-			s32 secondsample = g_AccessibilityToggleSample
-					- ACCESSIBILITY_TOGGLE_BEEP_SAMPLES
-					- ACCESSIBILITY_TOGGLE_GAP_SAMPLES;
-			s32 beepsample = g_AccessibilityToggleSample
-					< ACCESSIBILITY_TOGGLE_BEEP_SAMPLES
-						? g_AccessibilityToggleSample : secondsample;
+			s32 cyclelength = ACCESSIBILITY_TOGGLE_BEEP_SAMPLES
+					+ ACCESSIBILITY_TOGGLE_GAP_SAMPLES;
+			s32 beepindex = g_AccessibilityToggleSample / cyclelength;
+			s32 beepsample = g_AccessibilityToggleSample % cyclelength;
 
-			if (beepsample >= 0
-					&& beepsample < ACCESSIBILITY_TOGGLE_BEEP_SAMPLES) {
+			if (beepsample < ACCESSIBILITY_TOGGLE_BEEP_SAMPLES) {
 				f32 envelope = 1.0f;
-				f32 frequencyhz = g_AccessibilityToggleSample
-						< ACCESSIBILITY_TOGGLE_BEEP_SAMPLES
+				f32 frequencyhz = beepindex == 0
 							? ACCESSIBILITY_TOGGLE_BASE_FREQUENCY_HZ
-							: g_AccessibilityToggleOn
-								? ACCESSIBILITY_TOGGLE_ON_FREQUENCY_HZ
-								: ACCESSIBILITY_TOGGLE_OFF_FREQUENCY_HZ;
+							: g_AccessibilityToggleCurrentPattern
+									== ACCESSIBILITY_TOGGLE_PATTERN_OFF
+										? ACCESSIBILITY_TOGGLE_OFF_FREQUENCY_HZ
+										: ACCESSIBILITY_TOGGLE_ON_FREQUENCY_HZ;
 
 				if (beepsample < ACCESSIBILITY_TOGGLE_ATTACK_SAMPLES) {
 					envelope = (f32)beepsample
