@@ -450,10 +450,10 @@ struct menuitem g_MpConfirmChallenge4MbMenuItems[] = {
 	{
 		MENUITEMTYPE_SCROLLABLE,
 		DESCRIPTION_MPCONFIG,
-		0,
+		MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		0x0000007c,
 		(VERSION == VERSION_PAL_FINAL ? 65 : 55),
-		NULL,
+		mpChallengeDescriptionMenuHandler,
 	},
 	{
 		MENUITEMTYPE_SEPARATOR,

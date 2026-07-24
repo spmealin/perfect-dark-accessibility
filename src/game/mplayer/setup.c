@@ -4,6 +4,7 @@
 #include "game/tex.h"
 #include "game/savebuffer.h"
 #include "game/menu.h"
+#include "game/menuitem.h"
 #include "game/mainmenu.h"
 #include "game/filemgr.h"
 #include "game/game_1531a0.h"
@@ -4605,10 +4606,10 @@ struct menuitem g_MpConfirmChallengeViaListOrDetailsMenuItems[] = {
 	{
 		MENUITEMTYPE_SCROLLABLE,
 		DESCRIPTION_MPCONFIG,
-		0,
+		MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		0x0000007c,
 		PAL ? 0x41 : 0x37,
-		NULL,
+		mpChallengeDescriptionMenuHandler,
 	},
 	{
 		MENUITEMTYPE_SEPARATOR,
@@ -4668,7 +4669,7 @@ struct menuitem g_MpChallengesListOrDetailsMenuItems[] = {
 	{
 		MENUITEMTYPE_SCROLLABLE,
 		DESCRIPTION_MPCHALLENGE,
-		0,
+		MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		0x0000007c,
 		PAL ? 0x41 : 0x37,
 		menuhandler0017e9d8,
@@ -4741,10 +4742,10 @@ struct menuitem g_MpConfirmChallengeMenuItems[] = {
 	{
 		MENUITEMTYPE_SCROLLABLE,
 		DESCRIPTION_MPCONFIG,
-		0,
+		MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		0x0000007c,
 		PAL ? 0x41 : 0x37,
-		NULL,
+		mpChallengeDescriptionMenuHandler,
 	},
 	{
 		MENUITEMTYPE_SEPARATOR,
@@ -4908,6 +4909,10 @@ MenuItemHandlerResult mpChallengesListMenuHandler(s32 operation, struct menuitem
  */
 MenuItemHandlerResult menuhandler0017e9d8(s32 operation, struct menuitem *item, union handlerdata *data)
 {
+	if (operation == MENUOP_GETACCESSIBILITYTEXT) {
+		return mpChallengeDescriptionMenuHandler(operation, item, data);
+	}
+
 	if (operation == MENUOP_CHECKHIDDEN) {
 		if (g_BossFile.locktype != MPLOCKTYPE_CHALLENGE) {
 			return true;
@@ -4915,6 +4920,29 @@ MenuItemHandlerResult menuhandler0017e9d8(s32 operation, struct menuitem *item, 
 	}
 
 	return 0;
+}
+
+MenuItemHandlerResult mpChallengeDescriptionMenuHandler(s32 operation,
+		struct menuitem *item, union handlerdata *data)
+{
+	const char *description;
+
+	if (operation != MENUOP_GETACCESSIBILITYTEXT
+			|| data->accessibility.part != MENUACCESSIBILITYPART_SUMMARY
+			|| !data->accessibility.buffer
+			|| data->accessibility.bufferlen == 0) {
+		return 0;
+	}
+
+	description = menuitemScrollableGetText(item->param);
+
+	if (!description || !description[0]) {
+		return 0;
+	}
+
+	snprintf(data->accessibility.buffer, data->accessibility.bufferlen,
+			"%s", description);
+	return 1;
 }
 
 MenuItemHandlerResult menuhandlerMpAbortChallenge(s32 operation, struct menuitem *item, union handlerdata *data)

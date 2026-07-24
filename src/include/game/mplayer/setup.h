@@ -58,6 +58,8 @@ char *mpMenuTextTeamName(struct menuitem *item);
 char *func0f17e318(struct menudialogdef *dialogdef);
 MenuDialogHandlerResult menudialog0017e3fc(s32 operation, struct menudialogdef *dialogdef, union handlerdata *data);
 MenuItemHandlerResult mpChallengesListMenuHandler(s32 operation, struct menuitem *item, union handlerdata *data);
+MenuItemHandlerResult mpChallengeDescriptionMenuHandler(s32 operation,
+		struct menuitem *item, union handlerdata *data);
 char *mpMenuTextChallengeName(struct menuitem *item);
 MenuDialogHandlerResult mpCombatChallengesMenuDialog(s32 operation, struct menudialogdef *dialogdef, union handlerdata *data);
 char *mpMenuTextSavePlayerOrCopy(struct menuitem *item);
