@@ -127,7 +127,9 @@ The firing-range behavior remains a bounded proof. The separate hostile-characte
 
 Each sweep samples current player position, stance-sized movement cylinder, and horizontal camera direction at seven live angles: -45, -30, -15, 0, 15, 30, and 45 degrees. Slow completes the left-to-right sweep plus end pause in 120 logical ticks; Fast completes it in 60. Movement and turning do not restart or freeze the sequence. A delayed frame never catches up with a burst: overdue angles are skipped and no more than one collision query runs in a logical tick.
 
-Each sample tests up to a configurable distance, defaulting to 900 world units, using the movement system's swept-cylinder room traversal against background, solid object, door, and path-blocker collision. It excludes characters and players and follows the current collision-cheat state. A collision plays a 35 ms procedural chirp at the returned surface X/Z position, with the camera height used for horizontal-only spatialization and a 0.115 master gain before distance attenuation. Its configurable distance curve defaults to full volume through 112.5 units, fading through 750, and silent at 975 so a maximum-range hit remains audible. Pitch redundantly communicates hit distance using perceptually even logarithmic interpolation: the default is 600 Hz at contact, approximately 424 Hz halfway through the reach, and 300 Hz at maximum reach. Misses are silent. Seven preallocated mixer slots, one per angle, keep these cues independent of game sound channels and the other accessibility oscillator lanes.
+Each sample tests up to a configurable distance, defaulting to 900 world units, using the movement system's swept-cylinder room traversal against background, solid object, door, and path-blocker collision. It excludes characters and players and follows the current collision-cheat state. A collision plays a 35 ms procedural chirp at the returned surface X/Z position, with the camera height used for horizontal-only spatialization and a 0.115 master gain before distance attenuation. Its configurable distance curve defaults to full volume through 112.5 units, fading through 750, and silent at 975 so a maximum-range hit remains audible. Pitch redundantly communicates hit distance using perceptually even logarithmic interpolation: the default is 600 Hz at contact, approximately 424 Hz halfway through the reach, and 300 Hz at maximum reach.
+
+The same ray also samples the engine's walkable-floor height at four evenly spaced points, by default through 450 world units or until an intervening barrier. The first elevation change of at least 12 units, bounded to 200 units above or below the observer's current floor, replaces a farther wall cue for that angle. An upward stair or ramp sweeps from below to above the distance pitch during a 140 ms chirp; a downward stair, ramp, or bounded drop sweeps from above to below it. The longer terrain contour is four times the duration of the steady 35 ms wall chirp so its direction remains perceptible. The geometric midpoint remains the ordinary distance pitch, preserving the learned near/far scale. Flat ground and missing or out-of-range floor samples are silent. Seven preallocated mixer slots, one per angle, keep these cues independent of game sound channels and the other accessibility oscillator lanes.
 
 The following `pd.ini` values may be tuned without rebuilding; restart the game after editing them:
 
@@ -139,6 +141,8 @@ VirtualCaneFadeDistance=750.000000
 VirtualCaneMaximumAudibleDistance=975.000000
 VirtualCaneNearFrequency=600.000000
 VirtualCaneFarFrequency=300.000000
+VirtualCaneTerrainReach=450.000000
+VirtualCaneTerrainHeightThreshold=12.000000
 EnemyFullVolumeDistance=600.000000
 EnemyFadeDistance=3500.000000
 EnemyMaximumDistance=4000.000000
@@ -147,11 +151,11 @@ EnemyVolume=0.140000
 
 Distances are world units. The effective full/fade/maximum values are normalized into nondecreasing order; the cane maximum-audible distance is also raised to at least its reach. Cane reach is bounded to 100–5,000, cane attenuation values to 0–10,000, enemy distances to 0–20,000, and enemy volume to 0–0.25. Non-finite values fall back to the documented defaults. The effective startup values are recorded in the accessibility session log.
 
-Cane frequencies are bounded to 20–4,000 Hz. If the configured near frequency is lower than the far frequency, the effective endpoints are exchanged so closer obstacles remain higher pitched.
+Cane frequencies are bounded to 20–4,000 Hz. If the configured near frequency is lower than the far frequency, the effective endpoints are exchanged so closer obstacles remain higher pitched. Terrain reach is bounded to 50–2,000 units and its height threshold to 1–100 units.
 
 The samples use a shared active-observer pose. Ordinarily that is Joanna's movement cylinder; while the game is actually rendering the CamSpy camera, it is the CamSpy's prop, rooms, 26-unit collision radius, movement-height bounds, position, and look vector. A perspective change cancels the old partial sweep and starts a fresh one from the new observer so no remaining angle is reported from the prior body.
 
-One allocation-free aggregate `cane/sweep` record captures all seven scheduled results, live pose/direction, player bbox, requested endpoint, collision result, obstacle/geometry metadata, raw and audible position, distance, calculated frequency, volume, pan, lateness, and diagnostic query time. With `ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS=ON`, one-second performance records also expose query totals/timing, missed work, requested/active cane masks, tone starts, stops, and mixer counters. Engineering build evidence exists; collision-point interpretation, left/right sign, geometry usefulness, masking, and long-session stability still require runtime and blind-user acceptance.
+One allocation-free aggregate `cane/sweep` record captures all seven scheduled results, live pose/direction, player bbox, requested endpoint, collision result, obstacle/geometry metadata, raw and audible position, distance, start/end frequency, terrain direction/height/distance/room/flags/query count, volume, pan, lateness, and diagnostic query time. With `ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS=ON`, one-second performance records also expose query totals/timing, missed work, requested/active cane masks, tone starts, stops, and mixer counters. Fast mode adds at most 28 bounded floor queries per one-second sweep; long-session profiling must confirm that this remains within the existing cane timing thresholds. Engineering build evidence exists; collision-point interpretation, terrain usefulness, masking, and long-session stability still require runtime and blind-user acceptance.
 
 ### View orientation recovery
 

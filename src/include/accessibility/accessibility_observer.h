@@ -10,6 +10,7 @@ struct accessibilityobserver {
 	struct coord camera;
 	struct coord look;
 	RoomNum room;
+	f32 ground;
 	f32 radius;
 	f32 ymin;
 	f32 ymax;

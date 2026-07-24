@@ -40,7 +40,6 @@
 #define ACCESSIBILITY_TRACKER_RELEASE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.008f))
 #define ACCESSIBILITY_TRACKER_REAR_MODULATION_HZ 30.0f
 #define ACCESSIBILITY_CANE_VOLUME 0.115f
-#define ACCESSIBILITY_CANE_DURATION_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.035f))
 #define ACCESSIBILITY_CANE_ATTACK_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.003f))
 #define ACCESSIBILITY_CANE_RELEASE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.008f))
 #define ACCESSIBILITY_TONE_MIX_BUFFER_SAMPLES 2048
@@ -82,8 +81,10 @@ static SDL_atomic_t g_AccessibilityTrackerRear[ACCESSIBILITY_TONE_TRACKER_SLOT_C
 static SDL_atomic_t g_AccessibilityCaneEnabled[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityCaneSequence[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityCaneFrequencyMilliHz[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
+static SDL_atomic_t g_AccessibilityCaneEndFrequencyMilliHz[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityCaneVolumeMillionths[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityCanePanMillionths[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
+static SDL_atomic_t g_AccessibilityCaneDurationMs[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 static SDL_atomic_t g_AccessibilityToneMixCalls;
 static SDL_atomic_t g_AccessibilityTonePassthroughCalls;
@@ -133,8 +134,10 @@ static f32 g_AccessibilityTrackerPan[ACCESSIBILITY_TONE_TRACKER_SLOT_COUNT];
 static s32 g_AccessibilityCaneObservedSequence[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 static s32 g_AccessibilityCaneSamplesRemaining[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 static s32 g_AccessibilityCaneSample[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
+static s32 g_AccessibilityCaneDurationSamples[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 static f32 g_AccessibilityCanePhase[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 static f32 g_AccessibilityCaneFrequencyHz[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
+static f32 g_AccessibilityCaneEndFrequencyHz[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 static f32 g_AccessibilityCaneVolume[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 static f32 g_AccessibilityCanePan[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 
@@ -383,15 +386,18 @@ void accessibilityToneStopTracker(void)
 	}
 }
 
-void accessibilityTonePlayCaneSlot(s32 slot, f32 frequencyhz,
-		f32 volume, f32 pan)
+void accessibilityTonePlayCaneSlot(s32 slot, f32 startfrequencyhz,
+		f32 endfrequencyhz, f32 volume, f32 pan, s32 durationms)
 {
 	if (slot < 0 || slot >= ACCESSIBILITY_TONE_CANE_SLOT_COUNT) {
 		return;
 	}
 
-	if (frequencyhz < 1.0f) {
-		frequencyhz = 1.0f;
+	if (startfrequencyhz < 1.0f) {
+		startfrequencyhz = 1.0f;
+	}
+	if (endfrequencyhz < 1.0f) {
+		endfrequencyhz = 1.0f;
 	}
 
 	if (volume < 0.0f) {
@@ -405,13 +411,21 @@ void accessibilityTonePlayCaneSlot(s32 slot, f32 frequencyhz,
 	} else if (pan > 1.0f) {
 		pan = 1.0f;
 	}
+	if (durationms < 10) {
+		durationms = 10;
+	} else if (durationms > 250) {
+		durationms = 250;
+	}
 
 	SDL_AtomicSet(&g_AccessibilityCaneFrequencyMilliHz[slot],
-			(s32)(frequencyhz * 1000.0f));
+			(s32)(startfrequencyhz * 1000.0f));
+	SDL_AtomicSet(&g_AccessibilityCaneEndFrequencyMilliHz[slot],
+			(s32)(endfrequencyhz * 1000.0f));
 	SDL_AtomicSet(&g_AccessibilityCaneVolumeMillionths[slot],
 			(s32)(volume * 1000000.0f));
 	SDL_AtomicSet(&g_AccessibilityCanePanMillionths[slot],
 			(s32)(pan * 1000000.0f));
+	SDL_AtomicSet(&g_AccessibilityCaneDurationMs[slot], durationms);
 	SDL_AtomicSet(&g_AccessibilityCaneEnabled[slot], volume > 0.0f);
 	SDL_AtomicAdd(&g_AccessibilityCaneSequence[slot], 1);
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
@@ -642,12 +656,23 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			if (SDL_AtomicGet(&g_AccessibilityCaneEnabled[slot])) {
 				g_AccessibilityCaneFrequencyHz[slot] = (f32)SDL_AtomicGet(
 						&g_AccessibilityCaneFrequencyMilliHz[slot]) / 1000.0f;
+				g_AccessibilityCaneEndFrequencyHz[slot] = (f32)SDL_AtomicGet(
+						&g_AccessibilityCaneEndFrequencyMilliHz[slot])
+						/ 1000.0f;
 				g_AccessibilityCaneVolume[slot] = (f32)SDL_AtomicGet(
 						&g_AccessibilityCaneVolumeMillionths[slot]) / 1000000.0f;
 				g_AccessibilityCanePan[slot] = (f32)SDL_AtomicGet(
 						&g_AccessibilityCanePanMillionths[slot]) / 1000000.0f;
+				g_AccessibilityCaneDurationSamples[slot]
+						= (s32)(ACCESSIBILITY_TONE_SAMPLE_RATE
+								* (f32)SDL_AtomicGet(
+										&g_AccessibilityCaneDurationMs[slot])
+								/ 1000.0f);
+				if (g_AccessibilityCaneDurationSamples[slot] < 1) {
+					g_AccessibilityCaneDurationSamples[slot] = 1;
+				}
 				g_AccessibilityCaneSamplesRemaining[slot]
-						= ACCESSIBILITY_CANE_DURATION_SAMPLES;
+						= g_AccessibilityCaneDurationSamples[slot];
 				g_AccessibilityCaneSample[slot] = 0;
 				g_AccessibilityCanePhase[slot] = 0.0f;
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
@@ -1121,6 +1146,12 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 							? 1.0f - g_AccessibilityCanePan[slot] : 1.0f;
 					f32 rightpan = g_AccessibilityCanePan[slot] < 0.0f
 							? 1.0f + g_AccessibilityCanePan[slot] : 1.0f;
+					f32 progress = (f32)g_AccessibilityCaneSample[slot]
+							/ (f32)g_AccessibilityCaneDurationSamples[slot];
+					f32 frequency = g_AccessibilityCaneFrequencyHz[slot]
+							* powf(g_AccessibilityCaneEndFrequencyHz[slot]
+									/ g_AccessibilityCaneFrequencyHz[slot],
+									progress);
 					f32 cane;
 
 					if (g_AccessibilityCaneSample[slot]
@@ -1139,7 +1170,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 					caneleft += (s32)(cane * leftpan);
 					caneright += (s32)(cane * rightpan);
 					g_AccessibilityCanePhase[slot] += TWO_PI
-							* g_AccessibilityCaneFrequencyHz[slot]
+							* frequency
 							/ ACCESSIBILITY_TONE_SAMPLE_RATE;
 
 					if (g_AccessibilityCanePhase[slot] >= TWO_PI) {

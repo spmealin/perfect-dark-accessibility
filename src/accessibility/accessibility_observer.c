@@ -37,6 +37,7 @@ s32 accessibilityObserverGet(struct accessibilityobserver *observer)
 		observer->camera = player->cam_pos;
 		observer->look = player->cam_look;
 		observer->room = player->cam_room;
+		observer->ground = eyespy->oldground;
 		observer->radius = 26.0f;
 		observer->ymax = observer->origin.y + 15.0f;
 		yminoffset = eyespy->oldground <= chr->manground + 30.0f
@@ -50,6 +51,7 @@ s32 accessibilityObserverGet(struct accessibilityobserver *observer)
 		observer->camera = player->cam_pos;
 		observer->look = player->cam_look;
 		observer->room = player->cam_room;
+		observer->ground = player->vv_ground;
 		playerGetBbox(player->prop, &observer->radius,
 				&observer->ymax, &observer->ymin);
 	}

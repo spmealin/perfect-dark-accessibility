@@ -251,6 +251,8 @@ Accessibility.VirtualCaneFadeDistance=750
 Accessibility.VirtualCaneMaximumAudibleDistance=975
 Accessibility.VirtualCaneNearFrequency=600
 Accessibility.VirtualCaneFarFrequency=300
+Accessibility.VirtualCaneTerrainReach=450
+Accessibility.VirtualCaneTerrainHeightThreshold=12
 Accessibility.EnemyFullVolumeDistance=600
 Accessibility.EnemyFadeDistance=3500
 Accessibility.EnemyMaximumDistance=4000
@@ -265,7 +267,7 @@ Accessibility.StatusNarration=1
 Accessibility.Verbosity=1
 ```
 
-The implemented keys are constructor-registered bounded integers or floats in the existing config registry. Cross-field runtime validation enforces ordered attenuation thresholds, keeps the cane audible through its configured reach, normalizes the cane pitch endpoints so near is not lower than far, rejects non-finite values, and caps enemy gain at 0.25. Cane hit distance maps logarithmically from the configured near frequency at contact to the far frequency at maximum reach; the result is passed through the existing per-slot oscillator command without allocation or an additional voice. Effective values are sampled at startup and recorded in the session log; editing `pd.ini` requires a restart. Accessibility settings belong in `pd.ini`, not only in a selected Perfect Dark profile, because startup menus need them. Later key names/ranges remain provisional, and a later in-game settings page should use the same values.
+The implemented keys are constructor-registered bounded integers or floats in the existing config registry. Cross-field runtime validation enforces ordered attenuation thresholds, keeps the cane audible through its configured reach, normalizes the cane pitch endpoints so near is not lower than far, rejects non-finite values, and caps enemy gain at 0.25. Cane hit distance maps logarithmically from the configured near frequency at contact to the far frequency at maximum reach. Walkable-floor samples ahead of the active observer select the first elevation change above the configured threshold and encode its sign with an upward or downward logarithmic contour centered on that distance pitch. The result passes through the existing per-slot oscillator command without allocation or an additional voice. Effective values are sampled at startup and recorded in the session log; editing `pd.ini` requires a restart. Accessibility settings belong in `pd.ini`, not only in a selected Perfect Dark profile, because startup menus need them. Later key names/ranges remain provisional, and a later in-game settings page should use the same values.
 
 ### Playtest logging
 
@@ -305,7 +307,7 @@ A shared observer adapter selects the prop and pose that own the currently rende
 
 Each scheduled sample copies the current player movement bbox and follows the walking system's room traversal plus `cdExamCylMove06`/`cdExamCylMove02` ordering. The collision mask is background, objects, doors, and path blockers when normal Bond collision is enabled, otherwise background only; characters and players are excluded. Collision APIs publish through shared global scratch state, so the adapter immediately copies a swept hit's full position/geometry record or derives the destination-overlap fallback from its returned obstacle edge before computing distance, volume, and pan. The query never runs on the audio thread and does not call the state-mutating `bwalkCalculateNewPosition` wrapper.
 
-Seven fixed procedural-mixer slots own one 330 Hz, 35 ms chirp each. Atomic sequences transfer frequency, normalized volume, and pan to audio-owned phase/envelope storage; stop clears all slots. The path allocates no native game sound channels. One preallocated text buffer aggregates all seven sample records and uses the logger's preformatted event API, avoiding a periodic formatting allocation while retaining the logger's existing synchronous flush behavior. Advanced diagnostics expose collision timing/counters and mixer request/active masks.
+Seven fixed procedural-mixer slots each own one cane chirp. Atomic sequences transfer start/end frequency, duration, normalized volume, and pan to audio-owned phase/envelope storage; stop clears all slots. A wall uses a steady distance-pitched 35 ms chirp, while rising or falling terrain uses a 140 ms logarithmic contour centered on the same distance pitch. The path allocates no native game sound channels. One preallocated text buffer aggregates all seven sample records and uses the logger's preformatted event API, avoiding a periodic formatting allocation while retaining the logger's existing synchronous flush behavior. Advanced diagnostics expose collision timing/counters and mixer request/active masks.
 
 ### Target and scanner
 

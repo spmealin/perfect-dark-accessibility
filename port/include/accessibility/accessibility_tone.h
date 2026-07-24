@@ -49,8 +49,8 @@ void accessibilityToneSetTrackerSlot(s32 slot, s32 enabled, f32 frequencyhz,
 		f32 volume, f32 pan, s32 periodms, s32 height, s32 rear,
 		s32 restart);
 void accessibilityToneStopTracker(void);
-void accessibilityTonePlayCaneSlot(s32 slot, f32 frequencyhz,
-		f32 volume, f32 pan);
+void accessibilityTonePlayCaneSlot(s32 slot, f32 startfrequencyhz,
+		f32 endfrequencyhz, f32 volume, f32 pan, s32 durationms);
 void accessibilityToneStopCane(void);
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 void accessibilityToneGetDiagnostics(struct accessibilitytonediagnostics *diagnostics);
