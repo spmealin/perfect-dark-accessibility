@@ -32,6 +32,11 @@
 #define ACCESSIBILITY_HAZARD_VOLUME 0.14f
 #define ACCESSIBILITY_COMBAT_CHIRP_ATTACK_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.004f))
 #define ACCESSIBILITY_COMBAT_CHIRP_RELEASE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.012f))
+#define ACCESSIBILITY_COMBAT_FUNDAMENTAL_GAIN 0.78f
+#define ACCESSIBILITY_COMBAT_OCTAVE_GAIN 0.22f
+#define ACCESSIBILITY_TARGET_PRESENCE_DURATION_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.10f))
+#define ACCESSIBILITY_TARGET_PRESENCE_ATTACK_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.004f))
+#define ACCESSIBILITY_TARGET_PRESENCE_RELEASE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.012f))
 #define ACCESSIBILITY_TRACKER_VOLUME 0.065f
 #define ACCESSIBILITY_TRACKER_LEVEL_BEEP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.045f))
 #define ACCESSIBILITY_TRACKER_DOUBLE_BEEP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.035f))
@@ -53,6 +58,11 @@ static SDL_atomic_t g_AccessibilityChirpFrequencyMilliHz;
 static SDL_atomic_t g_AccessibilityChirpVolumeMillionths;
 static SDL_atomic_t g_AccessibilityChirpPanMillionths;
 static SDL_atomic_t g_AccessibilityChirpPulses;
+static SDL_atomic_t g_AccessibilityTargetPresenceSequence;
+static SDL_atomic_t g_AccessibilityTargetPresenceEnabled;
+static SDL_atomic_t g_AccessibilityTargetPresenceFrequencyMilliHz;
+static SDL_atomic_t g_AccessibilityTargetPresenceVolumeMillionths;
+static SDL_atomic_t g_AccessibilityTargetPresencePanMillionths;
 static SDL_atomic_t g_AccessibilityToggleSequence;
 static SDL_atomic_t g_AccessibilityToggleEnabled;
 static SDL_atomic_t g_AccessibilityWeaponFunctionSequence;
@@ -107,6 +117,13 @@ static f32 g_AccessibilityChirpPhase;
 static f32 g_AccessibilityChirpFrequencyHz;
 static f32 g_AccessibilityChirpVolume;
 static f32 g_AccessibilityChirpPan;
+static s32 g_AccessibilityTargetPresenceObservedSequence;
+static s32 g_AccessibilityTargetPresenceSamplesRemaining;
+static s32 g_AccessibilityTargetPresenceSample;
+static f32 g_AccessibilityTargetPresencePhase;
+static f32 g_AccessibilityTargetPresenceFrequencyHz;
+static f32 g_AccessibilityTargetPresenceVolume;
+static f32 g_AccessibilityTargetPresencePan;
 static s32 g_AccessibilityToggleObservedSequence;
 static s32 g_AccessibilityToggleSamplesRemaining;
 static s32 g_AccessibilityToggleSample;
@@ -152,6 +169,12 @@ static s16 accessibilityToneClamp(s32 value)
 	}
 
 	return value;
+}
+
+static f32 accessibilityToneCombatWave(f32 phase)
+{
+	return sinf(phase) * ACCESSIBILITY_COMBAT_FUNDAMENTAL_GAIN
+			+ sinf(phase * 2.0f) * ACCESSIBILITY_COMBAT_OCTAVE_GAIN;
 }
 
 void accessibilityToneSet(s32 enabled, f32 frequencyhz)
@@ -213,6 +236,39 @@ void accessibilityToneStopChirp(void)
 {
 	SDL_AtomicSet(&g_AccessibilityChirpEnabled, 0);
 	SDL_AtomicAdd(&g_AccessibilityChirpSequence, 1);
+}
+
+void accessibilityTonePlayTargetPresence(f32 frequencyhz,
+		f32 volume, f32 pan)
+{
+	if (frequencyhz < 1.0f) {
+		frequencyhz = 1.0f;
+	}
+	if (volume < 0.0f) {
+		volume = 0.0f;
+	} else if (volume > 1.0f) {
+		volume = 1.0f;
+	}
+	if (pan < -1.0f) {
+		pan = -1.0f;
+	} else if (pan > 1.0f) {
+		pan = 1.0f;
+	}
+
+	SDL_AtomicSet(&g_AccessibilityTargetPresenceFrequencyMilliHz,
+			(s32)(frequencyhz * 1000.0f));
+	SDL_AtomicSet(&g_AccessibilityTargetPresenceVolumeMillionths,
+			(s32)(volume * 1000000.0f));
+	SDL_AtomicSet(&g_AccessibilityTargetPresencePanMillionths,
+			(s32)(pan * 1000000.0f));
+	SDL_AtomicSet(&g_AccessibilityTargetPresenceEnabled, volume > 0.0f);
+	SDL_AtomicAdd(&g_AccessibilityTargetPresenceSequence, 1);
+}
+
+void accessibilityToneStopTargetPresence(void)
+{
+	SDL_AtomicSet(&g_AccessibilityTargetPresenceEnabled, 0);
+	SDL_AtomicAdd(&g_AccessibilityTargetPresenceSequence, 1);
 }
 
 void accessibilityTonePlayToggleConfirmation(s32 enabled)
@@ -503,6 +559,8 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 {
 	s32 enabled = SDL_AtomicGet(&g_AccessibilityToneEnabled);
 	s32 chirpsequence = SDL_AtomicGet(&g_AccessibilityChirpSequence);
+	s32 targetpresencesequence = SDL_AtomicGet(
+			&g_AccessibilityTargetPresenceSequence);
 	s32 togglesequence = SDL_AtomicGet(&g_AccessibilityToggleSequence);
 	s32 weaponfunctionsequence = SDL_AtomicGet(
 			&g_AccessibilityWeaponFunctionSequence);
@@ -716,6 +774,33 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		}
 	}
 
+	if (targetpresencesequence
+			!= g_AccessibilityTargetPresenceObservedSequence) {
+		g_AccessibilityTargetPresenceObservedSequence
+				= targetpresencesequence;
+
+		if (SDL_AtomicGet(&g_AccessibilityTargetPresenceEnabled)) {
+			g_AccessibilityTargetPresenceFrequencyHz
+					= (f32)SDL_AtomicGet(
+							&g_AccessibilityTargetPresenceFrequencyMilliHz)
+						/ 1000.0f;
+			g_AccessibilityTargetPresenceVolume
+					= (f32)SDL_AtomicGet(
+							&g_AccessibilityTargetPresenceVolumeMillionths)
+						/ 1000000.0f;
+			g_AccessibilityTargetPresencePan
+					= (f32)SDL_AtomicGet(
+							&g_AccessibilityTargetPresencePanMillionths)
+						/ 1000000.0f;
+			g_AccessibilityTargetPresenceSamplesRemaining
+					= ACCESSIBILITY_TARGET_PRESENCE_DURATION_SAMPLES;
+			g_AccessibilityTargetPresenceSample = 0;
+			g_AccessibilityTargetPresencePhase = 0.0f;
+		} else {
+			g_AccessibilityTargetPresenceSamplesRemaining = 0;
+		}
+	}
+
 	if (weaponfunctionsequence
 			!= g_AccessibilityWeaponFunctionObservedSequence) {
 		s32 pulses = SDL_AtomicGet(&g_AccessibilityWeaponFunctionPulses);
@@ -744,6 +829,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 	if (!enabled && g_AccessibilityToneGain <= 0.0f
 			&& !hazardenabled && g_AccessibilityHazardGain <= 0.0f
 			&& g_AccessibilityChirpSamplesRemaining <= 0
+			&& g_AccessibilityTargetPresenceSamplesRemaining <= 0
 			&& g_AccessibilityToggleSamplesRemaining <= 0
 			&& g_AccessibilityWeaponFunctionSamplesRemaining <= 0
 			&& !anycombatenabled && !anytrackerenabled && !anycaneactive) {
@@ -780,6 +866,8 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		s32 tone;
 		s32 chirpleft = 0;
 		s32 chirpright = 0;
+		s32 targetpresenceleft = 0;
+		s32 targetpresenceright = 0;
 		s32 hazardleft = 0;
 		s32 hazardright = 0;
 		s32 toggletone = 0;
@@ -889,6 +977,40 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			g_AccessibilityChirpSamplesRemaining--;
 		}
 
+		if (g_AccessibilityTargetPresenceSamplesRemaining > 0) {
+			f32 envelope = 1.0f;
+			f32 leftpan = g_AccessibilityTargetPresencePan > 0.0f
+					? 1.0f - g_AccessibilityTargetPresencePan : 1.0f;
+			f32 rightpan = g_AccessibilityTargetPresencePan < 0.0f
+					? 1.0f + g_AccessibilityTargetPresencePan : 1.0f;
+			f32 presence;
+
+			if (g_AccessibilityTargetPresenceSample
+					< ACCESSIBILITY_TARGET_PRESENCE_ATTACK_SAMPLES) {
+				envelope = (f32)g_AccessibilityTargetPresenceSample
+						/ (f32)ACCESSIBILITY_TARGET_PRESENCE_ATTACK_SAMPLES;
+			} else if (g_AccessibilityTargetPresenceSamplesRemaining
+					< ACCESSIBILITY_TARGET_PRESENCE_RELEASE_SAMPLES) {
+				envelope = (f32)g_AccessibilityTargetPresenceSamplesRemaining
+						/ (f32)ACCESSIBILITY_TARGET_PRESENCE_RELEASE_SAMPLES;
+			}
+
+			presence = accessibilityToneCombatWave(
+					g_AccessibilityTargetPresencePhase) * envelope
+					* g_AccessibilityTargetPresenceVolume
+					* combatmastervolume * 32767.0f;
+			targetpresenceleft = (s32)(presence * leftpan);
+			targetpresenceright = (s32)(presence * rightpan);
+			g_AccessibilityTargetPresencePhase += TWO_PI
+					* g_AccessibilityTargetPresenceFrequencyHz
+					/ ACCESSIBILITY_TONE_SAMPLE_RATE;
+			if (g_AccessibilityTargetPresencePhase >= TWO_PI) {
+				g_AccessibilityTargetPresencePhase -= TWO_PI;
+			}
+			g_AccessibilityTargetPresenceSample++;
+			g_AccessibilityTargetPresenceSamplesRemaining--;
+		}
+
 		if (g_AccessibilityToggleSamplesRemaining > 0) {
 			s32 secondsample = g_AccessibilityToggleSample
 					- ACCESSIBILITY_TOGGLE_BEEP_SAMPLES
@@ -992,7 +1114,8 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 						? 1.0f - g_AccessibilityCombatPan[slot] : 1.0f;
 				f32 rightpan = g_AccessibilityCombatPan[slot] < 0.0f
 						? 1.0f + g_AccessibilityCombatPan[slot] : 1.0f;
-				f32 combat = sinf(g_AccessibilityCombatPhase[slot])
+				f32 combat = accessibilityToneCombatWave(
+						g_AccessibilityCombatPhase[slot])
 						* g_AccessibilityCombatGain[slot] * 32767.0f;
 
 				combatleft += (s32)(combat * leftpan);
@@ -1026,7 +1149,8 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 								/ (f32)ACCESSIBILITY_COMBAT_CHIRP_RELEASE_SAMPLES;
 					}
 
-					combat = sinf(g_AccessibilityCombatPhase[slot]) * envelope
+					combat = accessibilityToneCombatWave(
+							g_AccessibilityCombatPhase[slot]) * envelope
 							* combatvolume[slot] * combatmastervolume
 							* 32767.0f;
 					combatleft += (s32)(combat * leftpan);
@@ -1185,11 +1309,13 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 		g_AccessibilityToneMixBuffer[index] = accessibilityToneClamp(
 				(s32)g_AccessibilityToneMixBuffer[index] + tone + chirpleft
-						+ hazardleft + combatleft + trackerleft + caneleft
+						+ targetpresenceleft + hazardleft + combatleft
+						+ trackerleft + caneleft
 						+ toggletone + weaponfunctiontone);
 		g_AccessibilityToneMixBuffer[index + 1] = accessibilityToneClamp(
 				(s32)g_AccessibilityToneMixBuffer[index + 1] + tone + chirpright
-						+ hazardright + combatright + trackerright + caneright
+						+ targetpresenceright + hazardright + combatright
+						+ trackerright + caneright
 						+ toggletone + weaponfunctiontone);
 
 		g_AccessibilityTonePhase += TWO_PI

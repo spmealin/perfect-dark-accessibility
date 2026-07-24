@@ -30,7 +30,6 @@
 #define ACCESSIBILITY_TARGETING_TONE_BASE_FREQUENCY_HZ 440.0f
 #define ACCESSIBILITY_TARGETING_TONE_MIN_PITCH 1.5f
 #define ACCESSIBILITY_TARGETING_TONE_MAX_PITCH 3.0f
-#define ACCESSIBILITY_TARGETING_COMBAT_FREQUENCY_HZ 440.0f
 #define ACCESSIBILITY_TARGETING_COMBAT_FAR_PERIOD_MS 750
 #define ACCESSIBILITY_TARGETING_COMBAT_CLOSE_PERIOD_MS 200
 #define ACCESSIBILITY_TARGETING_COMBAT_FAR_DURATION_MS 180
@@ -76,6 +75,7 @@ struct accessibilitytargetingstate {
 	struct accessibilitytargetingidentity aimedidentity;
 	s32 hasaimedidentity;
 	s32 presencechannel;
+	s32 proceduralpresenceactive;
 	s32 alignmentactive;
 	f32 alignmentfrequencyhz;
 	f32 alignmentquality;
@@ -149,6 +149,7 @@ static s32 g_AccessibilityTargetingStatesInitialized;
 #define g_AccessibilityTargetingAimedIdentity (g_AccessibilityTargetingCurrentState->aimedidentity)
 #define g_AccessibilityTargetingHasAimedIdentity (g_AccessibilityTargetingCurrentState->hasaimedidentity)
 #define g_AccessibilityTargetingPresenceChannel (g_AccessibilityTargetingCurrentState->presencechannel)
+#define g_AccessibilityTargetingProceduralPresenceActive (g_AccessibilityTargetingCurrentState->proceduralpresenceactive)
 #define g_AccessibilityTargetingAlignmentActive (g_AccessibilityTargetingCurrentState->alignmentactive)
 #define g_AccessibilityTargetingAlignmentFrequencyHz (g_AccessibilityTargetingCurrentState->alignmentfrequencyhz)
 #define g_AccessibilityTargetingAlignmentQuality (g_AccessibilityTargetingCurrentState->alignmentquality)
@@ -217,7 +218,7 @@ static void accessibilityTargetingLogTelemetry(s32 frame60)
 	}
 
 	accessibilityLogEvent("targeting", "telemetry",
-			"frame=%d observations=%llu presence_pulses=%llu alignment_updates=%llu records=%d aimed=%d memory_available=%d working_set_bytes=%llu working_set_delta=%lld private_bytes=%llu private_delta=%lld snd_states=%d prop_channels_in_use=%d prop_channels_total=%d prop_channels_stopped=%d targeting_channels=%d presence_channel=%d presence_owned=%d combat_oscillator_slots=%d combat_oscillator_capacity=%d alignment_active=%d alignment_frequency_hz=%.2f alignment_quality=%.4f alignment_distance=%.3f",
+			"frame=%d observations=%llu presence_pulses=%llu alignment_updates=%llu records=%d aimed=%d memory_available=%d working_set_bytes=%llu working_set_delta=%lld private_bytes=%llu private_delta=%lld snd_states=%d prop_channels_in_use=%d prop_channels_total=%d prop_channels_stopped=%d targeting_channels=%d presence_channel=%d presence_owned=%d procedural_presence_active=%d combat_oscillator_slots=%d combat_oscillator_capacity=%d alignment_active=%d alignment_frequency_hz=%.2f alignment_quality=%.4f alignment_distance=%.3f",
 			frame60,
 			(unsigned long long)g_AccessibilityTargetingObservationCount,
 			(unsigned long long)g_AccessibilityTargetingPresencePulseCount,
@@ -233,6 +234,7 @@ static void accessibilityTargetingLogTelemetry(s32 frame60)
 			g_SndNumPlaying, inuse, channels, stopped, owned,
 			g_AccessibilityTargetingPresenceChannel,
 			accessibilityTargetingPresenceOwned(),
+			g_AccessibilityTargetingProceduralPresenceActive,
 			accessibilityTargetingCombatSlotCount(),
 			ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT,
 			g_AccessibilityTargetingAlignmentActive,
@@ -342,17 +344,23 @@ static void accessibilityTargetingStopPresence(const char *reason)
 {
 	s32 channel = g_AccessibilityTargetingPresenceChannel;
 	s32 owned = accessibilityTargetingPresenceOwned();
+	s32 procedural = g_AccessibilityTargetingProceduralPresenceActive;
 
 	if (owned) {
 		psStopChannel(channel);
 	}
+	if (procedural) {
+		accessibilityToneStopTargetPresence();
+	}
 
-	if (channel >= 0) {
+	if (channel >= 0 || procedural) {
 		accessibilityLogEvent("targeting", "presence_stop",
-				"reason=%s channel=%d owned=%d", reason, channel, owned);
+				"reason=%s channel=%d owned=%d procedural=%d",
+				reason, channel, owned, procedural);
 	}
 
 	g_AccessibilityTargetingPresenceChannel = -1;
+	g_AccessibilityTargetingProceduralPresenceActive = false;
 }
 
 static void accessibilityTargetingStopCombatPresence(const char *reason)
@@ -650,6 +658,7 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 {
 	s32 slot;
 	s32 index;
+	f32 combatfrequency = accessibilityGetEnemyFrequency();
 
 	for (slot = 0; slot < ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT; slot++) {
 		struct accessibilitytargetingcombatslot *voice
@@ -664,7 +673,7 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 		if (recordindex < 0 || !accessibilityTargetingRecordPresenceEligible(
 				&g_AccessibilityTargetingRecords[recordindex])) {
 			accessibilityToneSetCombatSlot(slot, false,
-					ACCESSIBILITY_TARGETING_COMBAT_FREQUENCY_HZ,
+					combatfrequency,
 					0.0f, 0.0f,
 					ACCESSIBILITY_TARGETING_COMBAT_FAR_PERIOD_MS,
 					ACCESSIBILITY_TARGETING_COMBAT_FAR_DURATION_MS,
@@ -718,7 +727,7 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 					frame60, slot, voice->identity.source,
 					voice->identity.sourceslot, voice->identity.propnum,
 					(void *)record->candidate.prop,
-					ACCESSIBILITY_TARGETING_COMBAT_FREQUENCY_HZ,
+					combatfrequency,
 					distancecuereference);
 		}
 
@@ -777,7 +786,7 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 			voice->nextcadencelog60 = frame60 + TICKS(60);
 		}
 		accessibilityToneSetCombatSlot(slot, true,
-				ACCESSIBILITY_TARGETING_COMBAT_FREQUENCY_HZ,
+				combatfrequency,
 				normalizedvolume, normalizedpan, periodms, durationms,
 				distancezone == 2, restart, triggernow);
 		voice->audible = normalizedvolume > 0.0f;
@@ -795,6 +804,11 @@ static void accessibilityTargetingPulsePresence(s32 frame60)
 	s32 interval;
 	s16 channel = -1;
 	s32 reused = false;
+	s32 volume;
+	s32 pan;
+	f32 normalizedvolume;
+	f32 normalizedpan;
+	f32 frequencyhz;
 
 	if (!record || count <= 0) {
 		accessibilityTargetingStopPresence("no_eligible_target");
@@ -804,6 +818,51 @@ static void accessibilityTargetingPulsePresence(s32 frame60)
 	interval = g_AccessibilityTargetingCurrentPolicy->basecycleticks / count;
 	if (interval < g_AccessibilityTargetingCurrentPolicy->minslotticks) {
 		interval = g_AccessibilityTargetingCurrentPolicy->minslotticks;
+	}
+
+	if (g_AccessibilityTargetingCurrentPolicy->profile
+			== ACCESSIBILITY_TARGETING_PROFILE_FIRING_RANGE) {
+		if (accessibilityTargetingPresenceOwned()) {
+			psStopChannel(previouschannel);
+		}
+		g_AccessibilityTargetingPresenceChannel = -1;
+		volume = psCalculateVolumeFromDistance(record->candidate.distance,
+				g_AccessibilityTargetingCurrentPolicy->fulldistance,
+				g_AccessibilityTargetingCurrentPolicy->fadedistance,
+				g_AccessibilityTargetingCurrentPolicy->silentdistance,
+				AL_VOL_FULL);
+		pan = psCalculatePan(&record->candidate.position,
+				g_AccessibilityTargetingCurrentPolicy->fulldistance,
+				g_AccessibilityTargetingCurrentPolicy->fadedistance,
+				g_AccessibilityTargetingCurrentPolicy->silentdistance,
+				record->candidate.distance, false, NULL);
+		normalizedvolume = (f32)volume / (f32)AL_VOL_FULL;
+		normalizedpan = ((f32)pan - (f32)AL_PAN_CENTER)
+				/ (f32)AL_PAN_CENTER;
+		frequencyhz = accessibilityGetEnemyFrequency();
+		accessibilityTonePlayTargetPresence(frequencyhz,
+				normalizedvolume, normalizedpan);
+		g_AccessibilityTargetingProceduralPresenceActive = true;
+		g_AccessibilityTargetingLastPulseIdentity
+				= record->candidate.identity;
+		g_AccessibilityTargetingHasLastPulseIdentity = true;
+		g_AccessibilityTargetingNextPresence60 = frame60 + interval;
+		g_AccessibilityTargetingPresencePulseCount++;
+		accessibilityLogEvent("targeting", "presence_pulse",
+				"pulse=%llu frame=%d next_frame=%d interval=%d eligible=%d lane=procedural_combat_timbre frequency_hz=%.3f volume=%.4f pan=%.4f source=%d slot=%d propnum=%d prop=%p distance=%.3f screen=%.3f,%.3f,%.3f,%.3f position=%.3f,%.3f,%.3f",
+				(unsigned long long)g_AccessibilityTargetingPresencePulseCount,
+				frame60, g_AccessibilityTargetingNextPresence60,
+				interval, count, frequencyhz, normalizedvolume,
+				normalizedpan, record->candidate.identity.source,
+				record->candidate.identity.sourceslot,
+				record->candidate.identity.propnum,
+				(void *)record->candidate.prop,
+				record->candidate.distance,
+				record->candidate.screenx1, record->candidate.screeny1,
+				record->candidate.screenx2, record->candidate.screeny2,
+				record->candidate.position.x, record->candidate.position.y,
+				record->candidate.position.z);
+		return;
 	}
 
 	if (accessibilityTargetingPresenceChannelReusable(previouschannel)) {
@@ -1086,6 +1145,7 @@ static void accessibilityTargetingResetCurrent(const char *reason)
 	s32 hadstate = g_AccessibilityTargetingRecordCount
 			|| g_AccessibilityTargetingHasAimedIdentity
 			|| g_AccessibilityTargetingPresenceChannel >= 0
+			|| g_AccessibilityTargetingProceduralPresenceActive
 			|| accessibilityTargetingCombatSlotCount() > 0
 			|| g_AccessibilityTargetingAlignmentActive;
 
