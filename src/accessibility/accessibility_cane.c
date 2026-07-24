@@ -25,7 +25,6 @@
 #include "accessibility/accessibility_tone.h"
 
 #define ACCESSIBILITY_CANE_PROBE_COUNT 7
-#define ACCESSIBILITY_CANE_FREQUENCY_HZ 330.0f
 #define ACCESSIBILITY_CANE_SLOW_CYCLE_TICKS TICKS(120)
 #define ACCESSIBILITY_CANE_FAST_CYCLE_TICKS TICKS(60)
 #define ACCESSIBILITY_CANE_LOG_BUFFER_SIZE 8192
@@ -57,6 +56,7 @@ struct accessibilitycanesample {
 	struct coord rawhit;
 	struct coord audiosource;
 	f32 distance;
+	f32 frequency;
 	struct prop *obstacle;
 	s32 obstacletype;
 	u32 geoflags;
@@ -236,7 +236,7 @@ static void accessibilityCaneLogSweep(const char *reason)
 		struct accessibilitycanesample *sample = &g_AccessibilityCaneSamples[i];
 
 		accessibilityCaneAppendLog(
-				"%ss%d={angle:%d state:%s scheduled:%d actual:%d late:%d result:%d pass:%d observer:%p remote:%d origin:%.2f,%.2f,%.2f forward:%.5f,%.5f direction:%.5f,%.5f end:%.2f,%.2f,%.2f bbox:%.2f,%.2f,%.2f raw:%.2f,%.2f,%.2f audio:%.2f,%.2f,%.2f distance:%.2f obstacle:%p type:%d geoflags:0x%08x normal:%.5f,%.5f,%.5f edge:%.2f,%.2f,%.2f,%.2f volume:%d pan:%d normalized:%.5f,%.5f query_us:%" PRIu64 "}",
+				"%ss%d={angle:%d state:%s scheduled:%d actual:%d late:%d result:%d pass:%d observer:%p remote:%d origin:%.2f,%.2f,%.2f forward:%.5f,%.5f direction:%.5f,%.5f end:%.2f,%.2f,%.2f bbox:%.2f,%.2f,%.2f raw:%.2f,%.2f,%.2f audio:%.2f,%.2f,%.2f distance:%.2f frequency_hz:%.2f obstacle:%p type:%d geoflags:0x%08x normal:%.5f,%.5f,%.5f edge:%.2f,%.2f,%.2f,%.2f volume:%d pan:%d normalized:%.5f,%.5f query_us:%" PRIu64 "}",
 				i ? " " : "", i, sample->angledegrees,
 				accessibilityCaneSampleStateName(sample->state),
 				sample->scheduledtick, sample->actualtick, sample->lateness,
@@ -250,7 +250,8 @@ static void accessibilityCaneLogSweep(const char *reason)
 				sample->ymax, sample->rawhit.x, sample->rawhit.y,
 				sample->rawhit.z, sample->audiosource.x,
 				sample->audiosource.y, sample->audiosource.z,
-				sample->distance, (void *)sample->obstacle,
+				sample->distance, sample->frequency,
+				(void *)sample->obstacle,
 				sample->obstacletype, sample->geoflags, sample->normal.x,
 				sample->normal.y, sample->normal.z,
 				sample->edge1.x, sample->edge1.z,
@@ -353,6 +354,24 @@ static void accessibilityCaneNormalFromEdge(const struct coord *origin,
 	}
 }
 
+static f32 accessibilityCaneFrequencyForDistance(f32 distance, f32 reach,
+		f32 nearfrequency, f32 farfrequency)
+{
+	f32 fraction;
+
+	if (reach <= 0.0f || distance <= 0.0f) {
+		return nearfrequency;
+	}
+
+	fraction = distance / reach;
+
+	if (fraction > 1.0f) {
+		fraction = 1.0f;
+	}
+
+	return nearfrequency * powf(farfrequency / nearfrequency, fraction);
+}
+
 static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 {
 	struct accessibilityobserver observer;
@@ -365,6 +384,8 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 	f32 fulldistance;
 	f32 fadedistance;
 	f32 silentdistance;
+	f32 nearfrequency;
+	f32 farfrequency;
 	f32 angle;
 	f32 cosine;
 	f32 sine;
@@ -413,6 +434,7 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 			+ sample->forward.z * cosine;
 	accessibilityGetVirtualCaneTuning(&maxdistance, &fulldistance,
 			&fadedistance, &silentdistance);
+	accessibilityGetVirtualCanePitch(&nearfrequency, &farfrequency);
 	end.x = start.x + sample->direction.x * maxdistance;
 	end.y = start.y;
 	end.z = start.z + sample->direction.z * maxdistance;
@@ -503,6 +525,8 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 			+ (sample->audiosource.z - start.z)
 				* (sample->audiosource.z - start.z));
 	sample->distance = horizontal;
+	sample->frequency = accessibilityCaneFrequencyForDistance(horizontal,
+			maxdistance, nearfrequency, farfrequency);
 	sample->volume = psCalculateVolumeFromDistance(horizontal,
 			fulldistance, fadedistance, silentdistance, AL_VOL_FULL);
 	sample->pan = psCalculatePan(&sample->audiosource,
@@ -515,7 +539,7 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 	g_AccessibilityCaneHits++;
 
 	accessibilityTonePlayCaneSlot(sample - g_AccessibilityCaneSamples,
-			ACCESSIBILITY_CANE_FREQUENCY_HZ, sample->normalizedvolume,
+			sample->frequency, sample->normalizedvolume,
 			sample->normalizedpan);
 
 	return result;

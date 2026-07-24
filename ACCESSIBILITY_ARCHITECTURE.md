@@ -249,6 +249,8 @@ Accessibility.VirtualCaneReach=900
 Accessibility.VirtualCaneFullVolumeDistance=112.5
 Accessibility.VirtualCaneFadeDistance=750
 Accessibility.VirtualCaneMaximumAudibleDistance=975
+Accessibility.VirtualCaneNearFrequency=600
+Accessibility.VirtualCaneFarFrequency=300
 Accessibility.EnemyFullVolumeDistance=600
 Accessibility.EnemyFadeDistance=3500
 Accessibility.EnemyMaximumDistance=4000
@@ -263,7 +265,7 @@ Accessibility.StatusNarration=1
 Accessibility.Verbosity=1
 ```
 
-The implemented keys are constructor-registered bounded integers or floats in the existing config registry. Cross-field runtime validation enforces ordered attenuation thresholds, keeps the cane audible through its configured reach, rejects non-finite values, and caps enemy gain at 0.25. Effective values are sampled at startup and recorded in the session log; editing `pd.ini` requires a restart. Accessibility settings belong in `pd.ini`, not only in a selected Perfect Dark profile, because startup menus need them. Later key names/ranges remain provisional, and a later in-game settings page should use the same values.
+The implemented keys are constructor-registered bounded integers or floats in the existing config registry. Cross-field runtime validation enforces ordered attenuation thresholds, keeps the cane audible through its configured reach, normalizes the cane pitch endpoints so near is not lower than far, rejects non-finite values, and caps enemy gain at 0.25. Cane hit distance maps logarithmically from the configured near frequency at contact to the far frequency at maximum reach; the result is passed through the existing per-slot oscillator command without allocation or an additional voice. Effective values are sampled at startup and recorded in the session log; editing `pd.ini` requires a restart. Accessibility settings belong in `pd.ini`, not only in a selected Perfect Dark profile, because startup menus need them. Later key names/ranges remain provisional, and a later in-game settings page should use the same values.
 
 ### Playtest logging
 

@@ -21,6 +21,8 @@ s32 accessibilityGetVirtualCaneMode(void);
 void accessibilitySetVirtualCaneMode(s32 mode);
 void accessibilityGetVirtualCaneTuning(f32 *reach, f32 *fulldistance,
 		f32 *fadedistance, f32 *silentdistance);
+void accessibilityGetVirtualCanePitch(f32 *nearfrequency,
+		f32 *farfrequency);
 void accessibilityGetEnemyTuning(f32 *fulldistance, f32 *fadedistance,
 		f32 *silentdistance, f32 *volume);
 
