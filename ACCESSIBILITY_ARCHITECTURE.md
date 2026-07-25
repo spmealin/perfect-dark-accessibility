@@ -91,7 +91,7 @@ Actual player gun damage is applied in `src/game/chraction.c:chrDamage`, where t
 
 `src/game/lv.c` obtains the prop under aim with `propFindAimingAt`, filters some invalid/cloaked cases, and updates `currentplayer->lookingatprop` and tracked props. `src/game/sight.c:sightTick` manages sight-specific target tracking and includes `sightCanTargetProp` and `sightIsPropFriendly`.
 
-Targeting uses a two-phase observation. It captures fixed-size projected bounds immediately after aim and tracked-prop calculation, before PC prop rendering converts model matrices in place, then consumes and clears that cache after sight/HUD rendering has finalized native alignment state. The firing-range source admits active, undestroyed `MODEL_TARGET` props; the combat source admits ordinary onscreen hostile character props using the semantic filters described below. Both require successful finite projection and viewport intersection, and match `lookingatprop` only against the admitted set. Ordinary combat naming, non-character threats, multiplayer output, and special-sight behavior still need investigation.
+Targeting uses a two-phase observation. It captures fixed-size projected bounds immediately after aim and tracked-prop calculation, before PC prop rendering converts model matrices in place, then consumes and clears that cache after sight/HUD rendering has finalized native alignment state. The firing-range source admits active, undestroyed `MODEL_TARGET` props; the combat source admits ordinary onscreen hostile character props and hostile `OBJTYPE_AUTOGUN` props. Autoguns reuse native health, deactivation, ammunition, malfunction, and target-team state, so disabled/destroyed/non-threatening turrets and the player's deployed Laptop Gun are excluded without stage identifiers. Both require successful finite projection and viewport intersection, and match `lookingatprop` only against the admitted set. Ordinary combat naming, other non-character threats, multiplayer output, and special-sight behavior still need investigation.
 
 The R-Tracker is a separate semantic radar rather than an extension of combat targeting. `radarGetRTrackedType` is the single eligibility boundary used by both the native renderer and the accessibility adapter: yellow/blue object flags, the blue-marker cheat gate, and tracked-character life/cloak state remain native policy. The adapter scans active props only while the native device is active, assigns stable identities to ten fixed oscillator voices, and communicates category, bearing, front/rear, horizontal distance, and relative height. It intentionally preserves the visual radar's lack of line-of-sight, room, and render restrictions.
 
@@ -124,7 +124,7 @@ src/accessibility/
   accessibility_speech.c   speech lifecycle and UTF-8 output boundary
   accessibility_tracker.c  native R-Tracker semantic adapter and fixed-slot state
   accessibility_targeting.c generic fixed-capacity target state and owned audio lanes
-  accessibility_targeting_game.c firing-range and hostile-character semantic source adapter
+  accessibility_targeting_game.c firing-range and hostile-character/autogun semantic source adapter
 src/include/accessibility/
   accessibility.h
   accessibility_cane.h

@@ -58,7 +58,9 @@ struct accessibilitytargetinggameprojection {
 struct accessibilitytargetingcombatprojection {
 	uintptr_t prop;
 	uintptr_t chr;
+	uintptr_t obj;
 	s32 propnum;
+	s32 category;
 	s32 projected;
 	s32 finite;
 	s32 lineofsight;
@@ -150,6 +152,42 @@ static s32 accessibilityTargetingGameCharacterCombatCapable(
 	return chr && !chrIsDead(chr)
 			&& chr->actiontype != ACT_DRUGGEDDROP
 			&& chr->actiontype != ACT_DRUGGEDKO;
+}
+
+static s32 accessibilityTargetingGameAutogunCombatCapable(
+		struct autogunobj *autogun)
+{
+	struct defaultobj *obj;
+	struct chrdata *playerchr;
+
+	if (!autogun || !g_Vars.currentplayer
+			|| !g_Vars.currentplayer->prop
+			|| !g_Vars.currentplayer->prop->chr) {
+		return false;
+	}
+
+	obj = &autogun->base;
+	playerchr = g_Vars.currentplayer->prop->chr;
+
+	/* The villa windmill is scenery implemented with this object type. */
+	if (obj->type != OBJTYPE_AUTOGUN
+			|| obj->modelnum == MODEL_AIVILLAWINDMILL
+			|| (obj->flags & OBJFLAG_DEACTIVATED)
+			|| (obj->flags2 & (OBJFLAG2_AICANNOTUSE
+				| OBJFLAG2_AUTOGUN_MALFUNCTIONING1
+				| OBJFLAG2_AUTOGUN_MALFUNCTIONING2))
+			|| autogun->ammoquantity == 0
+			|| !objIsHealthy(obj)) {
+		return false;
+	}
+
+	/*
+	 * A zero team mask is the native stationary-autogun fallback: it targets
+	 * the player. A deployed laptop gun carries its owner's complement mask,
+	 * so this same test excludes the current player's own turret.
+	 */
+	return autogun->targetteam == 0
+			|| (autogun->targetteam & playerchr->team) != 0;
 }
 
 static s32 accessibilityTargetingGameAuditEqual(
@@ -353,32 +391,50 @@ static void accessibilityTargetingCaptureCombat(void)
 					< ARRAYCOUNT(g_AccessibilityTargetingCombatProjections);
 			propptr++) {
 		struct prop *prop = *propptr;
-		struct chrdata *chr;
+		struct chrdata *chr = NULL;
+		struct defaultobj *obj = NULL;
+		struct model *model;
 		struct accessibilitytargetingcombatprojection *projection;
 		struct coord targetpos;
+		s32 category;
 		s32 propnum;
 
-		if (!prop || (prop->type != PROPTYPE_CHR
-				&& prop->type != PROPTYPE_PLAYER)
-				|| prop == g_Vars.currentplayer->prop || !prop->chr) {
+		if (!prop || prop == g_Vars.currentplayer->prop) {
 			continue;
 		}
 
-		chr = prop->chr;
+		if ((prop->type == PROPTYPE_CHR
+				|| prop->type == PROPTYPE_PLAYER) && prop->chr) {
+			chr = prop->chr;
+			model = chr->model;
+			category = prop->type == PROPTYPE_PLAYER
+					? ACCESSIBILITY_TARGETING_CATEGORY_PLAYER
+					: ACCESSIBILITY_TARGETING_CATEGORY_CHARACTER;
+		} else if (prop->type == PROPTYPE_OBJ && prop->obj
+				&& prop->obj->type == OBJTYPE_AUTOGUN) {
+			obj = prop->obj;
+			model = obj->model;
+			category = ACCESSIBILITY_TARGETING_CATEGORY_TURRET;
+		} else {
+			continue;
+		}
+
 		propnum = accessibilityTargetingGamePropNum(prop);
 		projection = &g_AccessibilityTargetingCombatProjections[
 				g_AccessibilityTargetingCombatProjectionCount++];
 		projection->prop = (uintptr_t)prop;
 		projection->chr = (uintptr_t)chr;
+		projection->obj = (uintptr_t)obj;
 		projection->propnum = propnum;
+		projection->category = category;
 
-		if (propnum < 0 || !chr->model || !chr->model->matrices
-				|| !chr->model->definition
+		if (propnum < 0 || !model || !model->matrices
+				|| !model->definition
 				|| (prop->flags & PROPFLAG_ONTHISSCREENTHISTICK) == 0) {
 			continue;
 		}
 
-		projection->projected = modelGetScreenCoords(chr->model,
+		projection->projected = modelGetScreenCoords(model,
 				&projection->x2, &projection->x1,
 				&projection->y2, &projection->y1);
 		projection->finite = projection->projected
@@ -386,15 +442,21 @@ static void accessibilityTargetingCaptureCombat(void)
 				&& isfinite(projection->y2) && isfinite(projection->y1);
 
 		targetpos = prop->pos;
-		targetpos.y = chr->manground + chr->height * 0.5f;
+		if (chr) {
+			targetpos.y = chr->manground + chr->height * 0.5f;
+		}
+
 		if (prop->active && (prop->flags & PROPFLAG_ENABLED)
-				&& accessibilityTargetingGameCharacterCombatCapable(chr)
-				&& (chr->chrflags & CHRCFLAG_HIDDEN) == 0
-				&& (chr->hidden & CHRHFLAG_UNTARGETABLE) == 0
-				&& ((chr->hidden & CHRHFLAG_CLOAKED) == 0
-					|| USINGDEVICE(DEVICE_IRSCANNER))
-				&& accessibilityTargetingGameRelationship(prop)
-					== ACCESSIBILITY_TARGETING_RELATIONSHIP_HOSTILE) {
+				&& ((chr
+					&& accessibilityTargetingGameCharacterCombatCapable(chr)
+					&& (chr->chrflags & CHRCFLAG_HIDDEN) == 0
+					&& (chr->hidden & CHRHFLAG_UNTARGETABLE) == 0
+					&& ((chr->hidden & CHRHFLAG_CLOAKED) == 0
+						|| USINGDEVICE(DEVICE_IRSCANNER))
+					&& accessibilityTargetingGameRelationship(prop)
+						== ACCESSIBILITY_TARGETING_RELATIONSHIP_HOSTILE)
+				|| (obj && accessibilityTargetingGameAutogunCombatCapable(
+						(struct autogunobj *)obj)))) {
 			projection->lineofsight = cdTestLos03(
 					&g_Vars.currentplayer->cam_pos, camrooms,
 					&targetpos,
@@ -612,45 +674,61 @@ static void accessibilityTargetingObserveCombat(
 				= &g_AccessibilityTargetingCombatProjections[i];
 		struct prop *prop = (struct prop *)projection->prop;
 		struct chrdata *chr = (struct chrdata *)projection->chr;
+		struct defaultobj *obj = (struct defaultobj *)projection->obj;
 		struct accessibilitytargetingcandidate *candidate;
 		const char *reason = "eligible";
 		s32 relationship = ACCESSIBILITY_TARGETING_RELATIONSHIP_UNKNOWN;
+		s32 turret = projection->category
+				== ACCESSIBILITY_TARGETING_CATEGORY_TURRET;
 		s32 eligible = true;
 		s32 aimed = prop && prop == aimedprop;
 		f32 dx;
 		f32 dy;
 		f32 dz;
 
-		if (projection->propnum < 0 || !prop || !chr
+		if (projection->propnum < 0 || !prop
 				|| accessibilityTargetingGamePropNum(prop) != projection->propnum
-				|| prop->chr != chr) {
+				|| (turret ? prop->obj != obj : prop->chr != chr)
+				|| (turret ? !obj : !chr)) {
 			eligible = false;
 			reason = "stale_or_invalid_identity";
-		} else if (prop->type != PROPTYPE_CHR
-				&& prop->type != PROPTYPE_PLAYER) {
+		} else if (turret
+				? prop->type != PROPTYPE_OBJ
+					|| obj->type != OBJTYPE_AUTOGUN
+				: prop->type != PROPTYPE_CHR
+					&& prop->type != PROPTYPE_PLAYER) {
 			eligible = false;
 			reason = "wrong_prop_type";
 		} else if (!prop->active || (prop->flags & PROPFLAG_ENABLED) == 0) {
 			eligible = false;
 			reason = "inactive_or_disabled";
-		} else if (!accessibilityTargetingGameCharacterCombatCapable(chr)) {
+		} else if (turret
+				&& !accessibilityTargetingGameAutogunCombatCapable(
+					(struct autogunobj *)obj)) {
+			eligible = false;
+			reason = "autogun_inactive_or_non_hostile";
+		} else if (!turret
+				&& !accessibilityTargetingGameCharacterCombatCapable(chr)) {
 			eligible = false;
 			reason = "dead_dying_or_knocked_out";
-		} else if (chr->chrflags & CHRCFLAG_HIDDEN) {
+		} else if (!turret && (chr->chrflags & CHRCFLAG_HIDDEN)) {
 			eligible = false;
 			reason = "character_hidden";
-		} else if (chr->hidden & CHRHFLAG_UNTARGETABLE) {
+		} else if (!turret && (chr->hidden & CHRHFLAG_UNTARGETABLE)) {
 			eligible = false;
 			reason = "character_untargetable";
-		} else if ((chr->hidden & CHRHFLAG_CLOAKED)
+		} else if (!turret && (chr->hidden & CHRHFLAG_CLOAKED)
 				&& !USINGDEVICE(DEVICE_IRSCANNER)) {
 			eligible = false;
 			reason = "character_cloaked";
 		} else if ((prop->flags & PROPFLAG_ONTHISSCREENTHISTICK) == 0) {
 			eligible = false;
 			reason = "not_rendered_this_tick";
-		} else if (!chr->model || !chr->model->matrices
-				|| !chr->model->definition) {
+		} else if (turret
+				? !obj->model || !obj->model->matrices
+					|| !obj->model->definition
+				: !chr->model || !chr->model->matrices
+					|| !chr->model->definition) {
 			eligible = false;
 			reason = "model_unavailable";
 		} else if (!g_AccessibilityTargetingGameProjectionsValid
@@ -674,7 +752,9 @@ static void accessibilityTargetingObserveCombat(
 			eligible = false;
 			reason = "line_of_sight_blocked";
 		} else {
-			relationship = accessibilityTargetingGameRelationship(prop);
+			relationship = turret
+					? ACCESSIBILITY_TARGETING_RELATIONSHIP_HOSTILE
+					: accessibilityTargetingGameRelationship(prop);
 
 			if (relationship == ACCESSIBILITY_TARGETING_RELATIONSHIP_FRIENDLY) {
 				eligible = false;
@@ -692,14 +772,18 @@ static void accessibilityTargetingObserveCombat(
 
 		if (detailed) {
 			accessibilityLogEvent("targeting", "combat_candidate",
-					"frame=%d slot=%d accepted=%d reason=%s aimed=%d relationship=%d aimonly=%d prop=%p propnum=%d chr=%p prop_type=%d prop_flags=0x%02x chr_flags=0x%08x chr_hidden=0x%08x action=%d capture_valid=%d projected=%d finite=%d line_of_sight=%d screen=%.3f,%.3f,%.3f,%.3f",
+					"frame=%d slot=%d accepted=%d reason=%s aimed=%d category=%d relationship=%d aimonly=%d prop=%p propnum=%d chr=%p obj=%p obj_type=%d model=%d prop_type=%d prop_flags=0x%02x obj_flags=0x%08x obj_flags2=0x%08x chr_flags=0x%08x chr_hidden=0x%08x action=%d capture_valid=%d projected=%d finite=%d line_of_sight=%d screen=%.3f,%.3f,%.3f,%.3f",
 					g_Vars.lvframe60, i, eligible, reason, aimed,
+					projection->category,
 					relationship,
 					relationship
 						== ACCESSIBILITY_TARGETING_RELATIONSHIP_PROTECTED,
 					(void *)prop, projection->propnum,
-					(void *)chr, prop ? prop->type : -1,
-					prop ? prop->flags : 0, chr ? chr->chrflags : 0,
+					(void *)chr, (void *)obj, obj ? obj->type : -1,
+					obj ? obj->modelnum : -1,
+					prop ? prop->type : -1, prop ? prop->flags : 0,
+					obj ? obj->flags : 0, obj ? obj->flags2 : 0,
+					chr ? chr->chrflags : 0,
 					chr ? chr->hidden : 0, chr ? chr->actiontype : -1,
 					g_AccessibilityTargetingGameProjectionsValid
 						&& g_AccessibilityTargetingGameProjectionFrame60
@@ -723,17 +807,18 @@ static void accessibilityTargetingObserveCombat(
 		candidate->identity.sourceslot = projection->propnum;
 		candidate->identity.propnum = projection->propnum;
 		candidate->identity.proptype = prop->type;
-		candidate->identity.objectidentity = (uintptr_t)chr;
+		candidate->identity.objectidentity = turret
+				? (uintptr_t)obj : (uintptr_t)chr;
 		candidate->prop = prop;
-		candidate->category = prop->type == PROPTYPE_PLAYER
-				? ACCESSIBILITY_TARGETING_CATEGORY_PLAYER
-				: ACCESSIBILITY_TARGETING_CATEGORY_CHARACTER;
+		candidate->category = projection->category;
 		candidate->relationship = relationship;
 		candidate->aimonly = relationship
 				== ACCESSIBILITY_TARGETING_RELATIONSHIP_PROTECTED;
 		candidate->shootability = ACCESSIBILITY_TARGETING_SHOOTABILITY_SHOOTABLE;
 		candidate->position = prop->pos;
-		candidate->position.y = chr->manground + chr->height * 0.5f;
+		if (chr) {
+			candidate->position.y = chr->manground + chr->height * 0.5f;
+		}
 		candidate->screenx1 = projection->x1;
 		candidate->screeny1 = projection->y1;
 		candidate->screenx2 = projection->x2;
@@ -748,8 +833,10 @@ static void accessibilityTargetingObserveCombat(
 		dy = candidate->position.y - g_Vars.currentplayer->cam_pos.y;
 		dz = candidate->position.z - g_Vars.currentplayer->cam_pos.z;
 		candidate->hasdistancecue = true;
-		candidate->distancecue = sqrtf(dx * dx + dy * dy + dz * dz)
-				- chr->radius;
+		candidate->distancecue = sqrtf(dx * dx + dy * dy + dz * dz);
+		if (chr) {
+			candidate->distancecue -= chr->radius;
+		}
 		if (candidate->distancecue < 0.0f) {
 			candidate->distancecue = 0.0f;
 		}
