@@ -70,6 +70,7 @@ struct accessibilitybeaconresult {
 	s32 propnum;
 	s32 canonicalpropnum;
 	void *entity;
+	s32 entityischr;
 	u32 citag;
 	f32 distance;
 	f32 bearing;
@@ -398,6 +399,34 @@ static s32 accessibilityBeaconObjectEligible(struct prop *prop, u32 *citag, cons
 static s32 accessibilityBeaconPickupEligible(struct prop *prop, const char **reason)
 {
 	struct defaultobj *obj;
+
+	if (prop && g_Vars.currentplayer
+			&& g_Vars.currentplayer->eyespy
+			&& g_Vars.currentplayer->eyespy->prop == prop) {
+		struct eyespy *eyespy = g_Vars.currentplayer->eyespy;
+		struct chrdata *chr = prop->chr;
+
+		if (!chr || !prop->active
+				|| (prop->flags & PROPFLAG_ENABLED) == 0
+				|| (chr->chrflags & CHRCFLAG_HIDDEN)
+				|| (chr->hidden & CHRHFLAG_DELETING)) {
+			*reason = "camspy_inactive_or_hidden";
+			return false;
+		}
+
+		if (!eyespy->deployed || eyespy->held) {
+			*reason = "camspy_not_deployed";
+			return false;
+		}
+
+		if (eyespy->active) {
+			*reason = "camspy_currently_active";
+			return false;
+		}
+
+		*reason = "inactive_deployed_camspy";
+		return true;
+	}
 
 	if (!prop || (prop->type != PROPTYPE_OBJ && prop->type != PROPTYPE_WEAPON)) {
 		*reason = "not_pickup_prop_type";
@@ -819,7 +848,10 @@ static s32 accessibilityBeaconScan(s32 detailed)
 
 			result.category = ACCESSIBILITY_BEACON_CATEGORY_DOOR;
 			result.kind = ACCESSIBILITY_BEACON_KIND_DOOR;
-		} else if ((prop->type == PROPTYPE_OBJ || prop->type == PROPTYPE_WEAPON)
+		} else if ((prop->type == PROPTYPE_OBJ || prop->type == PROPTYPE_WEAPON
+					|| (g_Vars.currentplayer
+						&& g_Vars.currentplayer->eyespy
+						&& g_Vars.currentplayer->eyespy->prop == prop))
 				&& !observer.isremote
 				&& (g_AccessibilityBeaconCategoryActive[
 						ACCESSIBILITY_BEACON_CATEGORY_OBJECT]
@@ -886,7 +918,11 @@ static s32 accessibilityBeaconScan(s32 detailed)
 
 			result.propnum = accessibilityBeaconPropNum(candidate);
 			result.canonicalpropnum = canonicalpropnum;
-			result.entity = result.kind == ACCESSIBILITY_BEACON_KIND_NON_HOSTILE
+			result.entityischr =
+					result.kind == ACCESSIBILITY_BEACON_KIND_NON_HOSTILE
+					|| (result.kind == ACCESSIBILITY_BEACON_KIND_PICKUP
+						&& candidate->chr);
+			result.entity = result.entityischr
 					? (void *)candidate->chr : (void *)candidate->obj;
 			result.citag = citag;
 			result.distance = distance;
@@ -922,11 +958,11 @@ static s32 accessibilityBeaconScan(s32 detailed)
 		struct accessibilitybeaconresult *item = &g_AccessibilityBeaconResults[traversed];
 
 		accessibilityLogEvent("beacon", "scan_result",
-				"scan=%llu index=%d category=%s kind=%s propnum=%d canonical_propnum=%d entity=%p distance=%.3f bearing=%.3f vertical=%.3f ci_tag=0x%02x",
+				"scan=%llu index=%d category=%s kind=%s propnum=%d canonical_propnum=%d entity=%p entity_is_chr=%d distance=%.3f bearing=%.3f vertical=%.3f ci_tag=0x%02x",
 				(unsigned long long)g_AccessibilityBeaconScanCount, traversed,
 				accessibilityBeaconCategoryName(item->category),
 				accessibilityBeaconKindName(item->kind), item->propnum,
-				item->canonicalpropnum, item->entity, item->distance,
+				item->canonicalpropnum, item->entity, item->entityischr, item->distance,
 				item->bearing, item->vertical, item->citag);
 	}
 
@@ -966,10 +1002,8 @@ static struct prop *accessibilityBeaconValidateResult(struct accessibilitybeacon
 
 	prop = &g_Vars.props[result->propnum];
 
-	if ((result->kind == ACCESSIBILITY_BEACON_KIND_NON_HOSTILE
-				&& prop->chr != result->entity)
-			|| (result->kind != ACCESSIBILITY_BEACON_KIND_NON_HOSTILE
-				&& prop->obj != result->entity)) {
+	if ((result->entityischr && prop->chr != result->entity)
+			|| (!result->entityischr && prop->obj != result->entity)) {
 		*reason = "entity_identity_changed";
 		return NULL;
 	}
@@ -1384,11 +1418,11 @@ static void accessibilityBeaconBuildSchedule(
 					= &g_AccessibilityBeaconResults[g_AccessibilityBeaconSchedule[i]];
 
 			accessibilityLogEvent("beacon", "schedule_target",
-					"slot=%d category=%s kind=%s propnum=%d canonical_propnum=%d distance=%.3f entity=%p",
+					"slot=%d category=%s kind=%s propnum=%d canonical_propnum=%d distance=%.3f entity=%p entity_is_chr=%d",
 					i, accessibilityBeaconCategoryName(result->category),
 					accessibilityBeaconKindName(result->kind), result->propnum,
 					result->canonicalpropnum,
-					result->distance, result->entity);
+					result->distance, result->entity, result->entityischr);
 		}
 	}
 }
