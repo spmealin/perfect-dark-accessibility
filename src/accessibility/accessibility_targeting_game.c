@@ -8,6 +8,7 @@
 #include "game/chr.h"
 #include "game/chraction.h"
 #include "game/bondgun.h"
+#include "game/bondmove.h"
 #include "game/camera.h"
 #include "game/game_0b0fd0.h"
 #include "game/lv.h"
@@ -922,8 +923,14 @@ static void accessibilityTargetingObserveCombat(
 
 	if (detailed || scopechanged) {
 		accessibilityLogEvent("targeting", "scope_gate",
-				"frame=%d stage=%d player=%d accepted=1 reason=in_scope mode=combat candidates=%d captured=%d aimed=%d aimed_prop=%p raw_aim_prop=%p raw_aim_valid=%d alignment_source=%s aimed_shootability=%d native_alignment_expected=%d viewport=%.3f,%.3f,%.3f,%.3f",
+				"frame=%d stage=%d player=%d accepted=1 reason=in_scope mode=combat weapon=%d function=%d autoaim_x_enabled=%d autoaim_y_enabled=%d autoaim_x_prop=%p autoaim_y_prop=%p candidates=%d captured=%d aimed=%d aimed_prop=%p raw_aim_prop=%p raw_aim_valid=%d alignment_source=%s aimed_shootability=%d native_alignment_expected=%d viewport=%.3f,%.3f,%.3f,%.3f",
 				g_Vars.lvframe60, g_Vars.stagenum, g_Vars.currentplayernum,
+				bgunGetWeaponNum(HAND_RIGHT),
+				g_Vars.currentplayer->hands[HAND_RIGHT].gset.weaponfunc,
+				bmoveIsAutoAimXEnabledForCurrentWeapon(),
+				bmoveIsAutoAimYEnabledForCurrentWeapon(),
+				(void *)g_Vars.currentplayer->autoxaimprop,
+				(void *)g_Vars.currentplayer->autoyaimprop,
 				observation->candidatecount,
 				g_AccessibilityTargetingCombatProjectionCount,
 				observation->hasaimedtarget, (void *)aimedprop,

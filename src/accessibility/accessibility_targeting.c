@@ -27,6 +27,7 @@
 #define ACCESSIBILITY_TARGETING_OBSERVATION_LOG_TICKS TICKS(60)
 #define ACCESSIBILITY_TARGETING_TELEMETRY_TICKS TICKS(60 * 30)
 #define ACCESSIBILITY_TARGETING_ALIGNMENT_LOG_TICKS TICKS(6)
+#define ACCESSIBILITY_TARGETING_COMBAT_AIM_LOSS_GRACE_FRAMES 2
 #define ACCESSIBILITY_TARGETING_TONE_BASE_FREQUENCY_HZ 440.0f
 #define ACCESSIBILITY_TARGETING_TONE_MIN_PITCH 1.5f
 #define ACCESSIBILITY_TARGETING_TONE_MAX_PITCH 3.0f
@@ -81,6 +82,7 @@ struct accessibilitytargetingstate {
 	s32 presencechannel;
 	s32 proceduralpresenceactive;
 	s32 alignmentactive;
+	s32 aimlossframes;
 	f32 alignmentfrequencyhz;
 	f32 alignmentquality;
 	f32 alignmentdistance;
@@ -155,6 +157,7 @@ static s32 g_AccessibilityTargetingStatesInitialized;
 #define g_AccessibilityTargetingPresenceChannel (g_AccessibilityTargetingCurrentState->presencechannel)
 #define g_AccessibilityTargetingProceduralPresenceActive (g_AccessibilityTargetingCurrentState->proceduralpresenceactive)
 #define g_AccessibilityTargetingAlignmentActive (g_AccessibilityTargetingCurrentState->alignmentactive)
+#define g_AccessibilityTargetingAimLossFrames (g_AccessibilityTargetingCurrentState->aimlossframes)
 #define g_AccessibilityTargetingAlignmentFrequencyHz (g_AccessibilityTargetingCurrentState->alignmentfrequencyhz)
 #define g_AccessibilityTargetingAlignmentQuality (g_AccessibilityTargetingCurrentState->alignmentquality)
 #define g_AccessibilityTargetingAlignmentDistance (g_AccessibilityTargetingCurrentState->alignmentdistance)
@@ -988,7 +991,9 @@ void accessibilityTargetingObserve(
 	s32 aimedcandidate;
 	s32 aimedshootability;
 	s32 aimedvalid;
+	s32 retainingaim;
 	s32 i;
+	struct accessibilitytargetingidentity effectiveaimidentity;
 	const struct accessibilitytargetingcandidate *aimedrecord = NULL;
 
 	if (!observation || !observation->inscope
@@ -1022,6 +1027,8 @@ void accessibilityTargetingObserve(
 	aimedcandidate = false;
 	aimedshootability = ACCESSIBILITY_TARGETING_SHOOTABILITY_UNKNOWN;
 	aimedvalid = false;
+	retainingaim = false;
+	memset(&effectiveaimidentity, 0, sizeof(effectiveaimidentity));
 
 	if (observation->hasaimedtarget) {
 		for (i = 0; i < observation->candidatecount; i++) {
@@ -1032,13 +1039,64 @@ void accessibilityTargetingObserve(
 				aimedshootability = observation->candidates[i].shootability;
 				aimedvalid = aimedshootability
 						== ACCESSIBILITY_TARGETING_SHOOTABILITY_SHOOTABLE;
+				effectiveaimidentity = observation->aimedidentity;
 				break;
 			}
 		}
 	}
 
+	if (!aimedvalid
+			&& observation->profile == ACCESSIBILITY_TARGETING_PROFILE_COMBAT
+			&& g_AccessibilityTargetingHasAimedIdentity
+			&& g_AccessibilityTargetingAimLossFrames
+					< ACCESSIBILITY_TARGETING_COMBAT_AIM_LOSS_GRACE_FRAMES) {
+		for (i = 0; i < observation->candidatecount; i++) {
+			if (accessibilityTargetingIdentityEqual(
+					&g_AccessibilityTargetingAimedIdentity,
+					&observation->candidates[i].identity)
+					&& (observation->candidates[i].category
+							== ACCESSIBILITY_TARGETING_CATEGORY_CHARACTER
+						|| observation->candidates[i].category
+							== ACCESSIBILITY_TARGETING_CATEGORY_PLAYER)
+					&& observation->candidates[i].shootability
+						== ACCESSIBILITY_TARGETING_SHOOTABILITY_SHOOTABLE) {
+				aimedcandidate = true;
+				aimedrecord = &observation->candidates[i];
+				aimedshootability = aimedrecord->shootability;
+				aimedvalid = true;
+				retainingaim = true;
+				effectiveaimidentity = g_AccessibilityTargetingAimedIdentity;
+				g_AccessibilityTargetingAimLossFrames++;
+
+				if (g_AccessibilityTargetingAimLossFrames == 1) {
+					accessibilityLogEvent("targeting", "aim_loss_grace_start",
+							"frame=%d source=%d slot=%d propnum=%d grace_frames=%d",
+							observation->frame60,
+							effectiveaimidentity.source,
+							effectiveaimidentity.sourceslot,
+							effectiveaimidentity.propnum,
+							ACCESSIBILITY_TARGETING_COMBAT_AIM_LOSS_GRACE_FRAMES);
+				}
+				break;
+			}
+		}
+	}
+
+	if (aimedvalid && !retainingaim) {
+		if (g_AccessibilityTargetingAimLossFrames > 0) {
+			accessibilityLogEvent("targeting", "aim_loss_grace_cancel",
+					"frame=%d recovered_after_frames=%d source=%d slot=%d propnum=%d",
+					observation->frame60,
+					g_AccessibilityTargetingAimLossFrames,
+					effectiveaimidentity.source,
+					effectiveaimidentity.sourceslot,
+					effectiveaimidentity.propnum);
+		}
+		g_AccessibilityTargetingAimLossFrames = 0;
+	}
+
 	acquisition = aimedvalid && (!g_AccessibilityTargetingHasAimedIdentity
-			|| !accessibilityTargetingIdentityEqual(&observation->aimedidentity,
+			|| !accessibilityTargetingIdentityEqual(&effectiveaimidentity,
 				&g_AccessibilityTargetingAimedIdentity));
 
 	if (!aimedvalid) {
@@ -1056,6 +1114,7 @@ void accessibilityTargetingObserve(
 		}
 
 		g_AccessibilityTargetingHasAimedIdentity = false;
+		g_AccessibilityTargetingAimLossFrames = 0;
 		memset(&g_AccessibilityTargetingAimedIdentity, 0,
 				sizeof(g_AccessibilityTargetingAimedIdentity));
 		accessibilityTargetingStopAlignment(aimedcandidate
@@ -1066,7 +1125,7 @@ void accessibilityTargetingObserve(
 			accessibilityTargetingStopAlignment("aim_changed");
 		}
 
-		g_AccessibilityTargetingAimedIdentity = observation->aimedidentity;
+		g_AccessibilityTargetingAimedIdentity = effectiveaimidentity;
 		g_AccessibilityTargetingHasAimedIdentity = true;
 
 		if (acquisition) {
@@ -1083,7 +1142,8 @@ void accessibilityTargetingObserve(
 		}
 
 		accessibilityTargetingUpdateAlignment(observation->frame60,
-				aimedrecord, acquisition ? "acquisition" : "held");
+				aimedrecord, acquisition ? "acquisition"
+					: retainingaim ? "loss_grace" : "held");
 	}
 
 	accessibilityTargetingMerge(observation);
@@ -1126,7 +1186,7 @@ void accessibilityTargetingObserve(
 			|| aimedshootability
 					!= g_AccessibilityTargetingCurrentState->lastaimedshootability
 			|| (aimedcandidate && !accessibilityTargetingIdentityEqual(
-				&observation->aimedidentity,
+				&effectiveaimidentity,
 				&g_AccessibilityTargetingCurrentState->lastaimedidentity))
 			|| observation->frame60
 					>= g_AccessibilityTargetingCurrentState->nextobservationlog60) {
@@ -1157,7 +1217,7 @@ void accessibilityTargetingObserve(
 	g_AccessibilityTargetingCurrentState->lastaimedshootability = aimedshootability;
 	if (aimedcandidate) {
 		g_AccessibilityTargetingCurrentState->lastaimedidentity
-				= observation->aimedidentity;
+				= effectiveaimidentity;
 	}
 
 	if (g_AccessibilityTargetingCurrentState->nexttelemetry60 == 0
@@ -1200,6 +1260,7 @@ static void accessibilityTargetingResetCurrent(const char *reason)
 	g_AccessibilityTargetingRecordCount = 0;
 	g_AccessibilityTargetingHasLastPulseIdentity = false;
 	g_AccessibilityTargetingHasAimedIdentity = false;
+	g_AccessibilityTargetingAimLossFrames = 0;
 	g_AccessibilityTargetingNextPresence60 = 0;
 	g_AccessibilityTargetingNextAlignmentLog60 = 0;
 	g_AccessibilityTargetingObservationCount = 0;
