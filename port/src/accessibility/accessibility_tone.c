@@ -91,6 +91,7 @@ static SDL_atomic_t g_AccessibilityCombatEnabled[ACCESSIBILITY_TONE_COMBAT_SLOT_
 static SDL_atomic_t g_AccessibilityCombatSequence[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityCombatTriggerSequence[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityCombatFrequencyMilliHz[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
+static SDL_atomic_t g_AccessibilityCombatEndFrequencyMilliHz[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityCombatVolumeMillionths[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityCombatPanMillionths[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityCombatPeriodMs[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
@@ -383,16 +384,21 @@ void accessibilityToneSetHazard(s32 enabled, f32 frequencyhz, f32 volume, f32 pa
 	SDL_AtomicSet(&g_AccessibilityHazardEnabled, enabled != 0 && volume > 0.0f);
 }
 
-void accessibilityToneSetCombatSlot(s32 slot, s32 enabled, f32 frequencyhz,
-		f32 volume, f32 pan, s32 periodms, s32 durationms, s32 continuous,
-		s32 restart, s32 triggernow)
+void accessibilityToneSetCombatSlot(s32 slot, s32 enabled,
+		f32 startfrequencyhz, f32 endfrequencyhz, f32 volume, f32 pan,
+		s32 periodms, s32 durationms, s32 continuous, s32 restart,
+		s32 triggernow)
 {
 	if (slot < 0 || slot >= ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT) {
 		return;
 	}
 
-	if (frequencyhz < 1.0f) {
-		frequencyhz = 1.0f;
+	if (startfrequencyhz < 1.0f) {
+		startfrequencyhz = 1.0f;
+	}
+
+	if (endfrequencyhz < 1.0f) {
+		endfrequencyhz = 1.0f;
 	}
 
 	if (volume < 0.0f) {
@@ -418,7 +424,9 @@ void accessibilityToneSetCombatSlot(s32 slot, s32 enabled, f32 frequencyhz,
 	}
 
 	SDL_AtomicSet(&g_AccessibilityCombatFrequencyMilliHz[slot],
-			(s32)(frequencyhz * 1000.0f));
+			(s32)(startfrequencyhz * 1000.0f));
+	SDL_AtomicSet(&g_AccessibilityCombatEndFrequencyMilliHz[slot],
+			(s32)(endfrequencyhz * 1000.0f));
 	SDL_AtomicSet(&g_AccessibilityCombatVolumeMillionths[slot],
 			(s32)(volume * 1000000.0f));
 	SDL_AtomicSet(&g_AccessibilityCombatPanMillionths[slot],
@@ -687,6 +695,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 	s32 hazardenabled = SDL_AtomicGet(&g_AccessibilityHazardEnabled);
 	s32 combatenabled[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 	f32 combatfrequency[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
+	f32 combatendfrequency[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 	f32 combatvolume[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 	f32 combatpan[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 	s32 combatperiodsamples[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
@@ -747,6 +756,8 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		combatenabled[slot] = SDL_AtomicGet(&g_AccessibilityCombatEnabled[slot]);
 		combatfrequency[slot] = (f32)SDL_AtomicGet(
 				&g_AccessibilityCombatFrequencyMilliHz[slot]) / 1000.0f;
+		combatendfrequency[slot] = (f32)SDL_AtomicGet(
+				&g_AccessibilityCombatEndFrequencyMilliHz[slot]) / 1000.0f;
 		combatvolume[slot] = (f32)SDL_AtomicGet(
 				&g_AccessibilityCombatVolumeMillionths[slot]) / 1000000.0f;
 		combatpan[slot] = (f32)SDL_AtomicGet(
@@ -1319,6 +1330,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 				if (sample < combatdurationsamples[slot]) {
 					f32 envelope = 1.0f;
+					f32 frequency = combatfrequency[slot];
 					f32 leftpan = g_AccessibilityCombatPan[slot] > 0.0f
 							? 1.0f - g_AccessibilityCombatPan[slot] : 1.0f;
 					f32 rightpan = g_AccessibilityCombatPan[slot] < 0.0f
@@ -1335,6 +1347,14 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 								/ (f32)ACCESSIBILITY_COMBAT_CHIRP_RELEASE_SAMPLES;
 					}
 
+					if (combatdurationsamples[slot] > 1) {
+						f32 progress = (f32)sample
+								/ (f32)(combatdurationsamples[slot] - 1);
+
+						frequency += (combatendfrequency[slot]
+								- combatfrequency[slot]) * progress;
+					}
+
 					combat = accessibilityToneCombatWave(
 							g_AccessibilityCombatPhase[slot]) * envelope
 							* combatvolume[slot] * combatmastervolume
@@ -1342,7 +1362,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 					combatleft += (s32)(combat * leftpan);
 					combatright += (s32)(combat * rightpan);
 					g_AccessibilityCombatPhase[slot] += TWO_PI
-							* combatfrequency[slot] / ACCESSIBILITY_TONE_SAMPLE_RATE;
+							* frequency / ACCESSIBILITY_TONE_SAMPLE_RATE;
 
 					if (g_AccessibilityCombatPhase[slot] >= TWO_PI) {
 						g_AccessibilityCombatPhase[slot] -= TWO_PI;

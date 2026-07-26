@@ -36,6 +36,10 @@
 #define ACCESSIBILITY_TARGETING_COMBAT_CLOSE_DURATION_MS 50
 #define ACCESSIBILITY_TARGETING_COMBAT_TRIGGER_PERIOD_DELTA_MS 40
 #define ACCESSIBILITY_TARGETING_COMBAT_CLOSE_EXIT_SCALE 1.1f
+#define ACCESSIBILITY_TARGETING_CAMERA_START_FREQUENCY_HZ 1600.0f
+#define ACCESSIBILITY_TARGETING_CAMERA_END_FREQUENCY_HZ 1000.0f
+#define ACCESSIBILITY_TARGETING_CAMERA_PERIOD_MS 500
+#define ACCESSIBILITY_TARGETING_CAMERA_DURATION_MS 140
 
 struct accessibilitytargetingrecord {
 	struct accessibilitytargetingcandidate candidate;
@@ -673,7 +677,7 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 		if (recordindex < 0 || !accessibilityTargetingRecordPresenceEligible(
 				&g_AccessibilityTargetingRecords[recordindex])) {
 			accessibilityToneSetCombatSlot(slot, false,
-					combatfrequency,
+					combatfrequency, combatfrequency,
 					0.0f, 0.0f,
 					ACCESSIBILITY_TARGETING_COMBAT_FAR_PERIOD_MS,
 					ACCESSIBILITY_TARGETING_COMBAT_FAR_DURATION_MS,
@@ -701,11 +705,22 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 		f32 normalizedpan;
 		f32 proximity;
 		f32 cuedistance;
+		f32 startfrequency;
+		f32 endfrequency;
+		s32 camera;
 
 		if (!accessibilityTargetingRecordPresenceEligible(record)) {
 			continue;
 		}
 
+		camera = record->candidate.category
+				== ACCESSIBILITY_TARGETING_CATEGORY_SECURITY_CAMERA;
+		startfrequency = camera
+				? ACCESSIBILITY_TARGETING_CAMERA_START_FREQUENCY_HZ
+				: combatfrequency;
+		endfrequency = camera
+				? ACCESSIBILITY_TARGETING_CAMERA_END_FREQUENCY_HZ
+				: combatfrequency;
 		slot = accessibilityTargetingFindCombatSlot(&record->candidate.identity);
 		if (slot < 0) {
 			for (slot = 0; slot < ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT; slot++) {
@@ -723,11 +738,13 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 			voice->identity = record->candidate.identity;
 			restart = true;
 			accessibilityLogEvent("targeting", "combat_slot_assign",
-					"frame=%d oscillator_slot=%d source=%d slot=%d propnum=%d prop=%p frequency_hz=%.1f punch_range=%.3f",
+					"frame=%d oscillator_slot=%d source=%d slot=%d propnum=%d prop=%p category=%d cue=%s start_frequency_hz=%.1f end_frequency_hz=%.1f punch_range=%.3f",
 					frame60, slot, voice->identity.source,
 					voice->identity.sourceslot, voice->identity.propnum,
 					(void *)record->candidate.prop,
-					combatfrequency,
+					record->candidate.category,
+					camera ? "security_camera_sweep" : "enemy_proximity",
+					startfrequency, endfrequency,
 					distancecuereference);
 		}
 
@@ -748,10 +765,17 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 		restart |= normalizedvolume > 0.0f && !voice->audible;
 		cuedistance = record->candidate.hasdistancecue
 				? record->candidate.distancecue : record->candidate.distance;
-		accessibilityTargetingCombatCadence(cuedistance,
-				distancecuereference, voice->distancezone,
-				&periodms, &durationms,
-				&distancezone, &proximity);
+		if (camera) {
+			periodms = ACCESSIBILITY_TARGETING_CAMERA_PERIOD_MS;
+			durationms = ACCESSIBILITY_TARGETING_CAMERA_DURATION_MS;
+			distancezone = 0;
+			proximity = 0.0f;
+		} else {
+			accessibilityTargetingCombatCadence(cuedistance,
+					distancecuereference, voice->distancezone,
+					&periodms, &durationms,
+					&distancezone, &proximity);
+		}
 		if (voice->triggerperiodms <= 0) {
 			voice->triggerperiodms = periodms;
 		} else if (periodms > voice->triggerperiodms) {
@@ -771,8 +795,10 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 #endif
 		) {
 			accessibilityLogEvent("targeting", "combat_slot_cadence",
-					"frame=%d oscillator_slot=%d propnum=%d center_distance=%.3f cue_distance=%.3f cue_distance_available=%d punch_range=%.3f punch_range_exit=%.3f far_threshold=%.3f zone=%s proximity=%.4f period_ms=%d duration_ms=%d continuous=%d trigger_now=%d volume=%.4f pan=%.4f",
+					"frame=%d oscillator_slot=%d propnum=%d category=%d cue=%s center_distance=%.3f cue_distance=%.3f cue_distance_available=%d punch_range=%.3f punch_range_exit=%.3f far_threshold=%.3f zone=%s proximity=%.4f period_ms=%d duration_ms=%d continuous=%d trigger_now=%d start_frequency_hz=%.1f end_frequency_hz=%.1f volume=%.4f pan=%.4f",
 					frame60, slot, voice->identity.propnum,
+					record->candidate.category,
+					camera ? "security_camera_sweep" : "enemy_proximity",
 					record->candidate.distance, cuedistance,
 					record->candidate.hasdistancecue, distancecuereference,
 					distancecuereference
@@ -780,15 +806,16 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 					distancecuereference * 5.0f,
 					distancezone == 2 ? "punch_range"
 						: distancezone == 1 ? "ramping" : "far",
-					proximity, periodms, durationms, distancezone == 2,
-					triggernow,
+					proximity, periodms, durationms,
+					!camera && distancezone == 2, triggernow,
+					startfrequency, endfrequency,
 					normalizedvolume, normalizedpan);
 			voice->nextcadencelog60 = frame60 + TICKS(60);
 		}
 		accessibilityToneSetCombatSlot(slot, true,
-				combatfrequency,
+				startfrequency, endfrequency,
 				normalizedvolume, normalizedpan, periodms, durationms,
-				distancezone == 2, restart, triggernow);
+				!camera && distancezone == 2, restart, triggernow);
 		voice->audible = normalizedvolume > 0.0f;
 		voice->periodms = periodms;
 		voice->durationms = durationms;

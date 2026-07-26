@@ -191,6 +191,23 @@ static s32 accessibilityTargetingGameAutogunCombatCapable(
 			|| (autogun->targetteam & playerchr->team) != 0;
 }
 
+static s32 accessibilityTargetingGameCctvCombatCapable(
+		struct cctvobj *camera)
+{
+	struct defaultobj *obj;
+
+	if (!camera) {
+		return false;
+	}
+
+	obj = &camera->base;
+
+	return obj->type == OBJTYPE_CCTV
+			&& (obj->flags & (OBJFLAG_DEACTIVATED
+				| OBJFLAG_CAMERA_DISABLED)) == 0
+			&& objIsHealthy(obj);
+}
+
 static s32 accessibilityTargetingGameAuditEqual(
 		const struct accessibilitytargetinggameaudit *a,
 		const struct accessibilitytargetinggameaudit *b)
@@ -412,10 +429,13 @@ static void accessibilityTargetingCaptureCombat(void)
 					? ACCESSIBILITY_TARGETING_CATEGORY_PLAYER
 					: ACCESSIBILITY_TARGETING_CATEGORY_CHARACTER;
 		} else if (prop->type == PROPTYPE_OBJ && prop->obj
-				&& prop->obj->type == OBJTYPE_AUTOGUN) {
+				&& (prop->obj->type == OBJTYPE_AUTOGUN
+					|| prop->obj->type == OBJTYPE_CCTV)) {
 			obj = prop->obj;
 			model = obj->model;
-			category = ACCESSIBILITY_TARGETING_CATEGORY_TURRET;
+			category = obj->type == OBJTYPE_AUTOGUN
+					? ACCESSIBILITY_TARGETING_CATEGORY_TURRET
+					: ACCESSIBILITY_TARGETING_CATEGORY_SECURITY_CAMERA;
 		} else {
 			continue;
 		}
@@ -456,8 +476,12 @@ static void accessibilityTargetingCaptureCombat(void)
 						|| USINGDEVICE(DEVICE_IRSCANNER))
 					&& accessibilityTargetingGameRelationship(prop)
 						== ACCESSIBILITY_TARGETING_RELATIONSHIP_HOSTILE)
-				|| (obj && accessibilityTargetingGameAutogunCombatCapable(
-						(struct autogunobj *)obj)))) {
+				|| (obj && ((obj->type == OBJTYPE_AUTOGUN
+						&& accessibilityTargetingGameAutogunCombatCapable(
+							(struct autogunobj *)obj))
+					|| (obj->type == OBJTYPE_CCTV
+						&& accessibilityTargetingGameCctvCombatCapable(
+							(struct cctvobj *)obj)))))) {
 			projection->lineofsight = cdTestLos03(
 					&g_Vars.currentplayer->cam_pos, camrooms,
 					&targetpos,
@@ -684,8 +708,11 @@ static void accessibilityTargetingObserveCombat(
 		s32 relationship = ACCESSIBILITY_TARGETING_RELATIONSHIP_UNKNOWN;
 		s32 turret = projection->category
 				== ACCESSIBILITY_TARGETING_CATEGORY_TURRET;
+		s32 camera = projection->category
+				== ACCESSIBILITY_TARGETING_CATEGORY_SECURITY_CAMERA;
+		s32 objecttarget = turret || camera;
 		s32 eligible = true;
-		s32 aimed = prop && (turret
+		s32 aimed = prop && (objecttarget
 				? prop == rawaimedprop : prop == aimedprop);
 		f32 dx;
 		f32 dy;
@@ -693,13 +720,15 @@ static void accessibilityTargetingObserveCombat(
 
 		if (projection->propnum < 0 || !prop
 				|| accessibilityTargetingGamePropNum(prop) != projection->propnum
-				|| (turret ? prop->obj != obj : prop->chr != chr)
-				|| (turret ? !obj : !chr)) {
+				|| (objecttarget ? prop->obj != obj : prop->chr != chr)
+				|| (objecttarget ? !obj : !chr)) {
 			eligible = false;
 			reason = "stale_or_invalid_identity";
-		} else if (turret
+		} else if (objecttarget
 				? prop->type != PROPTYPE_OBJ
-					|| obj->type != OBJTYPE_AUTOGUN
+					|| (turret
+						? obj->type != OBJTYPE_AUTOGUN
+						: obj->type != OBJTYPE_CCTV)
 				: prop->type != PROPTYPE_CHR
 					&& prop->type != PROPTYPE_PLAYER) {
 			eligible = false;
@@ -712,24 +741,29 @@ static void accessibilityTargetingObserveCombat(
 					(struct autogunobj *)obj)) {
 			eligible = false;
 			reason = "autogun_inactive_or_non_hostile";
-		} else if (!turret
+		} else if (camera
+				&& !accessibilityTargetingGameCctvCombatCapable(
+					(struct cctvobj *)obj)) {
+			eligible = false;
+			reason = "camera_inactive_disabled_or_destroyed";
+		} else if (!objecttarget
 				&& !accessibilityTargetingGameCharacterCombatCapable(chr)) {
 			eligible = false;
 			reason = "dead_dying_or_knocked_out";
-		} else if (!turret && (chr->chrflags & CHRCFLAG_HIDDEN)) {
+		} else if (!objecttarget && (chr->chrflags & CHRCFLAG_HIDDEN)) {
 			eligible = false;
 			reason = "character_hidden";
-		} else if (!turret && (chr->hidden & CHRHFLAG_UNTARGETABLE)) {
+		} else if (!objecttarget && (chr->hidden & CHRHFLAG_UNTARGETABLE)) {
 			eligible = false;
 			reason = "character_untargetable";
-		} else if (!turret && (chr->hidden & CHRHFLAG_CLOAKED)
+		} else if (!objecttarget && (chr->hidden & CHRHFLAG_CLOAKED)
 				&& !USINGDEVICE(DEVICE_IRSCANNER)) {
 			eligible = false;
 			reason = "character_cloaked";
 		} else if ((prop->flags & PROPFLAG_ONTHISSCREENTHISTICK) == 0) {
 			eligible = false;
 			reason = "not_rendered_this_tick";
-		} else if (turret
+		} else if (objecttarget
 				? !obj->model || !obj->model->matrices
 					|| !obj->model->definition
 				: !chr->model || !chr->model->matrices
@@ -757,7 +791,7 @@ static void accessibilityTargetingObserveCombat(
 			eligible = false;
 			reason = "line_of_sight_blocked";
 		} else {
-			relationship = turret
+			relationship = objecttarget
 					? ACCESSIBILITY_TARGETING_RELATIONSHIP_HOSTILE
 					: accessibilityTargetingGameRelationship(prop);
 
@@ -780,7 +814,7 @@ static void accessibilityTargetingObserveCombat(
 					"frame=%d slot=%d accepted=%d reason=%s aimed=%d aim_source=%s category=%d relationship=%d aimonly=%d prop=%p propnum=%d chr=%p obj=%p obj_type=%d model=%d prop_type=%d prop_flags=0x%02x obj_flags=0x%08x obj_flags2=0x%08x chr_flags=0x%08x chr_hidden=0x%08x action=%d capture_valid=%d projected=%d finite=%d line_of_sight=%d screen=%.3f,%.3f,%.3f,%.3f",
 					g_Vars.lvframe60, i, eligible, reason, aimed,
 					aimed
-						? (turret ? "raw_query" : "native_filtered")
+						? (objecttarget ? "raw_query" : "native_filtered")
 						: "none",
 					projection->category,
 					relationship,
@@ -815,7 +849,7 @@ static void accessibilityTargetingObserveCombat(
 		candidate->identity.sourceslot = projection->propnum;
 		candidate->identity.propnum = projection->propnum;
 		candidate->identity.proptype = prop->type;
-		candidate->identity.objectidentity = turret
+		candidate->identity.objectidentity = objecttarget
 				? (uintptr_t)obj : (uintptr_t)chr;
 		candidate->prop = prop;
 		candidate->category = projection->category;
@@ -840,7 +874,7 @@ static void accessibilityTargetingObserveCombat(
 		dx = candidate->position.x - g_Vars.currentplayer->cam_pos.x;
 		dy = candidate->position.y - g_Vars.currentplayer->cam_pos.y;
 		dz = candidate->position.z - g_Vars.currentplayer->cam_pos.z;
-		candidate->hasdistancecue = true;
+		candidate->hasdistancecue = !camera;
 		candidate->distancecue = sqrtf(dx * dx + dy * dy + dz * dz);
 		if (chr) {
 			candidate->distancecue -= chr->radius;
@@ -853,9 +887,9 @@ static void accessibilityTargetingObserveCombat(
 			observation->hasaimedtarget = true;
 			observation->aimedidentity = candidate->identity;
 			aimedshootability = candidate->shootability;
-			alignmentusesraw = turret;
+			alignmentusesraw = objecttarget;
 
-			if (turret) {
+			if (objecttarget) {
 				dx = g_AccessibilityTargetingGameRawAimHitPos.x
 						- g_Vars.currentplayer->cam_pos.x;
 				dy = g_AccessibilityTargetingGameRawAimHitPos.y

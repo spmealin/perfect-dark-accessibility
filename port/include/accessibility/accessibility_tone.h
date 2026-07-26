@@ -47,9 +47,10 @@ void accessibilityTonePlayCaneModeConfirmation(s32 mode);
 void accessibilityTonePlayWeaponFunction(s32 secondary);
 void accessibilityToneStopWeaponFunction(void);
 void accessibilityToneSetHazard(s32 enabled, f32 frequencyhz, f32 volume, f32 pan);
-void accessibilityToneSetCombatSlot(s32 slot, s32 enabled, f32 frequencyhz,
-		f32 volume, f32 pan, s32 periodms, s32 durationms, s32 continuous,
-		s32 restart, s32 triggernow);
+void accessibilityToneSetCombatSlot(s32 slot, s32 enabled,
+		f32 startfrequencyhz, f32 endfrequencyhz, f32 volume, f32 pan,
+		s32 periodms, s32 durationms, s32 continuous, s32 restart,
+		s32 triggernow);
 void accessibilityToneStopCombat(void);
 void accessibilityToneSetTrackerSlot(s32 slot, s32 enabled, f32 frequencyhz,
 		f32 volume, f32 pan, s32 periodms, s32 height, s32 rear,
