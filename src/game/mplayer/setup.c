@@ -732,12 +732,43 @@ MenuItemHandlerResult mpChallengesListHandler(s32 operation, struct menuitem *it
 				&& data->accessibility.buffer && data->accessibility.bufferlen > 0
 				&& data->accessibility.index >= 0) {
 			union handlerdata countdata;
+			u32 used;
 			memset(&countdata, 0, sizeof(countdata));
 			mpChallengesListHandler(MENUOP_GETOPTIONCOUNT, item, &countdata);
 
 			if (data->accessibility.index < (s32)countdata.list.value) {
 				snprintf(data->accessibility.buffer, data->accessibility.bufferlen,
 						"%s", challengeGetName2(g_MpPlayerNum, data->accessibility.index));
+				used = strlen(data->accessibility.buffer);
+
+				for (i = 0; i < (IS4MB() ? 2 : 4); i++) {
+					s32 written;
+
+					if (!challengeIsCompletedByPlayerWithNumPlayers2(
+							g_MpPlayerNum, data->accessibility.index, i + 1)
+							|| used >= data->accessibility.bufferlen - 1) {
+						continue;
+					}
+
+					written = snprintf(data->accessibility.buffer + used,
+							data->accessibility.bufferlen - used,
+							"%s%d %s %s",
+							used ? ". " : "", i + 1,
+							langGet(L_MISC_437), // "Player"
+							langGet(L_OPTIONS_276)); // "Completed"
+
+					if (written < 0) {
+						data->accessibility.buffer[used] = '\0';
+						break;
+					}
+
+					if ((u32)written >= data->accessibility.bufferlen - used) {
+						break;
+					}
+
+					used += written;
+				}
+
 				return 1;
 			}
 		}
@@ -4801,6 +4832,37 @@ MenuItemHandlerResult mpChallengesListMenuHandler(s32 operation, struct menuitem
 				&& data->accessibility.index < challengeGetNumAvailable()) {
 			snprintf(data->accessibility.buffer, data->accessibility.bufferlen,
 					"%s", challengeGetNameBySlot(data->accessibility.index));
+			{
+				u32 used = strlen(data->accessibility.buffer);
+
+				for (i = 0; i < (IS4MB() ? 2 : 4); i++) {
+					s32 written;
+
+					if (!challengeIsCompletedByAnyChrWithNumPlayersBySlot(
+							data->accessibility.index, i + 1)
+							|| used >= data->accessibility.bufferlen - 1) {
+						continue;
+					}
+
+					written = snprintf(data->accessibility.buffer + used,
+							data->accessibility.bufferlen - used,
+							"%s%d %s %s",
+							used ? ". " : "", i + 1,
+							langGet(L_MISC_437), // "Player"
+							langGet(L_OPTIONS_276)); // "Completed"
+
+					if (written < 0) {
+						data->accessibility.buffer[used] = '\0';
+						break;
+					}
+
+					if ((u32)written >= data->accessibility.bufferlen - used) {
+						break;
+					}
+
+					used += written;
+				}
+			}
 			return 1;
 		}
 		break;

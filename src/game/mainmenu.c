@@ -1928,13 +1928,93 @@ MenuItemHandlerResult menuhandlerMissionList(s32 operation, struct menuitem *ite
 		if (data->accessibility.part == MENUACCESSIBILITYPART_OPTION
 				&& data->accessibility.buffer && data->accessibility.bufferlen > 0) {
 			union handlerdata optiondata;
+			union handlerdata countdata;
+			const char *difficulties[] = {
+				langGet(L_OPTIONS_251), // "Agent"
+				langGet(L_OPTIONS_252), // "Special Agent"
+				langGet(L_OPTIONS_253), // "Perfect Agent"
+			};
 			const char *optiontext;
+			u32 used;
+			s32 completed[3] = { false, false, false };
+			s32 regularcount;
+			s32 stageindex;
+			s32 k;
+
+			memset(&countdata, 0, sizeof(countdata));
+			menuhandlerMissionList(MENUOP_GETOPTIONCOUNT, item, &countdata);
+
+			if (data->accessibility.index < 0
+					|| data->accessibility.index >= (s32)countdata.list.value) {
+				break;
+			}
+
 			memset(&optiondata, 0, sizeof(optiondata));
 			optiondata.list.value = data->accessibility.index;
 			optiontext = (const char *)menuhandlerMissionList(MENUOP_GETOPTIONTEXT, item, &optiondata);
 
 			if (optiontext) {
 				snprintf(data->accessibility.buffer, data->accessibility.bufferlen, "%s", optiontext);
+
+				if (g_MissionConfig.isanti) {
+					return 1;
+				}
+
+				regularcount = countdata.list.value - getNumUnlockedSpecialStages();
+				stageindex = data->accessibility.index;
+
+				if (stageindex >= regularcount) {
+					stageindex = func0f104720(stageindex - regularcount);
+				}
+
+				if (g_MissionConfig.iscoop) {
+					for (k = 0; k < ARRAYCOUNT(completed); k++) {
+						completed[k] = (g_GameFile.coopcompletions[k]
+								& (1 << stageindex)) != 0;
+					}
+				} else {
+					s32 highestcompleted = -1;
+
+					for (k = 0; k < ARRAYCOUNT(completed); k++) {
+						if (g_GameFile.besttimes[stageindex][k] != 0) {
+							highestcompleted = k;
+						}
+					}
+
+					for (k = 0; k <= highestcompleted; k++) {
+						completed[k] = true;
+					}
+				}
+
+				used = strlen(data->accessibility.buffer);
+
+				for (k = 0; k < ARRAYCOUNT(completed); k++) {
+					s32 written;
+
+					if (!completed[k] || used >= data->accessibility.bufferlen - 1) {
+						continue;
+					}
+
+					written = snprintf(data->accessibility.buffer + used,
+							data->accessibility.bufferlen - used,
+							"%s%s %s",
+							used ? ". " : "",
+							difficulties[k],
+							langGet(L_OPTIONS_276)); // "Completed"
+
+					if (written < 0) {
+						data->accessibility.buffer[used] = '\0';
+						break;
+					}
+
+					if ((u32)written >= data->accessibility.bufferlen - used) {
+						used = data->accessibility.bufferlen - 1;
+						break;
+					}
+
+					used += written;
+				}
+
 				return 1;
 			}
 		}
