@@ -1279,6 +1279,31 @@ static void gfx_opengl_set_anisotropy_level(int level) {
 	current_anisotropy_level = level;
 }
 
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+static void gfx_opengl_copy_metadata(char *destination, size_t size,
+        GLenum name) {
+    const char *value;
+
+    if (!destination || size == 0) {
+        return;
+    }
+
+    value = (const char *)glGetString(name);
+    snprintf(destination, size, "%s", value ? value : "");
+}
+
+extern "C" void gfx_opengl_get_diagnostic_metadata(char *vendor, size_t vendor_size,
+        char *renderer, size_t renderer_size, char *version,
+        size_t version_size, char *shading_language,
+        size_t shading_language_size) {
+    gfx_opengl_copy_metadata(vendor, vendor_size, GL_VENDOR);
+    gfx_opengl_copy_metadata(renderer, renderer_size, GL_RENDERER);
+    gfx_opengl_copy_metadata(version, version_size, GL_VERSION);
+    gfx_opengl_copy_metadata(shading_language, shading_language_size,
+            GL_SHADING_LANGUAGE_VERSION);
+}
+#endif
+
 struct GfxRenderingAPI gfx_opengl_api = {
     gfx_opengl_get_name,
     gfx_opengl_get_max_texture_size,

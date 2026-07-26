@@ -66,6 +66,14 @@ static f64 accumDelta = 0.0;
 static f64 fpsTime = 0.0;
 static s32 fpsNumFrames = 0;
 
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+static struct videoframediagnostics vidFrameDiagnostics;
+static u64 vidDiagnosticFrameStartUs;
+static u64 vidDiagnosticPreviousFrameStartUs;
+static u64 vidDiagnosticVideoStartUs;
+static u64 vidDiagnosticVideoSubmitUs;
+#endif
+
 static s32 videoInitDisplayModes(void);
 void optionsMenuInit();
 
@@ -116,8 +124,15 @@ s32 videoInit(void)
 void videoStartFrame(void)
 {
 	if (initDone) {
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+		u64 started = sysGetMicroseconds();
+		vidDiagnosticFrameStartUs = started;
+#endif
 		startTime = wmAPI->get_time();
 		gfx_start_frame();
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+		vidDiagnosticVideoStartUs = sysGetMicroseconds() - started;
+#endif
 	}
 
 	// Synchronize with their backend counterparts.
@@ -128,18 +143,64 @@ void videoStartFrame(void)
 void videoSubmitCommands(Gfx *cmds)
 {
 	if (initDone) {
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+		u64 started = sysGetMicroseconds();
+#endif
 		gfx_run(cmds);
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+		vidDiagnosticVideoSubmitUs = sysGetMicroseconds() - started;
+#endif
 		++dlcount;
 	}
 }
 
 void videoEndFrame(void)
 {
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+	struct GfxFrameDiagnostics gfxdiagnostics;
+	u64 frame_limit_us;
+	u64 swap_us;
+	u64 started;
+#endif
+
 	if (!initDone) {
 		return;
 	}
 
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+	started = sysGetMicroseconds();
+#endif
 	gfx_end_frame();
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+	memset(&gfxdiagnostics, 0, sizeof(gfxdiagnostics));
+	gfx_get_frame_diagnostics(&gfxdiagnostics);
+	gfx_sdl_get_frame_diagnostics(&frame_limit_us, &swap_us);
+	vidFrameDiagnostics.sequence++;
+	vidFrameDiagnostics.completed_us = sysGetMicroseconds();
+	vidFrameDiagnostics.interval_us = vidDiagnosticPreviousFrameStartUs
+			? vidDiagnosticFrameStartUs - vidDiagnosticPreviousFrameStartUs : 0;
+	vidFrameDiagnostics.video_start_us = vidDiagnosticVideoStartUs;
+	vidFrameDiagnostics.event_us = gfxdiagnostics.event_us;
+	vidFrameDiagnostics.dimensions_us = gfxdiagnostics.dimensions_us;
+	vidFrameDiagnostics.framebuffer_maintenance_us =
+			gfxdiagnostics.framebuffer_maintenance_us;
+	vidFrameDiagnostics.video_submit_us = vidDiagnosticVideoSubmitUs;
+	vidFrameDiagnostics.backend_start_us =
+			gfxdiagnostics.backend_start_us;
+	vidFrameDiagnostics.framebuffer_setup_us =
+			gfxdiagnostics.framebuffer_setup_us;
+	vidFrameDiagnostics.display_list_us = gfxdiagnostics.display_list_us;
+	vidFrameDiagnostics.composite_us = gfxdiagnostics.composite_us;
+	vidFrameDiagnostics.renderer_end_us =
+			gfxdiagnostics.renderer_end_us;
+	vidFrameDiagnostics.frame_limit_us = frame_limit_us;
+	vidFrameDiagnostics.swap_us = swap_us;
+	vidFrameDiagnostics.swap_total_us = gfxdiagnostics.swap_total_us;
+	vidFrameDiagnostics.video_end_us =
+			sysGetMicroseconds() - started;
+	vidFrameDiagnostics.finish_us = gfxdiagnostics.finish_us;
+	vidDiagnosticPreviousFrameStartUs = vidDiagnosticFrameStartUs;
+#endif
 
 	++frames;
 	++fpsNumFrames;
@@ -156,6 +217,49 @@ void videoEndFrame(void)
 		fpsTime = endTime + vidDisplayFPSInterval;
 	}
 }
+
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+s32 videoGetFrameDiagnostics(struct videoframediagnostics *diagnostics)
+{
+	if (!diagnostics || !initDone || vidFrameDiagnostics.sequence == 0) {
+		return false;
+	}
+
+	*diagnostics = vidFrameDiagnostics;
+	return true;
+}
+
+void videoGetGraphicsDiagnosticMetadata(
+		struct videographicsmetadata *metadata)
+{
+	const char *driver;
+
+	if (!metadata) {
+		return;
+	}
+
+	memset(metadata, 0, sizeof(*metadata));
+	snprintf(metadata->api, sizeof(metadata->api), "%s",
+			renderingAPI && renderingAPI->get_name
+			? renderingAPI->get_name() : "");
+	driver = gfx_sdl_get_video_driver();
+	snprintf(metadata->video_driver, sizeof(metadata->video_driver),
+			"%s", driver ? driver : "");
+	gfx_opengl_get_diagnostic_metadata(metadata->vendor,
+			sizeof(metadata->vendor), metadata->renderer,
+			sizeof(metadata->renderer), metadata->version,
+			sizeof(metadata->version), metadata->shading_language,
+			sizeof(metadata->shading_language));
+	gfx_sdl_get_window_diagnostics(&metadata->refresh_rate,
+			&metadata->drawable_width, &metadata->drawable_height);
+	metadata->fullscreen = vidFullscreen;
+	metadata->fullscreen_mode = vidFullscreenExclusive;
+	metadata->vsync = wmAPI ? wmAPI->get_swap_interval() : vidVsync;
+	metadata->framerate_limit = vidFramerateLimit;
+	metadata->framebuffer_effects = vidFramebuffers;
+	metadata->msaa = vidMSAA;
+}
+#endif
 
 
 

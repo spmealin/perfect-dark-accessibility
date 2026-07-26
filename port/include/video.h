@@ -16,6 +16,47 @@ typedef struct {
 	s32 height;
 } displaymode;
 
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+struct videoframediagnostics {
+	u64 sequence;
+	u64 completed_us;
+	u64 interval_us;
+	u64 video_start_us;
+	u64 event_us;
+	u64 dimensions_us;
+	u64 framebuffer_maintenance_us;
+	u64 video_submit_us;
+	u64 backend_start_us;
+	u64 framebuffer_setup_us;
+	u64 display_list_us;
+	u64 composite_us;
+	u64 renderer_end_us;
+	u64 frame_limit_us;
+	u64 swap_us;
+	u64 swap_total_us;
+	u64 video_end_us;
+	u64 finish_us;
+};
+
+struct videographicsmetadata {
+	char api[32];
+	char video_driver[32];
+	char vendor[128];
+	char renderer[128];
+	char version[128];
+	char shading_language[128];
+	u32 refresh_rate;
+	u32 drawable_width;
+	u32 drawable_height;
+	s32 fullscreen;
+	s32 fullscreen_mode;
+	s32 vsync;
+	s32 framerate_limit;
+	s32 framebuffer_effects;
+	s32 msaa;
+};
+#endif
+
 s32 videoInit(void);
 void videoStartFrame(void);
 void videoSubmitCommands(Gfx *cmds);
@@ -81,5 +122,11 @@ void videoFreeCachedTexture(const void *texptr);
 void videoFreeCachedTextures(const void *start, const void *end);
 
 void videoShutdown(void);
+
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+s32 videoGetFrameDiagnostics(struct videoframediagnostics *diagnostics);
+void videoGetGraphicsDiagnosticMetadata(
+		struct videographicsmetadata *metadata);
+#endif
 
 #endif

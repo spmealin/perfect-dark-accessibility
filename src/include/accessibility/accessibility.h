@@ -6,6 +6,7 @@
 void accessibilityInit(void);
 void accessibilityShutdown(void);
 void accessibilityPerformanceTick(void);
+void accessibilityPerformanceShutdown(void);
 s32 accessibilityIsEnabled(void);
 s32 accessibilityIsEnvironmentalHazardsEnabled(void);
 s32 accessibilityIsHudMessagesEnabled(void);

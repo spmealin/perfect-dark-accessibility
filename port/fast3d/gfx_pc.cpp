@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cassert>
+#include <chrono>
 #include <cstdio>
 
 #include <map>
@@ -231,6 +232,15 @@ static size_t buf_vbo_num_tris;
 
 static struct GfxWindowManagerAPI* gfx_wapi;
 static struct GfxRenderingAPI* gfx_rapi;
+
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+static struct GfxFrameDiagnostics gfx_frame_diagnostics;
+
+static uint64_t gfx_diagnostic_now_us(void) {
+    return (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+#endif
 
 static uintptr_t segmentPointers[16];
 
@@ -2590,7 +2600,16 @@ extern "C" struct GfxRenderingAPI* gfx_get_current_rendering_api(void) {
 }
 
 extern "C" void gfx_start_frame(void) {
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+    uint64_t phase_start = gfx_diagnostic_now_us();
+    uint64_t frame_start = phase_start;
+    memset(&gfx_frame_diagnostics, 0, sizeof(gfx_frame_diagnostics));
+#endif
     gfx_wapi->handle_events();
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+    gfx_frame_diagnostics.event_us = gfx_diagnostic_now_us() - phase_start;
+    phase_start = gfx_diagnostic_now_us();
+#endif
     gfx_wapi->get_dimensions(&gfx_current_window_dimensions.width, &gfx_current_window_dimensions.height,
                              &gfx_current_window_position_x, &gfx_current_window_position_y);
 
@@ -2606,6 +2625,10 @@ extern "C" void gfx_start_frame(void) {
     gfx_current_game_window_viewport.width = gfx_current_dimensions.width;
     gfx_current_game_window_viewport.height = gfx_current_dimensions.height;
 
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+    gfx_frame_diagnostics.dimensions_us = gfx_diagnostic_now_us() - phase_start;
+    phase_start = gfx_diagnostic_now_us();
+#endif
     if (gfx_current_dimensions.height != gfx_prev_dimensions.height) {
         for (auto& fb : framebuffers) {
             uint32_t width, height, msaa;
@@ -2656,11 +2679,21 @@ extern "C" void gfx_start_frame(void) {
 
     // update aspect scale and offset
     gfx_update_aspect_mode();
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+    gfx_frame_diagnostics.framebuffer_maintenance_us =
+            gfx_diagnostic_now_us() - phase_start;
+    gfx_frame_diagnostics.start_total_us =
+            gfx_diagnostic_now_us() - frame_start;
+#endif
 }
 
 uint32_t num_dls = 0;
 
 extern "C" void gfx_run(Gfx* commands) {
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+    uint64_t phase_start = gfx_diagnostic_now_us();
+    uint64_t run_start = phase_start;
+#endif
     ++num_dls;
     gfx_sp_reset();
 
@@ -2671,6 +2704,11 @@ extern "C" void gfx_run(Gfx* commands) {
         return;
     }
     dropped_frame = false;
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+    gfx_frame_diagnostics.backend_start_us =
+            gfx_diagnostic_now_us() - phase_start;
+    phase_start = gfx_diagnostic_now_us();
+#endif
 
     gfx_rapi->update_framebuffer_parameters(0, gfx_current_window_dimensions.width,
                                             gfx_current_window_dimensions.height, 1, false, true, true,
@@ -2682,8 +2720,18 @@ extern "C" void gfx_run(Gfx* commands) {
     rdp.viewport_or_scissor_changed = true;
     rendering_state.viewport = {};
     rendering_state.scissor = {};
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+    gfx_frame_diagnostics.framebuffer_setup_us =
+            gfx_diagnostic_now_us() - phase_start;
+    phase_start = gfx_diagnostic_now_us();
+#endif
     gfx_run_dl(commands);
     gfx_flush();
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+    gfx_frame_diagnostics.display_list_us =
+            gfx_diagnostic_now_us() - phase_start;
+    phase_start = gfx_diagnostic_now_us();
+#endif
     gfxFramebuffer = 0;
 
     if (game_renders_to_framebuffer) {
@@ -2705,16 +2753,48 @@ extern "C" void gfx_run(Gfx* commands) {
         }
     }
 
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+    gfx_frame_diagnostics.composite_us =
+            gfx_diagnostic_now_us() - phase_start;
+    phase_start = gfx_diagnostic_now_us();
+#endif
     gfx_rapi->end_frame();
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+    gfx_frame_diagnostics.renderer_end_us =
+            gfx_diagnostic_now_us() - phase_start;
+    phase_start = gfx_diagnostic_now_us();
+#endif
     gfx_wapi->swap_buffers_begin();
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+    gfx_frame_diagnostics.swap_total_us =
+            gfx_diagnostic_now_us() - phase_start;
+    gfx_frame_diagnostics.run_total_us =
+            gfx_diagnostic_now_us() - run_start;
+#endif
 }
 
 extern "C" void gfx_end_frame(void) {
     if (!dropped_frame) {
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+        uint64_t finish_start = gfx_diagnostic_now_us();
+#endif
         gfx_rapi->finish_render();
         gfx_wapi->swap_buffers_end();
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+        gfx_frame_diagnostics.finish_us =
+                gfx_diagnostic_now_us() - finish_start;
+#endif
     }
 }
+
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+extern "C" void gfx_get_frame_diagnostics(
+        struct GfxFrameDiagnostics *diagnostics) {
+    if (diagnostics) {
+        *diagnostics = gfx_frame_diagnostics;
+    }
+}
+#endif
 
 extern "C" void gfx_set_target_fps(int fps) {
     gfx_wapi->set_target_fps(fps);

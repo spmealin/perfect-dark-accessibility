@@ -232,6 +232,13 @@ void accessibilityInit(void)
 	accessibilityWeaponFunctionReset("init");
 
 	if (!g_AccessibilityEnabled) {
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+		if (g_AccessibilityLoggingEnabledConfig && accessibilityLogInit()) {
+			accessibilityLogEvent("lifecycle", "session_start",
+					"enabled=0 logging=1 speech=0 menu_narration=0 hud_messages=0 environmental_hazards=0 interactable_beacons=0 ir_scanner_audio=0 non_hostile_beacons=0 rtracker_audio=0 targeting_feedback=0 weapon_function_cues=0 xray_scanner_audio=0 virtual_cane_mode=0 performance_diagnostics=1 performance_interval_us=1000000 speech_test=0 path=%s diagnostic_control=accessibility_disabled",
+					fsFullPath(ACCESSIBILITY_LOG_PATH));
+		}
+#endif
 		return;
 	}
 
@@ -325,6 +332,7 @@ void accessibilityShutdown(void)
 	accessibilityMenuReset();
 	accessibilityAnnouncementReset();
 	accessibilitySpeechShutdown();
+	accessibilityPerformanceShutdown();
 
 	if (accessibilityLogIsOpen()) {
 		elapsed = sysGetMicroseconds() - g_AccessibilityStartTimeUs;

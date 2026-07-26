@@ -27,6 +27,11 @@ static int target_fps = 120; // above 60 since vsync is enabled by default
 static uint64_t previous_time;
 static uint64_t qpc_freq;
 
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+static uint64_t diagnostic_frame_limit_us;
+static uint64_t diagnostic_swap_us;
+#endif
+
 #define FRAME_INTERVAL_US_NUMERATOR 1000000
 #define FRAME_INTERVAL_US_DENOMINATOR (target_fps)
 
@@ -354,15 +359,73 @@ static inline void sync_framerate_with_timer(void) {
 }
 
 static void gfx_sdl_swap_buffers_begin(void) {
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+    uint64_t phase_start;
+    diagnostic_frame_limit_us = 0;
+    diagnostic_swap_us = 0;
+#endif
     if (target_fps) {
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+        phase_start = SDL_GetPerformanceCounter();
+#endif
         sync_framerate_with_timer();
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+        diagnostic_frame_limit_us =
+                (SDL_GetPerformanceCounter() - phase_start) * 1000000 /
+                qpc_freq;
+#endif
     }
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+    phase_start = SDL_GetPerformanceCounter();
+#endif
     SDL_GL_SwapWindow(wnd);
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+    diagnostic_swap_us =
+            (SDL_GetPerformanceCounter() - phase_start) * 1000000 / qpc_freq;
+#endif
 }
 
 static void gfx_sdl_swap_buffers_end(void) {
 
 }
+
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+extern "C" void gfx_sdl_get_frame_diagnostics(uint64_t *frame_limit_us,
+        uint64_t *swap_us) {
+    if (frame_limit_us) {
+        *frame_limit_us = diagnostic_frame_limit_us;
+    }
+
+    if (swap_us) {
+        *swap_us = diagnostic_swap_us;
+    }
+}
+
+extern "C" const char *gfx_sdl_get_video_driver(void) {
+    const char *driver = SDL_GetCurrentVideoDriver();
+    return driver ? driver : "";
+}
+
+extern "C" void gfx_sdl_get_window_diagnostics(uint32_t *refresh_rate,
+        uint32_t *drawable_width, uint32_t *drawable_height) {
+    int width = 0;
+    int height = 0;
+
+    if (refresh_rate) {
+        gfx_sdl_get_active_window_refresh_rate(refresh_rate);
+    }
+
+    SDL_GL_GetDrawableSize(wnd, &width, &height);
+
+    if (drawable_width) {
+        *drawable_width = width > 0 ? (uint32_t)width : 0;
+    }
+
+    if (drawable_height) {
+        *drawable_height = height > 0 ? (uint32_t)height : 0;
+    }
+}
+#endif
 
 static double gfx_sdl_get_time(void) {
     return SDL_GetPerformanceCounter() / (double)qpc_freq;

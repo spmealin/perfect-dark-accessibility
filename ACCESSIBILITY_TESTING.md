@@ -65,6 +65,18 @@ The temporary `ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS` CMake option defaults to `
 
 When compiled in and accessibility logging is active, `performance/frame_window` is emitted approximately once per real-time second regardless of whether targeting, beacons, or hazards currently have a selected object. It records rendered-frame rate, the longest observed inter-frame gap, logical game-tick rate and delta fields, stage/menu context, Windows working-set and private-byte totals and session-baseline deltas, desired oscillator states including the enabled combat-slot count, and fixed-buffer mixer call/pass-through/active/frame counters. Use it to correlate a reported slowdown with memory growth, an oscillator that remained enabled, or continued expensive mixing. Hazard `scan` audits additionally include the current, average, and maximum scan duration in microseconds for the preceding audit window. These records are diagnostic observations only and do not allocate or lock in the audio callback. The session-start record reports `performance_diagnostics=1` and its interval when present, or zero when compiled out.
 
+The same flag now emits `graphics/metadata` once and `graphics/frame_window` once per second. The latter reports totals and maxima for frame interval, `videoStartFrame`, SDL events/dimensions, framebuffer maintenance/setup, display-list translation, composite/resolve, renderer end, explicit frame limiting, `SDL_GL_SwapWindow`, and `videoEndFrame`. The frame path writes only to fixed memory. It continuously retains 180 pre-trigger frames; three consecutive frames of at least 50 ms, one frame of at least 250 ms, or a one-second render rate below 30 FPS copies that history into a fixed 480-frame episode. After two one-second windows above 50 FPS, or at orderly shutdown, the log receives an episode summary, the ten worst retained frames, and twelve evenly sampled timeline records. `relative_to_trigger` identifies frames before and after the gate. Capacity exhaustion sets `truncated=1` rather than allocating.
+
+For a reproduction, start `tools/accessibility/capture_graphics_diagnostics.ps1` in normal PowerShell, then launch the executable separately through the required MinGW64 environment. The collector waits for the exact executable path, samples process/NVIDIA state every 500 ms, samples Windows per-process GPU counters every fourth sample, flushes bounded batches, and archives configuration, accessibility log, Git identity, power plan, and relevant System events beneath ignored `build/diagnostics/`. After the run:
+
+```powershell
+.\tools\accessibility\analyze_graphics_diagnostics.ps1 `
+  -LogPath .\build\diagnostics\<capture>\accessibility.log `
+  -CollectorDirectory .\build\diagnostics\<capture>
+```
+
+Confirm that a deliberate three-frame test stall in a developer-only harness retains records with negative `relative_to_trigger`, that the episode does not write detailed records until recovery, that normal 60 FPS play creates no false episode, and that a forced normal shutdown flushes an active episode. Compare an all-features-enabled run with `Accessibility.Enabled=0` and `LoggingEnabled=1`; diagnostic builds must retain graphics/performance logging in the disabled control while speech and accessibility gameplay features remain inactive. Follow the focused A/B decision table and fix criteria in `GRAPHICS_SLOWDOWN_INVESTIGATION_PLAN.md`.
+
 A JSON Lines or equivalently parseable record could look like this, with the schema finalized in implementation:
 
 ```json

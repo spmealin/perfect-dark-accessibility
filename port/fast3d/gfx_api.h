@@ -37,6 +37,23 @@ extern float gfx_current_native_aspect; // The aspect ratio of the above mode
 extern bool gfx_framebuffers_enabled;
 extern bool gfx_detail_textures_enabled;
 
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+struct GfxFrameDiagnostics {
+    uint64_t start_total_us;
+    uint64_t event_us;
+    uint64_t dimensions_us;
+    uint64_t framebuffer_maintenance_us;
+    uint64_t run_total_us;
+    uint64_t backend_start_us;
+    uint64_t framebuffer_setup_us;
+    uint64_t display_list_us;
+    uint64_t composite_us;
+    uint64_t renderer_end_us;
+    uint64_t swap_total_us;
+    uint64_t finish_us;
+};
+#endif
+
 void gfx_init(const struct GfxInitSettings *settings);
 void gfx_destroy(void);
 struct GfxRenderingAPI* gfx_get_current_rendering_api(void);
@@ -54,5 +71,8 @@ void gfx_resize_framebuffer(int fb, uint32_t width, uint32_t height, int upscale
 void gfx_set_framebuffer(int fb, float noise_scale) ;
 void gfx_reset_framebuffer(void);
 void gfx_copy_framebuffer(int fb_dst, int fb_src, int left, int top, int use_back);
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+void gfx_get_frame_diagnostics(struct GfxFrameDiagnostics *diagnostics);
+#endif
 
 #endif
