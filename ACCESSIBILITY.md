@@ -88,6 +88,24 @@ Pointing directly at an admitted hostile starts the responsive alignment tone, i
 
 The pattern has a dedicated fixed oscillator lane and does not consume a game sound channel, allocate at runtime, or interrupt door/object chirps. Any input path that changes the same semantic state receives the cue, including the dedicated controller command and active-menu selection. Temporary alternate functions are reported when their visual state actually changes. Multiplayer arbitration and usefulness remain to be acceptance-tested.
 
+### Weapon-change announcements
+
+`Accessibility.WeaponChangeAnnouncements` defaults to `1` and is subordinate to
+`Accessibility.Enabled` and speech availability. The accessibility layer waits
+for a requested weapon to become the equipped right-hand weapon rather than
+speaking the input alone.
+
+Releasing the active weapon menu after selecting a weapon queues its total
+ammunition count after the already spoken focus label. Quick forward/back weapon
+changes interrupt stale speech with the localized weapon name shown by the gun
+HUD followed by the same count. The count uses the ammunition type displayed for
+the effective weapon function, falls back to the other function exactly as the
+HUD does, and includes reserve plus loaded rounds in both hands. A weapon or
+device with no ammunition definition speaks only its name for a quick change and
+adds no count after active-menu selection. Pending requests expire if the
+requested weapon does not equip, preventing a failed or superseded command from
+being announced later.
+
 ### Single-player world scanners
 
 `Accessibility.InteractableBeacons` defaults to `1` for project-owner blind-user acceptance testing. It remains configurable in `pd.ini`. Enabling the setting does not start a sound automatically; use F5, F6, and F8 during any single-player mission or one-local-player Combat Simulator match.

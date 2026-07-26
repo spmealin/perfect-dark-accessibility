@@ -5707,6 +5707,8 @@ void bgunCycleForward(void)
 		}
 
 		bgunEquipWeapon(weaponnum1);
+		accessibilityWeaponQuickChangeRequested(g_Vars.currentplayernum,
+				weaponnum1);
 	}
 }
 
@@ -5738,6 +5740,8 @@ void bgunCycleBack(void)
 		}
 
 		bgunEquipWeapon(weaponnum1);
+		accessibilityWeaponQuickChangeRequested(g_Vars.currentplayernum,
+				weaponnum1);
 	}
 }
 

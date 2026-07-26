@@ -16,6 +16,7 @@ s32 accessibilityIsNonHostileBeaconsEnabled(void);
 s32 accessibilityIsMenuNarrationEnabled(void);
 s32 accessibilityIsRTrackerAudioEnabled(void);
 s32 accessibilityIsTargetingFeedbackEnabled(void);
+s32 accessibilityIsWeaponChangeAnnouncementsEnabled(void);
 s32 accessibilityIsWeaponFunctionCuesEnabled(void);
 s32 accessibilityIsXrayScannerAudioEnabled(void);
 s32 accessibilityIsAudibleMarkersEnabled(void);

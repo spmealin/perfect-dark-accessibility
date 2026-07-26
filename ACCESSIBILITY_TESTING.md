@@ -356,6 +356,23 @@ Acceptance session `1784764601` exposed the initial mismatch. The target for cri
 
 With `Accessibility.WeaponFunctionCues=1`, equip a weapon with two persistent functions and press R1/right bumper. Switching to the secondary function must produce exactly two centered 1000 Hz beeps; returning to primary must produce exactly one. Each beep should be brief (35 ms), the two-beep gap should be clearly countable at 30 ms, and output should begin only after the same semantic value that drives the visual indicator changes. Repeat using the active-menu function selector and any configured keyboard binding: input path must not affect the pattern.
 
+With `Accessibility.WeaponChangeAnnouncements=1`, hold the active weapon menu,
+move focus across several weapons, and verify each focus name is spoken as
+before. Release on an ammunition-using weapon and confirm its total ammunition
+count is queued only after release and only after the weapon equips; the weapon
+name must not be repeated. Use controller quick-forward and quick-back commands
+and confirm each successful switch announces the localized gun-HUD weapon name
+followed by the same total count. Compare the number with reserve plus both
+loaded hands, including dual wielding, an empty weapon, and a weapon whose
+secondary function uses a different ammunition type. Select unarmed and a
+no-ammunition device: radial selection must add no meaningless count, while a
+quick change still speaks its name. Rapidly cycle across multiple weapons and
+confirm stale intermediate speech is interrupted by the final settled weapon.
+Attempt a blocked or superseded switch and confirm it is never announced later.
+Repeat with the setting disabled and correlate `weapon_change/pending`,
+`weapon_change/announced`, expiration/suppression, and
+`announcement/output_result group=weapon_change` records.
+
 Try a weapon with no alternate function, temporary alternate-function weapons, an unavailable function, rapid repeated presses, weapon changes, dual wielding, firing/reloading, pause/menu transitions, death, and stage changes. Equipping a weapon or entering a stage must not announce its stored function as a new toggle. Confirm beacon chirps, hazard sweeps, aiming tones, and combat slots can overlap without interrupting the function pattern. Correlate every audible pattern with `weapon_function/state_change`; advanced `performance/frame_window` records should advance `weapon_function_sequence` without memory or channel growth. Record multiplayer behavior as unvalidated rather than accepted until independently tested.
 
 Use a controlled room with known eligible and ineligible entities. Test friendly/hostile/neutral where applicable, occlusion/cloak rules, target loss, rapid crossings, empty scan, overlapping results, collected/opened/destroyed objects, and multiple local-player context. Explicitly audit for hidden-information leaks.

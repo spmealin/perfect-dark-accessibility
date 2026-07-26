@@ -83,6 +83,13 @@ This roadmap orders work by user task and evidence. Milestones are not promises 
 
 Implementation status: the generic HUD-admission slice is implemented behind `Accessibility.HudMessages=1`. It queues every successfully admitted non-subtitle HUD message for non-interrupting speech and excludes the explicit in-game/cutscene subtitle types. The pre-mission Overview announces its visible difficulty-filtered objective list; pause Status adds current localized states; pause Briefing retains the complete long-form text; and pause Inventory exposes its visible rich item details. Subtitle narration, automatic priority objective events, full queue expiry/replacement policy, and Milestone 7 acceptance remain pending.
 
+Weapon-change speech now supplements that HUD slice behind
+`Accessibility.WeaponChangeAnnouncements=1`. Active-menu selection queues the
+settled weapon's total ammunition after release without repeating its focus
+label; quick forward/back switching announces the gun HUD's localized weapon
+name plus total ammunition. This is implemented feature work but remains pending
+blind-user acceptance alongside the rest of this milestone.
+
 ## Milestone 8 — Player status and inventory queries
 
 Implementation status: the active weapon/device radial now announces localized highlighted-item labels, including Unarmed, as a bounded inventory-selection slice. Health, shield, ammo, deliberate status/inventory queries, function-screen narration, and the rest of this milestone remain open.

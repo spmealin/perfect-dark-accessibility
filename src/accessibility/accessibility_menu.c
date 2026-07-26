@@ -10,12 +10,14 @@
 #include "types.h"
 #include "game/lang.h"
 #include "game/activemenu.h"
+#include "game/inv.h"
 #include "game/menu.h"
 #include "game/menuitem.h"
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_announcement.h"
 #include "accessibility/accessibility_log.h"
 #include "accessibility/accessibility_menu.h"
+#include "accessibility/accessibility_weapon.h"
 
 #define ACCESSIBILITY_MENU_FIELD_MAX 768
 #define ACCESSIBILITY_MENU_LONG_TEXT_MAX 8192
@@ -708,6 +710,34 @@ void accessibilityMenuObserveActive(s32 playernum)
 
 	previous = &g_AccessibilityActiveMenuSnapshots[playernum];
 	g_AccessibilityActiveMenuObservations++;
+
+	if (g_Vars.currentplayer
+			&& g_Vars.currentplayer->activemenumode == AMMODE_VIEW
+			&& playernum == 0) {
+		menu = &g_AmMenus[playernum];
+
+		if (menu->screenindex == 0 && menu->slotnum != 4) {
+			s32 slot = menu->slotnum;
+			s32 invindex;
+			s32 weaponnum = -1;
+
+			if (slot > 4) {
+				slot--;
+			}
+
+			invindex = menu->invindexes[slot];
+
+			if (invindex < invGetCount()) {
+				weaponnum = invGetWeaponNumByIndex(invindex);
+			}
+
+			accessibilityWeaponActiveMenuObserve(playernum, true, weaponnum);
+		} else {
+			accessibilityWeaponActiveMenuObserve(playernum, true, -1);
+		}
+	} else {
+		accessibilityWeaponActiveMenuObserve(playernum, false, -1);
+	}
 
 	if (!accessibilityIsMenuNarrationEnabled()
 			|| !g_Vars.currentplayer
