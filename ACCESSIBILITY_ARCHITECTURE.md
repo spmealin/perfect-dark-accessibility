@@ -120,6 +120,7 @@ src/accessibility/
   accessibility.c          lifecycle and feature coordinator
   accessibility_cane.c     live seven-angle movement-collision orientation cue
   accessibility_log.c      comprehensive structured development log
+  accessibility_marker.c   four player-authored landmark slots and LOS policy
   accessibility_observer.c active player/CamSpy perspective and collision-pose adapter
   accessibility_speech.c   speech lifecycle and UTF-8 output boundary
   accessibility_tracker.c  native R-Tracker semantic adapter and fixed-slot state
@@ -129,6 +130,7 @@ src/include/accessibility/
   accessibility.h
   accessibility_cane.h
   accessibility_log.h
+  accessibility_marker.h
   accessibility_observer.h
   accessibility_speech.h
   accessibility_speech_backend.h
@@ -240,6 +242,7 @@ Accessibility.WeaponFunctionCues=1
 Accessibility.XRayScannerAudio=1
 Accessibility.VirtualCaneMode=1
 Accessibility.RTrackerAudio=1
+Accessibility.AudibleMarkers=1
 ```
 
 Navigation and hostile-cue tuning is constructor-registered as bounded floats:
@@ -259,6 +262,8 @@ Accessibility.EnemyFadeDistance=3500
 Accessibility.EnemyMaximumDistance=4000
 Accessibility.EnemyVolume=0.25
 Accessibility.EnemyFrequency=900
+Accessibility.MarkerRange=1200
+Accessibility.MarkerVolume=1.0
 ```
 
 Later features may add:
@@ -335,7 +340,27 @@ Pickup eligibility normally follows `objTestForPickup` object types and flags. T
 
 ### Navigation
 
-Navigation is intentionally an experiment. Start with player position/orientation, rooms, a small set of known landmarks, and route-deviation logging in one training environment. Evaluate spoken clock directions versus earcons, metric versus qualitative distance, cue cadence, door/elevator transitions, and recovery after leaving a route. Do not generalize to all stages until route data and blind task completion support it.
+The player-authored marker module owns four fixed coordinate/room snapshots.
+F9 through F12 place or move a slot at the active accessibility observer's
+camera; Shift removes it. Each logical gameplay tick calculates 3D distance and
+runs at most four bounded portal-aware collision rays against background and
+doors. A blocked ray publishes zero gain, while an off-screen clear ray remains
+eligible. The observer adapter makes the same policy follow Joanna or an
+active CamSpy without storing live prop pointers in marker state.
+
+The port tone backend reserves four marker voices. Each renders two normalized,
+opposed triangular frequency sweeps plus spatial gain and pan. A shared
+allocation-free identity scheduler serializes one-to-four 800 Hz chirps with
+75 ms gaps and a minimum 500 ms start interval; removal appends a centered
+400 Hz chirp.
+Gameplay publishes only atomic enabled/gain/pan/restart values. Menus and other
+temporary presentation states mute voices but retain core slots; stage-stop,
+disable, and shutdown reset them.
+
+This landmark slice remains an experiment. Route guidance, automatic
+breadcrumbs, objective selection, and route-deviation policy are separate and
+must not infer destinations from marker state. Do not generalize a future route
+model to all stages until blind task completion supports it.
 
 ## Upstream hook ledger
 
@@ -343,11 +368,11 @@ This table records implemented and anticipated changes to established files so f
 
 | Established file | Proposed narrow hook or reason | Semantic payload | Why polling alone may be insufficient | Status |
 | --- | --- | --- | --- | --- |
-| `CMakeLists.txt` | Register core sources and select exactly one native/null speech backend | Build platform/configuration only | `src/accessibility` is outside the game glob and platform backends must not compile together | Implemented through the R-Tracker audio slice |
+| `CMakeLists.txt` | Register core sources and select exactly one native/null speech backend | Build platform/configuration only | `src/accessibility` is outside the game glob and platform backends must not compile together | Implemented through the audible-marker slice |
 | `port/src/main.c` | Initialize after `configInit`; shut down in `cleanup` | Lifecycle and logger availability | First UI may occur before a later tick; resources need ordered shutdown | Implemented in Milestone 2 with two calls |
-| `port/src/pdmain.c` | Call the compile-time-optional performance observer, call accessibility gameplay ticks immediately after `lvTick`, and reset owned audio before `lvStop` | Timing, input, stage/player context, safe main-thread collision queries, and teardown | Gameplay cues need settled semantic state, cane collision scratch state must be copied on the main thread, and owned sounds must stop before stage memory is disabled | Beacon, virtual-cane, laser-hazard, and R-Tracker ticks run after `lvTick`; cane, targeting, hazard, and R-Tracker stage-stop resets protect owned voices and stage identities |
+| `port/src/pdmain.c` | Call the compile-time-optional performance observer, call accessibility gameplay ticks immediately after `lvTick`, and reset owned audio before `lvStop` | Timing, input, stage/player context, safe main-thread collision queries, and teardown | Gameplay cues need settled semantic state, cane and marker collision work must remain on the main thread, and owned sounds must stop before stage memory is disabled | Beacon, virtual-cane, laser-hazard, audible-marker, and R-Tracker ticks run after `lvTick`; cane, marker, targeting, hazard, and R-Tracker stage-stop resets protect owned voices and stage identities |
 | `port/src/video.c`, `port/include/video.h`, and diagnostic-only boundaries in `port/fast3d/gfx_pc.cpp`, `gfx_sdl2.cpp`, `gfx_opengl.cpp`, and their headers | Under `ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS`, expose fixed per-frame timings and startup graphics metadata without changing rendering | SDL event/dimension time, framebuffer setup/resolve, display-list translation, limiter, swap, finish, window/GL identity | Aggregate main-loop cadence cannot distinguish game work from a blocked OpenGL present; the rare fault must be captured in its first reproduction | Compile-time optional; ordinary builds contain no timing path. Fast3D changes contain only timers/read-only getters and no accessibility policy or logging |
-| `port/src/audio.c` | Mix procedural accessibility voices into each completed stereo buffer before SDL queueing | Centered targeting tone, firing-range presence pulse, single/patterned beacon and cane chirps, toggle and weapon-function patterns, positioned environmental-hazard tone state, and concurrent R-Tracker markers | Clean responsive carriers cannot be made from game samples with finite duration or baked-in modulation | Independent fixed voices share one staging buffer: centered fine aim, one harmonic firing-range round-robin lane, one/two/three-pulse beacon patterns, a two/three-beep rising/falling toggle-and-cane-mode lane, seven cane slots, a one/two-beep weapon-function lane, continuous hazards, combat slots, and ten R-Tracker slots; none allocate at runtime |
+| `port/src/audio.c` | Mix procedural accessibility voices into each completed stereo buffer before SDL queueing | Centered targeting tone, firing-range presence pulse, single/patterned beacon and cane chirps, marker sweeps/identities, toggle and weapon-function patterns, positioned environmental-hazard tone state, and concurrent R-Tracker markers | Clean responsive carriers cannot be made from game samples with finite duration or baked-in modulation | Independent fixed voices share one staging buffer: centered fine aim, one harmonic firing-range round-robin lane, one/two/three-pulse beacon patterns, a two/three-beep rising/falling toggle-and-cane-mode lane, seven cane slots, four two-oscillator marker slots with one serialized identity lane, a one/two-beep weapon-function lane, continuous hazards, combat slots, and ten R-Tracker slots; none allocate at runtime |
 | `src/game/menutick.c` | Observe the final active dialog/focus once immediately after `menuProcessInput` | Menu slot/player/root/depth and current menu/dialog state | Captures all focus paths after item state settles without hooks in every transition | Implemented in Milestone 4 with one call |
 | `src/game/activemenutick.c` | Observe the settled active-menu screen and highlighted slot once after all sampled input is processed | Primary-player active-menu mode, screen index, slot index, and the localized `amGetSlotDetails` label | Weapon/device selection is a gameplay radial rather than a normal `struct menu`; observing after input avoids duplicate speech from intermediate controller samples | Weapon/device screen narration implemented; function and bot-order screens remain deferred |
 | `src/game/menu.c` | Expose a read-only focused-item runtime-data lookup | Dialog/item to existing row/block data | Accessibility must not duplicate private row/block mapping | Implemented in Milestone 4 as `menuGetItemData` |
@@ -364,7 +389,7 @@ This table records implemented and anticipated changes to established files so f
 | `src/game/propobj.c`, `src/include/game/propobj.h` | Expose pure IR/X-Ray renderer queries and the native potential-interaction predicate | Conditional-scenery/infrared highlight state, X-Ray range, and broad object interaction semantics before range/facing checks | Copied flag, movement-state, or eraser math could drift and announce a different object set | `objIsHighlightedByInfrared`, `objGetXrayHighlightDistance`, and `objIsPotentiallyInteractable` are shared with their native consumers |
 | `src/game/propsnd.c` | Reuse public read-only distance-volume and pan calculations for procedural spatial cues | World position, distance, range, volume, and pan | Procedural cues should retain the tested spatial behavior without allocating or stopping gameplay channels | No hook needed; beacon and hazard cores call `psCalculateVolumeFromDistance` and `psCalculatePan` |
 | `src/include/constants.h` | Reserve `PSTYPE_ACCESSIBILITY_TARGETING` | Legacy/fallback prop-sound ownership retained by the generic targeting core | Any fallback targeting sample must stop/reuse only its own sound, never gameplay sounds | The active firing-range profile moved to its dedicated procedural harmonic lane; the reserved owner remains for compatibility and can be removed with the dormant fallback path later |
-| `port/include/input.h` | Use provisional context-sensitive PC F4/F5/F6/F7/F8 accessibility keys and expose both Alt modifier bits | Development-only action identifiers | Gameplay uses F4 for virtual-cane mode, F5/F6/F8 for interactable/door/pickup scanners, and F7 for non-hostile people; menus retain their F5/F6 contexts; Alt+F4 must not change cane state | F7 was previously absent from the virtual-key enum and unbound in the default PC input path; replacement by Milestone 6 actions/settings remains required |
+| `port/include/input.h` | Use provisional context-sensitive PC F4 through F12 accessibility keys and expose modifier bits | Development-only action identifiers | Gameplay uses F4 for virtual-cane mode, F5/F6/F8 for interactable/door/pickup scanners, F7 for non-hostile people, and F9–F12 for player markers; menus retain their own contexts; modified OS/debug chords must not trigger marker placement | F10–F12 are now named consecutive SDL scancodes; replacement by Milestone 6 actions/settings remains required |
 | `port/src/input.c` | Add configurable accessibility actions or a dispatch boundary | Repeat, status, beacon/scan, cancel, navigation commands | Current binding model represents game controls, not a separate action set | Proposed for Milestone 6; provisional keys require no binding-model change |
 | `port/src/input.c`, `port/src/optionsmenu.c`, `src/include/constants.h`, `src/game/bondmove.c` | Add a configurable reset-view gameplay action using the unused extended control bit | Pressed edge from End, R3, or a player-selected replacement binding | Gives a deterministic horizontal-orientation recovery command without changing yaw or bypassing the binding system | Implemented as `CK_1000`/`BUTTON_RESET_VIEW`; PC defaults are End and right-stick click |
 | `port/src/optionsmenu.c` | Add an accessibility settings entry/dialog | Existing registered values, including proven beacon actions | Users need discoverable control without editing `pd.ini` | Proposed for Milestone 6 after beacon behavior is tested |

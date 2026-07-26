@@ -213,6 +213,34 @@ Implementation status: a general single-player virtual-cane slice is implemented
 
 The implemented cane now uses the active player-or-CamSpy observer pose and restarts a partial sweep when the visible perspective changes. CamSpy collision dimensions and rooms replace Joanna's only while its camera mode is effective. This engineering behavior still requires runtime transition, collision, and performance evidence.
 
+### Prioritized player-authored audible-marker slice
+
+- **Status:** Detailed specification and engineering implementation added;
+  runtime and blind-user acceptance are pending.
+- **Detailed specification:** `ACCESSIBILITY_AUDIBLE_MARKERS_SPEC.md` defines
+  the input, acoustic, line-of-sight, lifecycle, performance, logging, and
+  acceptance contract.
+- **Goal:** Let a player create four recognizable temporary landmarks to
+  detect revisited areas and orient toward a chosen point without automatic
+  route or objective guidance.
+- **Initial behavior:** F9 through F12 place or move slots one through four;
+  Shift plus the same key removes one. Each nearby clear-path marker has a
+  dedicated opposed 300–600 Hz sweep and a staggered one-to-four-chirp
+  identity. Background walls and doors block a portal-aware ray from the
+  active Joanna-or-CamSpy camera, but viewport membership and facing do not.
+  Stage changes clear all slots; temporary menus and pause states only mute
+  them.
+- **Acceptance:** Distinguish every slot, move and remove it without sight,
+  recognize a returned-to location, verify closed/open door and corner
+  transitions, verify off-screen clear-path behavior, switch perspectives with
+  CamSpy, mix all four with combat and cane output, and complete a long-session
+  stability pass.
+- **Risks:** Four continuous bases may mask gameplay, stereo retains
+  front/rear ambiguity, a ray every tick for each in-range marker adds bounded
+  collision cost, and fixed raw shortcuts can conflict with custom bindings.
+- **Explicit non-goals:** No persistence, names, breadcrumbs, pathfinding,
+  automatic movement, objective selection, or hidden destination information.
+
 - **Goal:** Evaluate nonvisual orientation and route guidance in one bounded Carrington Institute/training route.
 - **User-visible result:** Heading/landmark queries and optional cues support following a short route, detecting deviation, and recovering.
 - **Systems:** player pose, rooms/portals/pads, doors/elevators, landmarks, route model, speech/earcons.

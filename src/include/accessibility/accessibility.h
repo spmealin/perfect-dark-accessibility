@@ -18,6 +18,7 @@ s32 accessibilityIsRTrackerAudioEnabled(void);
 s32 accessibilityIsTargetingFeedbackEnabled(void);
 s32 accessibilityIsWeaponFunctionCuesEnabled(void);
 s32 accessibilityIsXrayScannerAudioEnabled(void);
+s32 accessibilityIsAudibleMarkersEnabled(void);
 s32 accessibilityGetVirtualCaneMode(void);
 void accessibilitySetVirtualCaneMode(s32 mode);
 void accessibilityGetVirtualCaneTuning(f32 *reach, f32 *fulldistance,
@@ -30,5 +31,6 @@ f32 accessibilityGetVirtualCaneVolume(void);
 void accessibilityGetEnemyTuning(f32 *fulldistance, f32 *fadedistance,
 		f32 *silentdistance, f32 *volume);
 f32 accessibilityGetEnemyFrequency(void);
+void accessibilityGetMarkerTuning(f32 *range, f32 *volume);
 
 #endif

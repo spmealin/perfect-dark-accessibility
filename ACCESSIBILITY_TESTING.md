@@ -378,6 +378,50 @@ Exercise simultaneous door/interactable beacons, hostile combat slots, fine aim,
 
 After engineering checks, have a blind tester distinguish a flat wall, angled wall, opening, and intermittent obstacle pattern, then keep Fast enabled while moving in a combat-like situation. Record whether geometry is understandable, responsive, masked, overwhelming, or misleading. This slice is not accessibility-accepted until that task evidence exists, and it does not complete Milestone 11 route guidance.
 
+#### Player-authored audible markers
+
+Confirm the session-start record contains `audible_markers=1`,
+`marker_range=1200`, `marker_volume=1`, `marker_line_of_sight=1`,
+`marker_keys=F9,F10,F11,F12`, and `marker_voices=4`. Place each slot in a
+different known location and verify F9 through F12 produce one through four
+800 Hz identity chirps over the opposed 300–600 Hz base sweeps. Press an
+occupied key elsewhere to move it; Shift plus the key must play that slot's
+centered identity followed by 400 Hz and permanently silence the old
+location. Holding, Alt, Control, and removing an empty slot must not create a
+marker.
+
+For every slot, approach from left, right, front, and rear and compare pan and
+distance gain. Put the marker outside the viewport with a clear path: it must
+remain audible. Then interpose a wall or closed door: it must become silent on
+the next logical update. Open the door or round the corner without toggling or
+replacing the marker and confirm immediate resumption. Test another floor,
+moving doors, and rapid obstruction boundaries for false clear rays or audio
+chatter. Correlate `marker/command`, `line_of_sight`, `observer_change`,
+`scope`, `summary`, and `reset` records with exact observer/marker positions,
+rooms, range, and state.
+
+Place all four markers inside range and line of sight. All four bases must
+remain spatially present, while the 35 ms identity chirps have countable 75 ms
+gaps, patterns never overlap, and pattern starts remain at least 500 ms apart.
+Repeat with the fast cane, enemies, targeting, scanners,
+hazards, music, effects, and speech. Record masking, clipping, front/rear
+confusion, and preferred range/volume.
+
+While controlling a CamSpy, place and remove a marker and verify position,
+range, pan, and line-of-sight rays originate at the CamSpy camera. Switch back
+to Joanna and confirm the same stored markers immediately re-evaluate from her
+camera. Menus, pause, computers, cutscenes, and death must mute but preserve
+slots; stage restart/exit, feature disable, and shutdown must clear them.
+
+Run at least 20 minutes with four active markers and repeated obstruction,
+menu, CamSpy, death, and stage transitions. Compare frame and audio behavior
+with zero and four markers. Because the implementation adds at most four
+portal-aware collision rays per logical tick, investigate sustained frame
+regression, any return of audio/video choppiness, growing memory/log rate, or
+stuck voices before acceptance. A blind tester must independently use a
+marker to recognize a revisited junction and return toward it before this slice
+is described as accessibility-accepted.
+
 Publish a route card with start, goal, nodes/landmarks, door/elevator state, allowed assistance, deviation definition, recovery condition, and completion condition. Record wrong turns, cue count, speech load, time to recover, motion discomfort, and whether the tester understood why each cue occurred.
 
 ## Independent blind-user sessions

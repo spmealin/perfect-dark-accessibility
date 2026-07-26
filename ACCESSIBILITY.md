@@ -4,7 +4,7 @@
 
 This work aims to make the Perfect Dark PC port meaningfully playable by blind and low-vision players, starting with nonvisual access to menus and essential game state and progressing through small, testable gameplay slices.
 
-The current branch contains the accessibility coordinator/logger, Tolk/NVDA speech backend, menu-agnostic focus narration, non-subtitle HUD-message speech, single-player interaction/door/pickup beacons, non-hostile-character beacons, damaging-laser hazard cues, firing-range, hostile-character/autogun, and initial device-target feedback, weapon-function state cues, a seven-direction virtual-cane prototype, a nonvisual R-Tracker interface, and on-screen IR/X-Ray Scanner object audio. All implemented feature backends default to enabled for blind-user acceptance testing; the cane defaults to Slow mode. Menu narration has passed project-owner blind-user acceptance, while the newer gameplay slices retain the narrower evidence and pending tests documented below and in `ACCESSIBILITY_TESTING.md`. Broader navigation/route guidance, other non-character combat categories, and full-game accessibility are not implemented.
+The current branch contains the accessibility coordinator/logger, Tolk/NVDA speech backend, menu-agnostic focus narration, non-subtitle HUD-message speech, single-player interaction/door/pickup beacons, non-hostile-character beacons, damaging-laser hazard cues, firing-range, hostile-character/autogun, and initial device-target feedback, weapon-function state cues, a seven-direction virtual-cane prototype, four player-authored audible landmarks, a nonvisual R-Tracker interface, and on-screen IR/X-Ray Scanner object audio. All implemented feature backends default to enabled for blind-user acceptance testing; the cane defaults to Slow mode. Menu narration has passed project-owner blind-user acceptance, while the newer gameplay slices retain the narrower evidence and pending tests documented below and in `ACCESSIBILITY_TESTING.md`. Automatic route and goal guidance, other non-character combat categories, and full-game accessibility are not implemented.
 
 The firing-range weapon list announces the same completed bronze, silver, and gold proficiency stars rendered beside each weapon. It reads only the filled stars represented by the saved score and does not infer incomplete progress or expose state absent from the visual row.
 
@@ -157,15 +157,50 @@ EnemyFadeDistance=3500.000000
 EnemyMaximumDistance=4000.000000
 EnemyVolume=0.250000
 EnemyFrequency=900.000000
+AudibleMarkers=1
+MarkerRange=1200.000000
+MarkerVolume=1.000000
 ```
 
 Distances are world units. The effective full/fade/maximum values are normalized into nondecreasing order; the cane maximum-audible distance is also raised to at least its reach. Cane reach is bounded to 100–5,000, cane attenuation values to 0–10,000, cane and enemy volume to 0–0.4, enemy distances to 0–20,000, and enemy frequency to 100–4,000 Hz. Non-finite values fall back to the documented defaults. The effective startup values are recorded in the accessibility session log.
 
-Cane frequencies are bounded to 20–4,000 Hz. If the configured near frequency is lower than the far frequency, the effective endpoints are exchanged so closer obstacles remain higher pitched. Terrain reach is bounded to 50–2,000 units and its height threshold to 1–100 units.
+Cane frequencies are bounded to 20–4,000 Hz. If the configured near frequency is lower than the far frequency, the effective endpoints are exchanged so closer obstacles remain higher pitched. Terrain reach is bounded to 50–2,000 units and its height threshold to 1–100 units. Marker range is bounded to 100–10,000 world units and its linear master multiplier to 0–4.
 
 The samples use a shared active-observer pose. Ordinarily that is Joanna's movement cylinder; while the game is actually rendering the CamSpy camera, it is the CamSpy's prop, rooms, 26-unit collision radius, movement-height bounds, position, and look vector. A perspective change cancels the old partial sweep and starts a fresh one from the new observer so no remaining angle is reported from the prior body.
 
 One allocation-free aggregate `cane/sweep` record captures all seven scheduled results, live pose/direction, player bbox, requested endpoint, collision result, obstacle/geometry metadata, raw and audible position, distance, start/end frequency, terrain direction/height/distance/room/flags/query count, every floor probe's position/resolved-room list/floor room/height/delta/flags/rejection reason, distance attenuation, master and effective volume, pan, lateness, and diagnostic query time. With `ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS=ON`, one-second performance records also expose query totals/timing, missed work, requested/active cane masks, tone starts, stops, and mixer counters. Fast mode adds at most 28 bounded floor queries per one-second sweep; long-session profiling must confirm that this remains within the existing cane timing thresholds. Engineering build evidence exists; collision-point interpretation, terrain usefulness, masking, and long-session stability still require runtime and blind-user acceptance.
+
+### Player-authored audible markers
+
+`Accessibility.AudibleMarkers=1` enables four temporary landmark slots for
+single-player missions and one-local-player Combat Simulator sessions. F9
+through F12 place slots one through four at the active camera position.
+Pressing an occupied slot key moves it; Shift plus the key removes it. Alt- and
+Control-modified shortcuts are ignored. The slots are deliberately not saved
+to a profile and clear on stage exit or restart.
+
+An audible marker combines two continuous opposed sweeps, 300 to 600 Hz and
+600 to 300 Hz over two seconds, with an 800 Hz identity pattern every two
+seconds. Slots one through four use one through four chirps. The four bases
+have dedicated preallocated voices, while a shared scheduler staggers identity
+patterns by at least 500 ms. Identity chirps retain a short 35 ms tone but now
+use a 75 ms gap so slots three and four are easier to count. Removal repeats
+the slot identity at center and adds a 400 Hz deletion chirp.
+
+Markers sound only within the configured range and when the engine reports an
+unobstructed ray from the active observer camera to the stored point. The ray
+tests background walls and doors using the normal sight/shoot blocking flags.
+A marker behind a wall or closed door is silent, but it may sound behind the
+player or outside the viewport when the direct path is clear. Placement,
+spatialization, range, and line of sight switch to the CamSpy while that
+perspective is active and return to Joanna seamlessly afterward.
+
+Menus, pause, dialogs, cutscenes, death, unsupported multiplayer, stage
+teardown, feature disable, and shutdown silence marker voices. Temporary
+presentation states preserve marker locations. This engineering
+implementation builds successfully but still requires runtime and blind-user
+acceptance for sound identity, masking, line-of-sight transitions, preferred
+range, CamSpy behavior, and long-session performance.
 
 ### View orientation recovery
 

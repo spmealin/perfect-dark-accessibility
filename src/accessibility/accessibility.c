@@ -11,6 +11,7 @@
 #include "accessibility/accessibility_cane.h"
 #include "accessibility/accessibility_hazard.h"
 #include "accessibility/accessibility_log.h"
+#include "accessibility/accessibility_marker.h"
 #include "accessibility/accessibility_menu.h"
 #include "accessibility/accessibility_speech.h"
 #include "accessibility/accessibility_targeting.h"
@@ -30,6 +31,7 @@ static s32 g_AccessibilityRTrackerAudioEnabledConfig = 1;
 static s32 g_AccessibilityTargetingFeedbackEnabledConfig = 1;
 static s32 g_AccessibilityWeaponFunctionCuesEnabledConfig = 1;
 static s32 g_AccessibilityXrayScannerAudioEnabledConfig = 1;
+static s32 g_AccessibilityAudibleMarkersEnabledConfig = 1;
 static s32 g_AccessibilityVirtualCaneModeConfig = 1;
 static f32 g_AccessibilityVirtualCaneReachConfig = 900.0f;
 static f32 g_AccessibilityVirtualCaneFullVolumeDistanceConfig = 112.5f;
@@ -45,6 +47,8 @@ static f32 g_AccessibilityEnemyFadeDistanceConfig = 3500.0f;
 static f32 g_AccessibilityEnemyMaximumDistanceConfig = 4000.0f;
 static f32 g_AccessibilityEnemyVolumeConfig = 0.25f;
 static f32 g_AccessibilityEnemyFrequencyConfig = 900.0f;
+static f32 g_AccessibilityMarkerRangeConfig = 1200.0f;
+static f32 g_AccessibilityMarkerVolumeConfig = 1.0f;
 static s32 g_AccessibilityInitialized = 0;
 static s32 g_AccessibilityEnabled = 0;
 static s32 g_AccessibilityShutdownComplete = 0;
@@ -200,6 +204,20 @@ f32 accessibilityGetEnemyFrequency(void)
 			900.0f, 100.0f, 4000.0f);
 }
 
+void accessibilityGetMarkerTuning(f32 *range, f32 *volume)
+{
+	if (range) {
+		*range = accessibilityValidatedFloat(
+				g_AccessibilityMarkerRangeConfig,
+				1200.0f, 100.0f, 10000.0f);
+	}
+	if (volume) {
+		*volume = accessibilityValidatedFloat(
+				g_AccessibilityMarkerVolumeConfig,
+				1.0f, 0.0f, 4.0f);
+	}
+}
+
 void accessibilityInit(void)
 {
 	f32 caneReach;
@@ -216,6 +234,8 @@ void accessibilityInit(void)
 	f32 enemyMaximum;
 	f32 enemyVolume;
 	f32 enemyFrequency;
+	f32 markerRange;
+	f32 markerVolume;
 
 	if (g_AccessibilityInitialized) {
 		return;
@@ -227,6 +247,7 @@ void accessibilityInit(void)
 	accessibilityBeaconReset("init");
 	accessibilityCaneReset("init");
 	accessibilityHazardReset("init");
+	accessibilityMarkerReset("init");
 	accessibilityTargetingReset("init");
 	accessibilityTrackerReset("init");
 	accessibilityWeaponFunctionReset("init");
@@ -252,13 +273,15 @@ void accessibilityInit(void)
 	accessibilityGetEnemyTuning(&enemyFull, &enemyFade,
 			&enemyMaximum, &enemyVolume);
 	enemyFrequency = accessibilityGetEnemyFrequency();
+	accessibilityGetMarkerTuning(&markerRange, &markerVolume);
 
-	sysLogPrintf(LOG_NOTE, "accessibility: enabled (logging %s, speech %s, HUD messages %s, environmental hazards %s, interactable beacons %s, IR Scanner audio %s, non-hostile beacons %s, R-Tracker audio %s, targeting feedback %s, weapon function cues %s, X-Ray Scanner audio %s, virtual cane mode %d, cane reach %.1f, cane pitch %.1f-%.1f Hz, cane volume %.3f, terrain reach %.1f, enemy maximum %.1f, enemy frequency %.1f Hz, enemy volume %.3f)",
+	sysLogPrintf(LOG_NOTE, "accessibility: enabled (logging %s, speech %s, HUD messages %s, environmental hazards %s, interactable beacons %s, audible markers %s, IR Scanner audio %s, non-hostile beacons %s, R-Tracker audio %s, targeting feedback %s, weapon function cues %s, X-Ray Scanner audio %s, virtual cane mode %d, cane reach %.1f, cane pitch %.1f-%.1f Hz, cane volume %.3f, terrain reach %.1f, enemy maximum %.1f, enemy frequency %.1f Hz, enemy volume %.3f, marker range %.1f, marker volume %.3f)",
 			g_AccessibilityLoggingEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilitySpeechEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityHudMessagesEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityEnvironmentalHazardsEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityInteractableBeaconsEnabledConfig ? "enabled" : "disabled",
+			g_AccessibilityAudibleMarkersEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityIrScannerAudioEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityNonHostileBeaconsEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityRTrackerAudioEnabledConfig ? "enabled" : "disabled",
@@ -268,11 +291,12 @@ void accessibilityInit(void)
 			g_AccessibilityVirtualCaneModeConfig, caneReach,
 			caneFarFrequency, caneNearFrequency,
 			caneVolume, caneTerrainReach,
-			enemyMaximum, enemyFrequency, enemyVolume);
+			enemyMaximum, enemyFrequency, enemyVolume,
+			markerRange, markerVolume);
 
 	if (g_AccessibilityLoggingEnabledConfig && accessibilityLogInit()) {
 		accessibilityLogEvent("lifecycle", "session_start",
-				"enabled=%d logging=%d speech=%d menu_narration=%d hud_messages=%d environmental_hazards=%d interactable_beacons=%d ir_scanner_audio=%d non_hostile_beacons=%d rtracker_audio=%d targeting_feedback=%d weapon_function_cues=%d xray_scanner_audio=%d virtual_cane_mode=%d cane_reach=%.3f cane_full_distance=%.3f cane_fade_distance=%.3f cane_maximum_audible_distance=%.3f cane_near_frequency_hz=%.3f cane_far_frequency_hz=%.3f cane_volume=%.4f cane_terrain_reach=%.3f cane_terrain_height_threshold=%.3f enemy_full_distance=%.3f enemy_fade_distance=%.3f enemy_maximum_distance=%.3f enemy_frequency_hz=%.3f enemy_volume=%.4f performance_diagnostics=%d performance_interval_us=%d speech_test=%d path=%s",
+				"enabled=%d logging=%d speech=%d menu_narration=%d hud_messages=%d environmental_hazards=%d interactable_beacons=%d audible_markers=%d ir_scanner_audio=%d non_hostile_beacons=%d rtracker_audio=%d targeting_feedback=%d weapon_function_cues=%d xray_scanner_audio=%d virtual_cane_mode=%d cane_reach=%.3f cane_full_distance=%.3f cane_fade_distance=%.3f cane_maximum_audible_distance=%.3f cane_near_frequency_hz=%.3f cane_far_frequency_hz=%.3f cane_volume=%.4f cane_terrain_reach=%.3f cane_terrain_height_threshold=%.3f enemy_full_distance=%.3f enemy_fade_distance=%.3f enemy_maximum_distance=%.3f enemy_frequency_hz=%.3f enemy_volume=%.4f marker_range=%.3f marker_volume=%.4f marker_line_of_sight=1 marker_keys=F9,F10,F11,F12 marker_voices=4 performance_diagnostics=%d performance_interval_us=%d speech_test=%d path=%s",
 				g_AccessibilityEnabledConfig,
 				g_AccessibilityLoggingEnabledConfig,
 				g_AccessibilitySpeechEnabledConfig,
@@ -280,6 +304,7 @@ void accessibilityInit(void)
 				g_AccessibilityHudMessagesEnabledConfig,
 				g_AccessibilityEnvironmentalHazardsEnabledConfig,
 				g_AccessibilityInteractableBeaconsEnabledConfig,
+				g_AccessibilityAudibleMarkersEnabledConfig,
 				g_AccessibilityIrScannerAudioEnabledConfig,
 				g_AccessibilityNonHostileBeaconsEnabledConfig,
 				g_AccessibilityRTrackerAudioEnabledConfig,
@@ -291,6 +316,7 @@ void accessibilityInit(void)
 				caneNearFrequency, caneFarFrequency,
 				caneVolume, caneTerrainReach, caneTerrainHeightThreshold,
 				enemyFull, enemyFade, enemyMaximum, enemyFrequency, enemyVolume,
+				markerRange, markerVolume,
 				ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS,
 				ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS ? 1000000 : 0,
 				sysArgCheck("--accessibility-speech-test"),
@@ -326,6 +352,7 @@ void accessibilityShutdown(void)
 	accessibilityBeaconReset("shutdown");
 	accessibilityCaneReset("shutdown");
 	accessibilityHazardReset("shutdown");
+	accessibilityMarkerReset("shutdown");
 	accessibilityTargetingReset("shutdown");
 	accessibilityTrackerReset("shutdown");
 	accessibilityWeaponFunctionReset("shutdown");
@@ -409,6 +436,12 @@ s32 accessibilityIsXrayScannerAudioEnabled(void)
 			&& g_AccessibilityXrayScannerAudioEnabledConfig;
 }
 
+s32 accessibilityIsAudibleMarkersEnabled(void)
+{
+	return g_AccessibilityEnabled
+			&& g_AccessibilityAudibleMarkersEnabledConfig;
+}
+
 s32 accessibilityGetVirtualCaneMode(void)
 {
 	if (!g_AccessibilityEnabled) {
@@ -444,6 +477,7 @@ PD_CONSTRUCTOR static void accessibilityConfigInit(void)
 	configRegisterInt("Accessibility.TargetingFeedback", &g_AccessibilityTargetingFeedbackEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.WeaponFunctionCues", &g_AccessibilityWeaponFunctionCuesEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.XRayScannerAudio", &g_AccessibilityXrayScannerAudioEnabledConfig, 0, 1);
+	configRegisterInt("Accessibility.AudibleMarkers", &g_AccessibilityAudibleMarkersEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.VirtualCaneMode", &g_AccessibilityVirtualCaneModeConfig, 0, 2);
 	configRegisterFloat("Accessibility.VirtualCaneReach",
 			&g_AccessibilityVirtualCaneReachConfig, 100.0f, 5000.0f);
@@ -475,4 +509,8 @@ PD_CONSTRUCTOR static void accessibilityConfigInit(void)
 			&g_AccessibilityEnemyVolumeConfig, 0.0f, 0.4f);
 	configRegisterFloat("Accessibility.EnemyFrequency",
 			&g_AccessibilityEnemyFrequencyConfig, 100.0f, 4000.0f);
+	configRegisterFloat("Accessibility.MarkerRange",
+			&g_AccessibilityMarkerRangeConfig, 100.0f, 10000.0f);
+	configRegisterFloat("Accessibility.MarkerVolume",
+			&g_AccessibilityMarkerVolumeConfig, 0.0f, 4.0f);
 }
