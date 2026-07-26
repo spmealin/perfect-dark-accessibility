@@ -36,6 +36,8 @@ set(ROMID "ntsc-final" CACHE STRING "Which ROM to build an executable for: ntsc-
 option(FORCE_CROSSCOMPILE "Force cross compiling" NO)
 option(ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
   "Enable temporary high-frequency accessibility performance diagnostics" OFF)
+option(PD_PACKAGE_ACCESSIBILITY
+  "Enable accessibility in the generated Windows redistributable configuration" OFF)
 
 # Determine target arch
 
@@ -385,6 +387,91 @@ target_link_libraries(pd ${LIBS})
 set_target_properties(pd PROPERTIES OUTPUT_NAME "${BIN_NAME}")
 if(WIN32)
   set_target_properties(pd PROPERTIES WIN32_EXECUTABLE TRUE)
+endif()
+
+# Keep MinGW-built Windows developer output self-contained so the executable
+# can be launched from Explorer without inheriting the MSYS2 PATH.
+if(WIN32 AND MINGW)
+  get_filename_component(MINGW_RUNTIME_DIRECTORY
+    "${CMAKE_C_COMPILER}" DIRECTORY)
+
+  if(TARGET_IS_64BIT)
+    set(MINGW_GCC_RUNTIME_NAME "libgcc_s_seh-1.dll")
+  else()
+    set(MINGW_GCC_RUNTIME_NAME "libgcc_s_dw2-1.dll")
+  endif()
+
+  set(MINGW_RUNTIME_NAMES
+    "libwinpthread-1.dll"
+    "${MINGW_GCC_RUNTIME_NAME}"
+    "SDL2.dll"
+    "zlib1.dll"
+  )
+  set(MINGW_RUNTIME_FILES)
+  set(MINGW_RUNTIME_COPY_COMMANDS)
+
+  foreach(RUNTIME_NAME IN LISTS MINGW_RUNTIME_NAMES)
+    set(RUNTIME_SOURCE "${MINGW_RUNTIME_DIRECTORY}/${RUNTIME_NAME}")
+
+    if(NOT EXISTS "${RUNTIME_SOURCE}")
+      message(FATAL_ERROR
+        "Required MinGW runtime DLL not found: ${RUNTIME_SOURCE}. "
+        "Install the matching MSYS2 MinGW toolchain, SDL2, and zlib packages.")
+    endif()
+
+    list(APPEND MINGW_RUNTIME_FILES "${RUNTIME_SOURCE}")
+    list(APPEND MINGW_RUNTIME_COPY_COMMANDS
+      COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+        "${RUNTIME_SOURCE}"
+        "${CMAKE_BINARY_DIR}/${RUNTIME_NAME}"
+    )
+  endforeach()
+
+  add_custom_target(mingw_runtime_files ALL
+    ${MINGW_RUNTIME_COPY_COMMANDS}
+    DEPENDS ${MINGW_RUNTIME_FILES}
+    VERBATIM
+  )
+  add_dependencies(pd mingw_runtime_files)
+
+  if(PD_PACKAGE_ACCESSIBILITY)
+    set(PD_PACKAGE_ACCESSIBILITY_VALUE 1)
+  else()
+    set(PD_PACKAGE_ACCESSIBILITY_VALUE 0)
+  endif()
+
+  set(PD_PACKAGE_CONFIG_DIRECTORY "${CMAKE_BINARY_DIR}/package")
+  file(MAKE_DIRECTORY "${PD_PACKAGE_CONFIG_DIRECTORY}")
+  configure_file(
+    "${CMAKE_SOURCE_DIR}/dist/windows/pd-package.ini.in"
+    "${PD_PACKAGE_CONFIG_DIRECTORY}/pd.ini"
+    @ONLY
+  )
+
+  add_custom_target(pd_zip
+    COMMAND "${CMAKE_COMMAND}"
+      "-DPD_PACKAGE_BINARY=${CMAKE_BINARY_DIR}/${BIN_NAME}.exe"
+      "-DPD_PACKAGE_RUNTIME_DIRECTORY=${CMAKE_BINARY_DIR}"
+      "-DPD_PACKAGE_GCC_RUNTIME_NAME=${MINGW_GCC_RUNTIME_NAME}"
+      "-DPD_PACKAGE_CONTROLLER_NAME=${TOLK_CONTROLLER_NAME}"
+      "-DPD_PACKAGE_CONFIG=${PD_PACKAGE_CONFIG_DIRECTORY}/pd.ini"
+      "-DPD_PACKAGE_ROM_INSTRUCTIONS=${CMAKE_SOURCE_DIR}/dist/windows/put_your_rom_here.txt"
+      "-DPD_PACKAGE_PROJECT_LICENSE=${CMAKE_SOURCE_DIR}/LICENSE"
+      "-DPD_PACKAGE_TOLK_LICENSE=${TOLK_ROOT}/LICENSE.txt"
+      "-DPD_PACKAGE_NVDA_LICENSE=${TOLK_ROOT}/LICENSE-NVDA.txt"
+      "-DPD_PACKAGE_STAGING=${CMAKE_BINARY_DIR}/dist/staging"
+      "-DPD_PACKAGE_ARCHIVE=${CMAKE_BINARY_DIR}/dist/pd.zip"
+      -P "${CMAKE_SOURCE_DIR}/cmake/PackageWindows.cmake"
+    DEPENDS
+      pd
+      tolk_runtime_files
+      mingw_runtime_files
+      "${CMAKE_SOURCE_DIR}/cmake/PackageWindows.cmake"
+      "${CMAKE_SOURCE_DIR}/dist/windows/pd-package.ini.in"
+      "${CMAKE_SOURCE_DIR}/dist/windows/put_your_rom_here.txt"
+      "${CMAKE_SOURCE_DIR}/LICENSE"
+    VERBATIM
+  )
 endif()
 
 # Additional commands for specific platforms.

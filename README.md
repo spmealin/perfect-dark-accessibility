@@ -122,8 +122,23 @@ Controls can be rebound in `pd.ini`. Default control scheme is as follows:
 5. Run `cmake -G"Unix Makefiles" -Bbuild .`.
    * Add ` -DROMID=pal-final` or ` -DROMID=jpn-final` at the end of the command if you want to build a PAL or JPN executable respectively.\
 6. Run `cmake --build build -j4 -- -O`.
-7. The resulting executable will be at `build/pd.x86_64.exe` (or at `build/pd.i686.exe` if building for i686).
+7. The resulting executable will be at `build/pd.x86_64.exe` (or at `build/pd.i686.exe` if building for i686). MinGW builds also copy the required GCC, pthread, SDL2, and zlib runtime DLLs beside the executable, so it can be launched directly from Windows Explorer.
 8. If you don't know where you downloaded the source to, you can run `explorer .` to open the current directory.
+
+To configure, build, and create a clean Windows ZIP in one command from
+PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\build_windows_dist.ps1
+```
+
+The archive is written to `build/dist/pd.zip`. It contains the executable,
+runtime and screen-reader DLLs, required license notices, a clean `pd.ini`, and
+a `data` directory with ROM placement instructions. Accessibility is disabled
+in the packaged configuration by default; pass `-EnableAccessibility` to enable
+it. The archive never contains a ROM, extracted ROM data, saves, logs, or the
+developer's existing configuration. Each recipient must add a legally obtained
+supported ROM to the packaged `data` directory.
 
 ### Linux
 

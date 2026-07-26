@@ -34,7 +34,24 @@ cmake -G"Unix Makefiles" -Bbuild .
 cmake --build build -j4 -- -O
 ```
 
-For the default configuration, the resulting executable is `build/pd.x86_64.exe`.
+For the default configuration, the resulting executable is
+`build/pd.x86_64.exe`. MinGW Windows builds copy `libwinpthread-1.dll`, the
+architecture-matching shared GCC runtime, `SDL2.dll`, and `zlib1.dll` from the
+active compiler's binary directory into `build/` with `copy_if_different`.
+Together with the existing Tolk/controller runtime target, this makes the
+developer output directly launchable from Windows Explorer without relying on
+the MinGW shell's `PATH`. Missing runtime inputs fail configuration with their
+resolved path rather than producing an incomplete output silently.
+
+The MinGW-only `pd_zip` target stages those runtime files, the executable,
+license notices, a newly generated package configuration, and a ROM-placement
+notice before creating `build/dist/pd.zip`. The PowerShell wrapper
+`tools/build_windows_dist.ps1` performs both configuration and this target
+through an initialized MinGW64 bash. `PD_PACKAGE_ACCESSIBILITY` defaults to
+`OFF`, producing a package with top-level accessibility, logging, and speech
+disabled; it does not change the developer's `build/pd.ini`. ROMs, extracted
+assets, saves, logs, diagnostics, and personal configuration are never package
+inputs.
 
 ## Confirmed semantic boundaries
 
@@ -369,7 +386,7 @@ This table records implemented and anticipated changes to established files so f
 
 | Established file | Proposed narrow hook or reason | Semantic payload | Why polling alone may be insufficient | Status |
 | --- | --- | --- | --- | --- |
-| `CMakeLists.txt` | Register core sources and select exactly one native/null speech backend | Build platform/configuration only | `src/accessibility` is outside the game glob and platform backends must not compile together | Implemented through the audible-marker slice |
+| `CMakeLists.txt` | Register core sources, select exactly one native/null speech backend, copy Windows runtimes, and define the clean Windows ZIP target | Build platform/configuration only | `src/accessibility` is outside the game glob; platform backends must not compile together; package staging must never admit ROM, save, log, or personal configuration paths | Implemented through the Windows redistributable target |
 | `port/src/main.c` | Initialize after `configInit`; shut down in `cleanup` | Lifecycle and logger availability | First UI may occur before a later tick; resources need ordered shutdown | Implemented in Milestone 2 with two calls |
 | `port/src/pdmain.c` | Call the compile-time-optional performance observer, call accessibility gameplay ticks immediately after `lvTick`, and reset owned audio before `lvStop` | Timing, input, stage/player context, safe main-thread collision queries, and teardown | Gameplay cues need settled semantic state, cane and marker collision work must remain on the main thread, and owned sounds must stop before stage memory is disabled | Beacon, virtual-cane, laser-hazard, audible-marker, and R-Tracker ticks run after `lvTick`; cane, marker, targeting, hazard, and R-Tracker stage-stop resets protect owned voices and stage identities |
 | `port/src/video.c`, `port/include/video.h`, and diagnostic-only boundaries in `port/fast3d/gfx_pc.cpp`, `gfx_sdl2.cpp`, `gfx_opengl.cpp`, and their headers | Under `ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS`, expose fixed per-frame timings and startup graphics metadata without changing rendering | SDL event/dimension time, framebuffer setup/resolve, display-list translation, limiter, swap, finish, window/GL identity | Aggregate main-loop cadence cannot distinguish game work from a blocked OpenGL present; the rare fault must be captured in its first reproduction | Compile-time optional; ordinary builds contain no timing path. Fast3D changes contain only timers/read-only getters and no accessibility policy or logging |

@@ -1,0 +1,7 @@
+Place a legally obtained supported Perfect Dark ROM in this directory.
+
+For the default NTSC final build, name it:
+pd.ntsc-final.z64
+
+ROM files and extracted copyrighted game assets are not distributed with this
+package. See README.md in the source repository for other supported regions.

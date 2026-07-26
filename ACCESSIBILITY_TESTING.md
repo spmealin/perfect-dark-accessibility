@@ -36,6 +36,17 @@ The default output is `build/pd.x86_64.exe`. Record:
 
 The project supports multiple ROM configurations, so region-sensitive changes should compile in the configurations documented by `README.md` or explicitly record what remains untested. Do not upload a ROM, generated asset tree, or built executable as ordinary test evidence.
 
+For a clean x86-64 Windows package, run
+`powershell -ExecutionPolicy Bypass -File tools\build_windows_dist.ps1`.
+Confirm `build/dist/pd.zip` contains only the executable, six DLLs including
+Tolk and the NVDA controller, project/Tolk/NVDA licenses, the generated `pd.ini`,
+and `data/put_your_rom_here.txt`. It must not contain a ROM, extracted asset,
+`eeprom.bin`, multiplayer setup, accessibility/general/crash log, diagnostic
+capture, or developer configuration. Extract to a temporary directory, point
+the executable at an external legally obtained ROM using `--basedir`, and
+confirm the default package session reports `enabled=0`. Repeat with
+`-EnableAccessibility` only when validating the accessible distribution.
+
 ## Runtime smoke procedure
 
 Use a legally obtained supported ROM placed as described by `README.md`. Do not include its location or fingerprint in reports.
@@ -44,7 +55,14 @@ For project-owner blind-user acceptance builds, every implemented accessibility 
 
 For a normal startup smoke test:
 
-Launch every built Perfect Dark executable from the MSYS2 MinGW64 environment, including smoke tests, scripted interaction tests, and debugging runs. Launching `build/pd.x86_64.exe` from PowerShell, Command Prompt, or another normal command line can fail with missing-DLL errors because the MinGW runtime search environment is absent.
+Configure and compile every Windows build from the MSYS2 MinGW64 environment.
+The build copies its four non-system MinGW dependencies beside the executable,
+so the resulting `build/pd.x86_64.exe` may then be launched from Windows
+Explorer, PowerShell, Command Prompt, or the MinGW64 shell. Before a direct
+Windows launch test, verify `libwinpthread-1.dll`, `libgcc_s_seh-1.dll`,
+`SDL2.dll`, and `zlib1.dll` are adjacent to the x86-64 executable. An i686 build
+uses `libgcc_s_dw2-1.dll` instead. Keep using an initialized MinGW64 shell for
+configure and build commands; copied runtime files do not provide build tools.
 
 1. Back up the relevant `pd.ini` and save data outside the repository if the test changes persistent settings.
 2. Record whether portable/save-directory behaviour or command-line flags differ from defaults.

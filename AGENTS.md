@@ -29,7 +29,7 @@ Treat statements marked **Confirmed** as repository observations. Treat **Propos
 
 Use normal workspace tools and the default shell for repository inspection, searches, file manipulation, documentation, Git operations, and other non-build work. Do not launch MinGW64 merely to read or edit files.
 
-Use the MSYS2 MinGW64 environment when configuring or building the game and whenever launching a built Perfect Dark executable. For interactive use, enter through `C:\msys64\mingw64.exe`. Noninteractive tooling may initialize the same environment with `MSYSTEM=MINGW64` and `CHERE_INVOKING=1`, then invoke `C:\msys64\usr\bin\bash.exe -lc`; the executable itself must still be started by that initialized shell. Never start `build/pd.x86_64.exe` directly from PowerShell, Command Prompt, or another normal command line, because the missing MinGW runtime search environment can produce missing-DLL errors. This runtime-launch rule applies to smoke tests, scripted tests, and debugging runs. The baseline Windows build is:
+Use the MSYS2 MinGW64 environment when configuring or building the game. For interactive use, enter through `C:\msys64\mingw64.exe`. Noninteractive tooling may initialize the same environment with `MSYSTEM=MINGW64` and `CHERE_INVOKING=1`, then invoke `C:\msys64\usr\bin\bash.exe -lc`. The Windows build copies its required MinGW, SDL2, and zlib runtime DLLs beside `build/pd.x86_64.exe`; after confirming those files are present, the executable may be launched directly from Windows Explorer, PowerShell, Command Prompt, or the MinGW64 shell. If the adjacent runtime files are missing, rebuild through MinGW64 rather than borrowing DLLs from an unrelated toolchain. The baseline Windows build is:
 
 ```sh
 cmake -G"Unix Makefiles" -Bbuild .
@@ -37,6 +37,13 @@ cmake --build build -j4 -- -O
 ```
 
 The executable is `build/pd.x86_64.exe` for the default `ntsc-final` configuration. Other supported ROM configurations and executable names are described in `README.md`.
+
+`powershell -ExecutionPolicy Bypass -File tools\build_windows_dist.ps1`
+configures and builds through MinGW64, then creates `build/dist/pd.zip`. The
+default package deliberately disables accessibility for vanilla comparison.
+Never add a ROM, extracted asset, save, log, diagnostic capture, or personal
+`pd.ini` to that archive; recipients supply their own legal ROM. Use
+`-EnableAccessibility` only when an accessible package is explicitly requested.
 
 Documentation-only changes do not require a rebuild unless they alter build inputs. Still check links, paths, symbols, the diff, and repository status.
 
