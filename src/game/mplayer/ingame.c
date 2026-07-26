@@ -1029,7 +1029,7 @@ struct menuitem g_MpEndscreenSavePlayerMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		MENUITEMFLAG_LESSLEFTPADDING,
+		MENUITEMFLAG_LESSLEFTPADDING | MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		L_MPWEAPONS_247, // "Save new player and statistics?"
 		0,
 		NULL,
