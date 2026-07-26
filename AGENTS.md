@@ -11,7 +11,7 @@ Before accessibility work, read:
 - `ACCESSIBILITY_ARCHITECTURE.md` for confirmed engine boundaries and proposed interfaces.
 - `ACCESSIBILITY_ROADMAP.md` for milestone order and acceptance criteria.
 - `ACCESSIBILITY_TESTING.md` for evidence and playtest requirements.
-- The matching `milestones/ACCESSIBILITY_MILESTONE_XX_PLAN.md`, when one exists, before implementing that milestone.
+- The matching `documentation/milestones/ACCESSIBILITY_MILESTONE_XX_PLAN.md`, when one exists, before implementing that milestone.
 
 Treat statements marked **Confirmed** as repository observations. Treat **Proposed** and **Question** as design work that still needs implementation or validation.
 

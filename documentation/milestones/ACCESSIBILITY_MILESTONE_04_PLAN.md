@@ -508,7 +508,7 @@ ACCESSIBILITY.md
 ACCESSIBILITY_ARCHITECTURE.md
 ACCESSIBILITY_ROADMAP.md
 ACCESSIBILITY_TESTING.md
-milestones/ACCESSIBILITY_MILESTONE_04_PLAN.md
+documentation/milestones/ACCESSIBILITY_MILESTONE_04_PLAN.md
 ```
 
 Do not modify Tolk or its controller DLL. Do not move native dependencies; Milestone 3 already copies them beside the executable.

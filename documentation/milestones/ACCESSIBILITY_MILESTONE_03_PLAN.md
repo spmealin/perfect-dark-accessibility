@@ -170,7 +170,7 @@ src/accessibility/accessibility.c
 ACCESSIBILITY_ARCHITECTURE.md
 ACCESSIBILITY_ROADMAP.md
 ACCESSIBILITY_TESTING.md
-milestones/ACCESSIBILITY_MILESTONE_03_PLAN.md
+documentation/milestones/ACCESSIBILITY_MILESTONE_03_PLAN.md
 ```
 
 Do not modify `port/src/main.c`: the coordinator's existing lifecycle calls are sufficient. Do not modify any file under `src/game`, `src/lib`, `port/src/input.c`, or `port/src/pdmain.c`.

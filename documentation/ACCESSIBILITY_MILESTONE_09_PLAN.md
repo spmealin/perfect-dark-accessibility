@@ -517,7 +517,7 @@ ACCESSIBILITY.md
 ACCESSIBILITY_ARCHITECTURE.md
 ACCESSIBILITY_ROADMAP.md
 ACCESSIBILITY_TESTING.md
-ACCESSIBILITY_MILESTONE_09_PLAN.md
+documentation/ACCESSIBILITY_MILESTONE_09_PLAN.md
 ```
 
 Do not modify `training.c`, `prop.c`, `propobj.c`, `sight.c`, `bondgun.c`, or `propsnd.c` unless tracing proves a missing pure semantic contract. Existing public functions and state are sufficient for the planned adapter. If one of these established files must change, add the smallest read-only helper, document why direct observation was unsafe, and update the hook ledger.
@@ -790,7 +790,7 @@ Known regressions/limitations:
 Git status and untracked runtime data check:
 ```
 
-Do not mark the whole roadmap milestone complete in this report. After the firing-range slice is accepted, move this plan into `milestones/` as the executed record only when the project owner asks to close or archive the slice.
+Do not mark the whole roadmap milestone complete in this report. After the firing-range slice is accepted, move this plan into `documentation/milestones/` as the executed record only when the project owner asks to close or archive the slice.
 
 ## Execution result — 2026-07-20
 

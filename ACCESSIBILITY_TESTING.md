@@ -75,7 +75,7 @@ For a reproduction, start `tools/accessibility/capture_graphics_diagnostics.ps1`
   -CollectorDirectory .\build\diagnostics\<capture>
 ```
 
-Confirm that a deliberate three-frame test stall in a developer-only harness retains records with negative `relative_to_trigger`, that the episode does not write detailed records until recovery, that normal 60 FPS play creates no false episode, and that a forced normal shutdown flushes an active episode. Compare an all-features-enabled run with `Accessibility.Enabled=0` and `LoggingEnabled=1`; diagnostic builds must retain graphics/performance logging in the disabled control while speech and accessibility gameplay features remain inactive. Follow the focused A/B decision table and fix criteria in `GRAPHICS_SLOWDOWN_INVESTIGATION_PLAN.md`.
+Confirm that a deliberate three-frame test stall in a developer-only harness retains records with negative `relative_to_trigger`, that the episode does not write detailed records until recovery, that normal 60 FPS play creates no false episode, and that a forced normal shutdown flushes an active episode. Compare an all-features-enabled run with `Accessibility.Enabled=0` and `LoggingEnabled=1`; diagnostic builds must retain graphics/performance logging in the disabled control while speech and accessibility gameplay features remain inactive. Follow the focused A/B decision table and fix criteria in `documentation/GRAPHICS_SLOWDOWN_INVESTIGATION_PLAN.md`.
 
 A JSON Lines or equivalently parseable record could look like this, with the schema finalized in implementation:
 
@@ -469,7 +469,7 @@ Collect the tracked scanner and confirm the voice disappears. Deactivate the dev
 
 In Skedar Ruins, verify all three tracked pillars sound at once and disappear individually when their native markers clear. On Attack Ship, verify simultaneous yellow objects and red tracked characters, including removal of a dead or cloaked tracked character. With the native R-Tracker cheat enabled, verify blue items use the distinct 1000 Hz category and coexist with the other categories. The audited maximum is eight markers; logs must report any overflow beyond the ten fixed slots.
 
-Correlate perceived output with `rtracker/announcement`, `scope`, `slot_assign`, `candidate`, `slot_release`, `overflow`, and `scan_summary` events. With `ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS=ON`, also inspect `tracker_enabled_slots`, R-Tracker scan timing, frame gaps, memory deltas, and mixer activity over repeated sessions. Investigate scans above the specification's thresholds or any sustained growth/choppiness. The complete semantic and acoustic contract is `ACCESSIBILITY_RTRACKER_AUDIO_SPEC.md`.
+Correlate perceived output with `rtracker/announcement`, `scope`, `slot_assign`, `candidate`, `slot_release`, `overflow`, and `scan_summary` events. With `ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS=ON`, also inspect `tracker_enabled_slots`, R-Tracker scan timing, frame gaps, memory deltas, and mixer activity over repeated sessions. Investigate scans above the specification's thresholds or any sustained growth/choppiness. The complete semantic and acoustic contract is `documentation/ACCESSIBILITY_RTRACKER_AUDIO_SPEC.md`.
 
 ### IR Scanner highlighted-object acceptance
 

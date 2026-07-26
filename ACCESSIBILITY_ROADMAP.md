@@ -15,7 +15,7 @@ This roadmap orders work by user task and evidence. Milestones are not promises 
 ## Milestone 2 — Minimal initialization and playtest logging proof
 
 - **Status:** Implementation and Windows runtime verification complete. Disabled and enabled normal-exit runs passed in the real executable; lifecycle edge cases passed in a focused harness.
-- **Detailed plan:** `milestones/ACCESSIBILITY_MILESTONE_02_PLAN.md` is the authoritative implementation handoff.
+- **Detailed plan:** `documentation/milestones/ACCESSIBILITY_MILESTONE_02_PLAN.md` is the authoritative implementation handoff.
 - **Goal:** Add a disabled-by-default accessibility service with configuration, safe lifecycle, and opt-in structured session logging.
 - **Later default change:** These controls now default on during blind-user acceptance testing and remain configurable.
 - **User-visible result:** With both settings explicitly enabled, startup and shutdown produce a comprehensive local diagnostic log; normal play is otherwise unchanged.
@@ -28,7 +28,7 @@ This roadmap orders work by user task and evidence. Milestones are not promises 
 ## Milestone 3 — Windows speech backend proof
 
 - **Status:** Implementation and machine-verifiable Windows/NVDA runtime proof complete. Tolk loaded dynamically, NVDA 2026.1 accepted fixed and multilingual output, cancellation succeeded, and dependency failures remained nonfatal. Audible and braille perception were not independently observable by the implementation agent.
-- **Detailed plan:** `milestones/ACCESSIBILITY_MILESTONE_03_PLAN.md` is the executed implementation record. It selects pinned Tolk commit `e5149f0cb6ef9b941673017e0e7b7c409e485fbe` with NVDA as the validated path.
+- **Detailed plan:** `documentation/milestones/ACCESSIBILITY_MILESTONE_03_PLAN.md` is the executed implementation record. It selects pinned Tolk commit `e5149f0cb6ef9b941673017e0e7b7c409e485fbe` with NVDA as the validated path.
 - **Goal:** Select and validate one replaceable Windows speech path behind the backend interface.
 - **User-visible result:** An explicit test action speaks a fixed, non-game string and can be interrupted; absent/unavailable speech does not block startup.
 - **Systems:** Core backend boundary, dynamically loaded Tolk Windows backend, null backend, UTF-8 conversion, configuration, and development-output packaging.
@@ -40,7 +40,7 @@ This roadmap orders work by user task and evidence. Milestones are not promises 
 ## Milestone 4 — Menu-agnostic focus narration
 
 - **Status:** Complete. The MinGW64 build passed, accessibility/logging/speech/menu narration default on for testing, and the project owner completed blind-user acceptance testing and accepted the spoken-menu behavior, including context-only menu titles and percentage-based sliders.
-- **Detailed plan:** `milestones/ACCESSIBILITY_MILESTONE_04_PLAN.md` is the authoritative handoff.
+- **Detailed plan:** `documentation/milestones/ACCESSIBILITY_MILESTONE_04_PLAN.md` is the authoritative handoff.
 - **Goal:** Let a blind user understand and operate the startup/New Agent/settings path while establishing shared semantics for every focusable control family used by the menu engine.
 - **User-visible result:** Final dialog context and focused control semantics are spoken; values and internal list/grid focus update predictably; repeat and cancel work; rapid navigation replaces stale output.
 - **Systems:** One post-`menuProcessInput` observer, runtime item-data query, type-based semantic adapter, generic custom-render semantic operation, replaceable menu announcement dispatcher, and provisional PC repeat/cancel commands.
@@ -52,7 +52,7 @@ This roadmap orders work by user task and evidence. Milestones are not promises 
 ## Milestone 5 — Interactable beacons
 
 - **Status:** The original existing-sample implementation, automatic refresh, and multi-target scheduling passed blind-user acceptance. The procedural-chirp cue revision builds successfully and is pending runtime acceptance.
-- **Detailed plan:** `milestones/ACCESSIBILITY_MILESTONE_05_PLAN.md` is the authoritative implementation handoff.
+- **Detailed plan:** `documentation/milestones/ACCESSIBILITY_MILESTONE_05_PLAN.md` is the authoritative implementation handoff.
 - **Goal:** Let a blind player deliberately select and spatially locate useful classes of nearby props: interactable objects, collectible items, and doors.
 - **User-visible result:** F5 toggles one positioned 880 Hz chirp on eligible interactable objects, F6 independently toggles one 440 Hz chirp on eligible doors, and F8 independently toggles three quick positioned 880 Hz chirps on collectible items. Any combination can run; all patterns are staggered and require no new audio asset.
 - **Systems:** Accessibility gameplay coordinator, read-only prop eligibility, active-prop traversal, door sibling canonicalization, player-relative ordering, procedural stereo audio, provisional PC actions, configuration, and structured logging.
@@ -98,7 +98,7 @@ Implementation status: the active weapon/device radial now announces localized h
 ## Milestone 9 — Targeting feedback
 
 - **Status:** Firing-range slice implemented; fine-aim tone runtime and blind-user acceptance pending. The branch contains a generic fixed-capacity targeting core, a Carrington Institute firing-range source adapter, serialized positioned visible-target pulses, and a centered continuous pitch lane gated by current shootability. The tone reuses the existing non-random aim-query collision point and maps target-center proximity to 660–1320 Hz; it does not include weapon spread or cast another ray. Back-facing range targets retain presence feedback but do not produce positive alignment feedback. This does not complete broader character/combat, relationship, high-value-zone policy, speech/repeat, special-sight, or multiplayer coverage.
-- **Detailed plan and execution record:** `ACCESSIBILITY_MILESTONE_09_PLAN.md` remains active until the firing-range proof is runtime-tested and accepted.
+- **Detailed plan and execution record:** `documentation/ACCESSIBILITY_MILESTONE_09_PLAN.md` remains active until the firing-range proof is runtime-tested and accepted.
 - **Goal:** Tell a player when a valid aimed target changes and provide truthful relationship/distance cues.
 - **User-visible result:** Optional speech/earcons identify acquired/lost targets and a repeat command describes the current known target.
 - **Systems:** `lv.c` aimed-prop selection, `sightTick`, prop/character/object categories, friendliness rules, position/orientation.
@@ -123,7 +123,7 @@ Engineering extension: an active CamSpy now contributes incomplete engine hologr
 ### Prioritized R-Tracker nonvisual-interface slice
 
 - **Status:** Detailed specification and engineering implementation added; runtime and blind-user acceptance are pending.
-- **Detailed specification:** `ACCESSIBILITY_RTRACKER_AUDIO_SPEC.md` defines the authoritative semantic, acoustic, lifecycle, performance, and acceptance contract.
+- **Detailed specification:** `documentation/ACCESSIBILITY_RTRACKER_AUDIO_SPEC.md` defines the authoritative semantic, acoustic, lifecycle, performance, and acceptance contract.
 - **Goal:** Provide equal nonvisual access to every marker exposed by the native R-Tracker without inventing line-of-sight, navigation, identity, or objective information.
 - **Systems:** Shared radar classification, active-prop traversal, native device/cheat state, ten fixed procedural mixer voices, screen-reader state announcements, configuration, lifecycle reset, structured logging, and optional performance diagnostics.
 - **Initial behavior:** Device changes speak `R-Tracker on` and `R-Tracker off`; an empty activation speaks `No tracked targets` once. All admitted targets sound concurrently with stable, staggered slots. Yellow objects use 700 Hz, red tracked characters 520 Hz, and blue cheat items 1000 Hz. Stereo pan conveys bearing, rear modulation conveys front/back, cadence ramps from 1.2 seconds at 4,000 units to 0.2 seconds nearby, and single/rising-double/falling-double patterns convey level/above/below.
@@ -217,7 +217,7 @@ The implemented cane now uses the active player-or-CamSpy observer pose and rest
 
 - **Status:** Detailed specification and engineering implementation added;
   runtime and blind-user acceptance are pending.
-- **Detailed specification:** `ACCESSIBILITY_AUDIBLE_MARKERS_SPEC.md` defines
+- **Detailed specification:** `documentation/ACCESSIBILITY_AUDIBLE_MARKERS_SPEC.md` defines
   the input, acoustic, line-of-sight, lifecycle, performance, logging, and
   acceptance contract.
 - **Goal:** Let a player create four recognizable temporary landmarks to
