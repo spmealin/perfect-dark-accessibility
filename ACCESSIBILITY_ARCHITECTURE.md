@@ -412,7 +412,7 @@ This table records implemented and anticipated changes to established files so f
 | `port/src/input.c`, `port/src/optionsmenu.c`, `src/include/constants.h`, `src/game/bondmove.c` | Add a configurable reset-view gameplay action using the unused extended control bit | Pressed edge from End, R3, or a player-selected replacement binding | Gives a deterministic horizontal-orientation recovery command without changing yaw or bypassing the binding system | Implemented as `CK_1000`/`BUTTON_RESET_VIEW`; PC defaults are End and right-stick click |
 | `port/src/optionsmenu.c` | Add an accessibility settings entry/dialog | Existing registered values, including proven beacon actions | Users need discoverable control without editing `pd.ini` | Proposed for Milestone 6 after beacon behavior is tested |
 
-`src/game/player.c` is a confirmed future semantic source but does not need Milestone 4 hooks. `src/game/mainmenu.c` has one read-only semantic-provider case for its custom-rendered mission list; it contains no speech policy.
+`src/game/player.c` is a confirmed future semantic source but does not need Milestone 4 hooks. `src/game/mainmenu.c` has one read-only semantic-provider case for its custom-rendered mission list; it combines the same localized location and subtitle fields drawn by the renderer and appends the visible difficulty-completion state, while containing no speech policy.
 
 ## Known uncertainties and required experiments
 

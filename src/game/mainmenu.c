@@ -1956,12 +1956,22 @@ MenuItemHandlerResult menuhandlerMissionList(s32 operation, struct menuitem *ite
 			if (optiontext) {
 				snprintf(data->accessibility.buffer, data->accessibility.bufferlen, "%s", optiontext);
 
+				regularcount = countdata.list.value - getNumUnlockedSpecialStages();
+				stageindex = data->accessibility.index;
+
+				if (stageindex < regularcount) {
+					used = strlen(data->accessibility.buffer);
+
+					if (used < data->accessibility.bufferlen - 1) {
+						snprintf(data->accessibility.buffer + used,
+								data->accessibility.bufferlen - used,
+								"%s", langGet(g_SoloStages[stageindex].name2));
+					}
+				}
+
 				if (g_MissionConfig.isanti) {
 					return 1;
 				}
-
-				regularcount = countdata.list.value - getNumUnlockedSpecialStages();
-				stageindex = data->accessibility.index;
 
 				if (stageindex >= regularcount) {
 					stageindex = func0f104720(stageindex - regularcount);
