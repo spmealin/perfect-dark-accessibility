@@ -657,12 +657,15 @@ static void accessibilityTargetingObserveCombat(
 		s32 detailed, s32 scopechanged)
 {
 	struct prop *aimedprop = g_Vars.currentplayer->lookingatprop.prop;
+	struct prop *rawaimedprop = g_AccessibilityTargetingGameRawAimHitValid
+			? (struct prop *)g_AccessibilityTargetingGameRawAimProp : NULL;
 	f32 viewleft = (f32)viGetViewLeft() / g_ScaleX;
 	f32 viewtop = viGetViewTop();
 	f32 viewright = viewleft + (f32)viGetViewWidth() / g_ScaleX;
 	f32 viewbottom = viewtop + viGetViewHeight();
 	f32 viewcenterx = (viewleft + viewright) * 0.5f;
 	s32 aimedshootability = ACCESSIBILITY_TARGETING_SHOOTABILITY_UNKNOWN;
+	s32 alignmentusesraw = false;
 	s32 i;
 
 	observation->inscope = true;
@@ -682,7 +685,8 @@ static void accessibilityTargetingObserveCombat(
 		s32 turret = projection->category
 				== ACCESSIBILITY_TARGETING_CATEGORY_TURRET;
 		s32 eligible = true;
-		s32 aimed = prop && prop == aimedprop;
+		s32 aimed = prop && (turret
+				? prop == rawaimedprop : prop == aimedprop);
 		f32 dx;
 		f32 dy;
 		f32 dz;
@@ -773,8 +777,11 @@ static void accessibilityTargetingObserveCombat(
 
 		if (detailed) {
 			accessibilityLogEvent("targeting", "combat_candidate",
-					"frame=%d slot=%d accepted=%d reason=%s aimed=%d category=%d relationship=%d aimonly=%d prop=%p propnum=%d chr=%p obj=%p obj_type=%d model=%d prop_type=%d prop_flags=0x%02x obj_flags=0x%08x obj_flags2=0x%08x chr_flags=0x%08x chr_hidden=0x%08x action=%d capture_valid=%d projected=%d finite=%d line_of_sight=%d screen=%.3f,%.3f,%.3f,%.3f",
+					"frame=%d slot=%d accepted=%d reason=%s aimed=%d aim_source=%s category=%d relationship=%d aimonly=%d prop=%p propnum=%d chr=%p obj=%p obj_type=%d model=%d prop_type=%d prop_flags=0x%02x obj_flags=0x%08x obj_flags2=0x%08x chr_flags=0x%08x chr_hidden=0x%08x action=%d capture_valid=%d projected=%d finite=%d line_of_sight=%d screen=%.3f,%.3f,%.3f,%.3f",
 					g_Vars.lvframe60, i, eligible, reason, aimed,
+					aimed
+						? (turret ? "raw_query" : "native_filtered")
+						: "none",
 					projection->category,
 					relationship,
 					relationship
@@ -846,6 +853,17 @@ static void accessibilityTargetingObserveCombat(
 			observation->hasaimedtarget = true;
 			observation->aimedidentity = candidate->identity;
 			aimedshootability = candidate->shootability;
+			alignmentusesraw = turret;
+
+			if (turret) {
+				dx = g_AccessibilityTargetingGameRawAimHitPos.x
+						- g_Vars.currentplayer->cam_pos.x;
+				dy = g_AccessibilityTargetingGameRawAimHitPos.y
+						- g_Vars.currentplayer->cam_pos.y;
+				dz = g_AccessibilityTargetingGameRawAimHitPos.z
+						- g_Vars.currentplayer->cam_pos.z;
+				candidate->aimdistance = sqrtf(dx * dx + dy * dy + dz * dz);
+			}
 		}
 	}
 
@@ -863,15 +881,21 @@ static void accessibilityTargetingObserveCombat(
 			? 0 : (uintptr_t)aimedprop;
 	observation->nativealignmentexpected = observation->hasaimedtarget
 			&& aimedshootability == ACCESSIBILITY_TARGETING_SHOOTABILITY_SHOOTABLE
+			&& !alignmentusesraw
 			&& accessibilityTargetingGameNativeAlignmentExpected(aimedprop);
 
 	if (detailed || scopechanged) {
 		accessibilityLogEvent("targeting", "scope_gate",
-				"frame=%d stage=%d player=%d accepted=1 reason=in_scope mode=combat candidates=%d captured=%d aimed=%d aimed_prop=%p aimed_shootability=%d native_alignment_expected=%d viewport=%.3f,%.3f,%.3f,%.3f",
+				"frame=%d stage=%d player=%d accepted=1 reason=in_scope mode=combat candidates=%d captured=%d aimed=%d aimed_prop=%p raw_aim_prop=%p raw_aim_valid=%d alignment_source=%s aimed_shootability=%d native_alignment_expected=%d viewport=%.3f,%.3f,%.3f,%.3f",
 				g_Vars.lvframe60, g_Vars.stagenum, g_Vars.currentplayernum,
 				observation->candidatecount,
 				g_AccessibilityTargetingCombatProjectionCount,
 				observation->hasaimedtarget, (void *)aimedprop,
+				(void *)rawaimedprop,
+				g_AccessibilityTargetingGameRawAimHitValid,
+				observation->hasaimedtarget
+					? (alignmentusesraw ? "raw_query" : "native_filtered")
+					: "none",
 				aimedshootability, observation->nativealignmentexpected,
 				viewleft, viewtop, viewright, viewbottom);
 	}
