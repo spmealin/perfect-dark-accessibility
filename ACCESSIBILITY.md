@@ -20,6 +20,8 @@ Combat Simulator challenge confirmation and details dialogs announce the complet
 
 After a Combat Simulator session, the Save Player confirmation announces its visible localized question, `Save new player and statistics?`, before the initially focused `Save Now` control. Moving between `Save Now` and `No Thanks!` reads only the new control; F5 reconstructs the title, question, and current control.
 
+The Combat Simulator results sequence announces the semantic contents of every custom-rendered page. Challenge and team rankings read each displayed team and score in visual order; player rankings read each displayed player, deaths, and score; the Game Over page reads placement, title, weapon of choice, and any displayed awards; and Stats for Player reads suicides plus the displayed kills and deaths against each opponent. These values come from the same multiplayer records used by the renderers. F5 repeats the complete current page.
+
 ### Active weapon menu narration
 
 With `Accessibility.MenuNarration=1`, holding the active-menu control and selecting a weapon or device announces the exact localized short label rendered in the highlighted radial slot. This includes `Unarmed`. Speech occurs only when a non-center slot becomes selected; returning to the center, holding a selection, or renderer animation does not repeat it. Returning to center and deliberately selecting the same item again announces it again. Closing the radial menu resets selection state without cancelling an already-started short item announcement.

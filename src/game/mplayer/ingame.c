@@ -1,4 +1,5 @@
 #include <ultra64.h>
+#include <string.h>
 #include "constants.h"
 #include "game/game_006900.h"
 #include "game/title.h"
@@ -28,14 +29,130 @@ struct menudialogdef g_MpEndscreenTeamGameOverMenuDialog;
 struct menudialogdef g_MpEndscreenSavePlayerMenuDialog;
 #endif
 
+static void mpAccessibilityAppend(char *buffer, u32 bufferlen, const char *text)
+{
+	u32 used;
+
+	if (!buffer || bufferlen == 0 || !text || !text[0]) {
+		return;
+	}
+
+	used = strlen(buffer);
+
+	if (used < bufferlen - 1) {
+		snprintf(buffer + used, bufferlen - used, "%s%s",
+				used ? ". " : "", text);
+	}
+}
+
+static void mpAccessibilityAppendValue(char *buffer, u32 bufferlen,
+		const char *label, const char *value)
+{
+	u32 used;
+
+	if (!buffer || bufferlen == 0 || !label || !label[0]
+			|| !value || !value[0]) {
+		return;
+	}
+
+	used = strlen(buffer);
+
+	if (used < bufferlen - 1) {
+		snprintf(buffer + used, bufferlen - used, "%s%s %s",
+				used ? ". " : "", label, value);
+	}
+}
+
+static MenuItemHandlerResult mpRankingAccessibilityHandler(s32 operation,
+		struct menuitem *item, union handlerdata *data)
+{
+	struct ranking rankings[MAX_MPCHRS];
+	char row[256];
+	char value[32];
+	s32 team;
+	s32 count;
+	s32 i;
+
+	if (operation != MENUOP_GETACCESSIBILITYTEXT
+			|| data->accessibility.part != MENUACCESSIBILITYPART_CONTROL
+			|| !data->accessibility.buffer
+			|| data->accessibility.bufferlen == 0) {
+		return 0;
+	}
+
+	data->accessibility.buffer[0] = '\0';
+	team = item->param2 == 1;
+	count = team ? mpGetTeamRankings(rankings) : mpGetPlayerRankings(rankings);
+
+	for (i = 0; i < count; i++) {
+		struct ranking *ranking = &rankings[i];
+		const char *name = team
+				? g_BossFile.teamnames[ranking->teamnum]
+				: ranking->mpchr->name;
+
+		row[0] = '\0';
+		mpAccessibilityAppend(row, sizeof(row), name);
+
+		if (!team) {
+			snprintf(value, sizeof(value), "%d", ranking->mpchr->numdeaths);
+			mpAccessibilityAppendValue(row, sizeof(row),
+					langGet(L_MPMENU_277), value); // "Deaths"
+		}
+
+		snprintf(value, sizeof(value), "%d", ranking->score);
+		mpAccessibilityAppendValue(row, sizeof(row),
+				langGet(L_MPMENU_278), value); // "Score"
+		mpAccessibilityAppend(data->accessibility.buffer,
+				data->accessibility.bufferlen, row);
+	}
+
+	return data->accessibility.buffer[0] != '\0';
+}
+
 MenuItemHandlerResult mpStatsForPlayerDropdownHandler(s32 operation, struct menuitem *item, union handlerdata *data)
 {
 	struct mpchrconfig *mpchr;
+	char row[256];
+	char value[32];
 	s32 v0;
 	s32 v1;
 	s32 a1;
 
 	switch (operation) {
+	case MENUOP_GETACCESSIBILITYTEXT:
+		if (data->accessibility.part == MENUACCESSIBILITYPART_CONTROL
+				&& data->accessibility.buffer
+				&& data->accessibility.bufferlen > 0) {
+			s32 playernum = g_MpSelectedPlayersForStats[g_MpPlayerNum];
+
+			mpchr = MPCHR(playernum);
+			data->accessibility.buffer[0] = '\0';
+			snprintf(value, sizeof(value), "%d", mpchr->killcounts[playernum]);
+			mpAccessibilityAppendValue(data->accessibility.buffer,
+					data->accessibility.bufferlen,
+					langGet(L_MPMENU_281), value); // "Suicides"
+
+			for (a1 = 0; a1 < MAX_MPCHRS; a1++) {
+				if ((g_MpSetup.chrslots & (1 << a1)) && a1 != playernum) {
+					struct mpchrconfig *opponent = MPCHR(a1);
+
+					row[0] = '\0';
+					mpAccessibilityAppend(row, sizeof(row), opponent->name);
+					snprintf(value, sizeof(value), "%d", mpchr->killcounts[a1]);
+					mpAccessibilityAppendValue(row, sizeof(row),
+							langGet(L_MPMENU_283), value); // "Kills"
+					snprintf(value, sizeof(value), "%d",
+							opponent->killcounts[playernum]);
+					mpAccessibilityAppendValue(row, sizeof(row),
+							langGet(L_MPMENU_282), value); // "Deaths"
+					mpAccessibilityAppend(data->accessibility.buffer,
+							data->accessibility.bufferlen, row);
+				}
+			}
+
+			return data->accessibility.buffer[0] != '\0';
+		}
+		break;
 	case MENUOP_GETOPTIONCOUNT:
 		data->list.value = 0;
 
@@ -550,7 +667,7 @@ struct menuitem g_MpPlayerRankingMenuItems[] = {
 		0,
 		0,
 		0,
-		NULL,
+		mpRankingAccessibilityHandler,
 	},
 	{ MENUITEMTYPE_END },
 };
@@ -580,7 +697,7 @@ struct menuitem g_MpTeamRankingsMenuItems[] = {
 		0,
 		0x00000001,
 		0,
-		NULL,
+		mpRankingAccessibilityHandler,
 	},
 	{ MENUITEMTYPE_END },
 };
@@ -625,6 +742,40 @@ char *mpMenuTextPlacementWithSuffix(struct menuitem *item)
 
 MenuItemHandlerResult mpPlacementMenuHandler(s32 operation, struct menuitem *item, union handlerdata *data)
 {
+	if (operation == MENUOP_GETACCESSIBILITYTEXT
+			&& data->accessibility.part == MENUACCESSIBILITYPART_CONTROL
+			&& data->accessibility.buffer
+			&& data->accessibility.bufferlen > 0) {
+		const char *award1 = mpMenuTextAward1(item);
+		const char *award2 = mpMenuTextAward2(item);
+
+		data->accessibility.buffer[0] = '\0';
+		mpAccessibilityAppend(data->accessibility.buffer,
+				data->accessibility.bufferlen,
+				mpMenuTextPlacementWithSuffix(item));
+		mpAccessibilityAppendValue(data->accessibility.buffer,
+				data->accessibility.bufferlen,
+				langGet(L_MPMENU_261), // "Title:"
+				mpMenuTextPlayerTitle(0));
+		mpAccessibilityAppendValue(data->accessibility.buffer,
+				data->accessibility.bufferlen,
+				langGet(L_MPMENU_262), // "Weapon of Choice:"
+				mpMenuTextWeaponOfChoiceName(item));
+
+		if ((award1 && award1[0]) || (award2 && award2[0])) {
+			char awards[256];
+
+			awards[0] = '\0';
+			mpAccessibilityAppend(awards, sizeof(awards), award1);
+			mpAccessibilityAppend(awards, sizeof(awards), award2);
+			mpAccessibilityAppendValue(data->accessibility.buffer,
+					data->accessibility.bufferlen,
+					langGet(L_MPMENU_263), awards); // "Awards:"
+		}
+
+		return data->accessibility.buffer[0] != '\0';
+	}
+
 	if (operation == MENUOP_GETCOLOUR) {
 		if (g_PlayerConfigsArray[g_MpPlayerNum].base.placement == 0) { // winner
 			data->label.colour2 = colourBlend(data->label.colour2, 0xffff00ff, menuGetSinOscFrac(40) * 255);

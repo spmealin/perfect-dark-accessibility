@@ -356,6 +356,11 @@ static void accessibilityMenuDescribeItem(struct accessibilitymenusnapshot *snap
 	snapshot->keyboardcol = -1;
 
 	switch (item->type) {
+	case MENUITEMTYPE_LABEL:
+		strcpy(snapshot->role, "information");
+		accessibilityMenuGetProviderText(item, MENUACCESSIBILITYPART_CONTROL,
+				-1, snapshot->value, sizeof(snapshot->value));
+		break;
 	case MENUITEMTYPE_SELECTABLE:
 		strcpy(snapshot->role, "button");
 
@@ -443,10 +448,14 @@ static void accessibilityMenuDescribeItem(struct accessibilitymenusnapshot *snap
 		break;
 	case MENUITEMTYPE_RANKING:
 		strcpy(snapshot->role, "ranking table");
-		if (itemdata) {
+		if (!accessibilityMenuGetProviderText(item,
+				MENUACCESSIBILITYPART_CONTROL, -1,
+				snapshot->value, sizeof(snapshot->value))
+				&& itemdata) {
 			snapshot->scrolloffset = itemdata->ranking.scrolloffset;
 			snapshot->subindex = snapshot->scrolloffset;
-			snprintf(snapshot->value, sizeof(snapshot->value), "scroll position %d", snapshot->scrolloffset);
+			snprintf(snapshot->value, sizeof(snapshot->value),
+					"scroll position %d", snapshot->scrolloffset);
 		}
 		break;
 	case MENUITEMTYPE_PLAYERSTATS:
@@ -454,14 +463,19 @@ static void accessibilityMenuDescribeItem(struct accessibilitymenusnapshot *snap
 		snapshot->optioncount = accessibilityMenuGetHandlerValue(item, MENUOP_GETOPTIONCOUNT);
 		snapshot->selectedindex = accessibilityMenuGetHandlerValue(item, MENUOP_GETSELECTEDINDEX);
 		accessibilityMenuGetOptionText(item, snapshot->selectedindex, option, sizeof(option));
-		if (itemdata) {
-			snapshot->scrolloffset = itemdata->dropdown.scrolloffset;
-			snapshot->subindex = snapshot->scrolloffset;
+		accessibilityMenuCopyNormalized(snapshot->label,
+				sizeof(snapshot->label), option);
+		snapshot->subindex = snapshot->selectedindex;
+		if (!accessibilityMenuGetProviderText(item,
+				MENUACCESSIBILITYPART_CONTROL, snapshot->selectedindex,
+				snapshot->value, sizeof(snapshot->value))) {
+			if (itemdata) {
+				snapshot->scrolloffset = itemdata->dropdown.scrolloffset;
+			}
+			snprintf(snapshot->value, sizeof(snapshot->value),
+					"scroll position %d",
+					snapshot->scrolloffset < 0 ? 0 : snapshot->scrolloffset);
 		}
-		snprintf(snapshot->value, sizeof(snapshot->value), "%s%s%d",
-				option,
-				option[0] ? ", scroll position " : "scroll position ",
-				snapshot->scrolloffset < 0 ? 0 : snapshot->scrolloffset);
 		break;
 	default:
 		strcpy(snapshot->role, "unknown control");
@@ -475,7 +489,7 @@ static void accessibilityMenuDescribeItem(struct accessibilitymenusnapshot *snap
 		break;
 	}
 
-	if (!snapshot->label[0]) {
+	if (!snapshot->label[0] && !snapshot->value[0]) {
 		accessibilityMenuGetProviderText(item, MENUACCESSIBILITYPART_CONTROL,
 				-1, snapshot->label, sizeof(snapshot->label));
 	}
