@@ -66,6 +66,14 @@ Automatic alerts establish a silent baseline, then report new enemy contacts and
 
 One dedicated procedural mixer voice and a fixed 48-event queue avoid runtime allocation and game sound-channel use. Menus, pause, cutscenes, death, unsupported player counts, match teardown, and native radar unavailability stop output and force a fresh silent baseline on resume. An empty manual pulse and an unavailable native radar have distinct centered earcons. The complete contract and remaining blind-user test matrix are in `documentation/ACCESSIBILITY_COMBAT_RADAR_AUDIO_PLAN.md`.
 
+### King of the Hill beacon
+
+`Accessibility.KingOfTheHillBeacon` defaults to `1` and is subordinate to `Accessibility.Enabled`. In a one-local-player King of the Hill match, it uses the scenario's exact floor-adjusted `hillpos`, not a room estimate or map-specific coordinate. Within the configured audible-marker range, direct line of sight to the hill center produces the player-marker base sound: two opposing oscillators sweep between 300 and 600 Hz. A single positioned 800 Hz identity chirp repeats every second, instead of the player markers' one-to-four chirps every two seconds. The cue follows `Accessibility.MarkerRange` and `Accessibility.MarkerVolume`, including their distance curve.
+
+When the native renderer actually draws the Hill on Radar marker, the same base sound remains available outside local line of sight and range at one-quarter gain, without the identity chirp. This quieter radar guide uses stereo pan and rear modulation to communicate the route direction; it disappears if Hill on Radar is disabled, the complete radar is disabled or hidden, or a mobile hill is between locations. Entering local range with line of sight adds the one-second identity chirp immediately, while the stronger of the distance-shaped local base and quiet radar base controls overall gain. The ordinary F3 radar pulse continues to include the hill as an objective marker.
+
+The hill has one dedicated fixed procedural voice, so it does not consume a player-marker slot, replace a combat-radar event, allocate memory, or use a game sound channel. Menu, pause, cutscene, player death, match teardown, unsupported player counts, feature disable, and shutdown silence it. Logs use the `hill_beacon` feature and distinguish `local`, `radar`, and suppressed states.
+
 ### IR Scanner highlight audio
 
 `Accessibility.IRScannerAudio` defaults to `1` and is subordinate to `Accessibility.Enabled`. While the native IR Scanner is active, an object that received the visual scanner highlight in the preceding rendered frame uses the R-Tracker's yellow-object 700 Hz spatial pattern. Up to ten highlighted objects can sound concurrently through the same fixed voice pool; the game does not permit the R-Tracker and IR Scanner to be active together.

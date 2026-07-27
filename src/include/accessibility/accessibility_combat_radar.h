@@ -12,6 +12,7 @@ void accessibilityCombatRadarCaptureDot(struct prop *prop,
 		const struct coord *relative, u32 colour1, u32 colour2,
 		s32 swapcolours, s32 yindicators);
 void accessibilityCombatRadarCaptureEnd(void);
+s32 accessibilityCombatRadarIsHillShown(void);
 void accessibilityCombatRadarTick(void);
 void accessibilityCombatRadarReset(const char *reason);
 

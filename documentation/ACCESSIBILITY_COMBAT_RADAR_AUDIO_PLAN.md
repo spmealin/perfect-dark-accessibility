@@ -344,6 +344,37 @@ merely because that enemy is also visible or targetable. The event communicates
 a radar range transition; the continuous scanner communicates immediate
 combat presence.
 
+## King of the Hill objective extension
+
+The implemented King of the Hill extension uses
+`g_ScenarioData.koh.hillpos`, the floor-adjusted center derived from the same
+selected pad that supplies the highlighted/occupancy room and used for the
+radar dot. It has one
+dedicated fixed mixer voice and is controlled by
+`Accessibility.KingOfTheHillBeacon`, which defaults to `1`.
+
+Inside `Accessibility.MarkerRange`, a direct collision line from the active
+observer to the hill center enables the full player-marker dual sweep and a
+single 800 Hz chirp every second. Distance shaping and master gain reuse
+`Accessibility.MarkerVolume`; 75 units of range hysteresis protects the
+boundary. The line-of-sight endpoint is raised 30 units only for the collision
+test so the floor itself does not reject its exact horizontal center.
+
+The final Combat Simulator capture records when King of the Hill's null-prop
+marker actually reaches `radarDrawDot`. That observation, rather than a second
+copy of the renderer's option rules, enables a no-chirp radar guide at
+one-quarter gain. The guide does not require range or line of sight because
+the native radar marker does not. Stereo pan and rear modulation convey
+direction. Entering local range with line of sight adds the identity chirp;
+the local component and radar component feed one voice and the stronger base
+gain wins, so they never double.
+
+During a mobile-hill transition the old voice stops until the scenario
+installs a new stationary center. Menus, pause, cutscenes, death, unsupported
+player counts, stage teardown, feature disable, and shutdown also stop it.
+Blind-user acceptance remains required for the mix level, local takeover
+distance, mobile-hill transition, and masking alongside combat output.
+
 ## Lifecycle and suppression
 
 Manual pulse and automatic output are allowed only when:

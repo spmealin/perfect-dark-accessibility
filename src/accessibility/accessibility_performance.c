@@ -518,7 +518,7 @@ void accessibilityPerformanceTick(void)
 	accessibilityToneGetDiagnostics(&tone);
 	accessibilityCaneGetDiagnostics(&cane);
 	accessibilityLogEvent("performance", "frame_window",
-			"window_us=%" PRIu64 " render_frames=%d render_fps=%.3f max_frame_gap_us=%" PRIu64 " game_ticks=%d game_tick_rate=%.3f stage=%d lvframe60=%d diffframe60=%d lvupdate60=%d tickmode=%d menu_count=%d memory_available=%d working_set_bytes=%" PRIu64 " working_set_delta=%lld private_bytes=%" PRIu64 " private_delta=%lld tone_enabled=%d chirp_enabled=%d chirp_sequence=%d weapon_function_sequence=%d weapon_function_pulses=%d hazard_enabled=%d combat_enabled_slots=%d tracker_enabled_slots=%d radar_enabled=%d radar_sequence=%d marker_enabled_slots=%d cane_mode=%d cane_requested_mask=0x%x cane_active_mask=0x%x cane_commands_delta=%d cane_tones_started_delta=%d cane_stops_delta=%d cane_queries_delta=%" PRIu64 " cane_hits_delta=%" PRIu64 " cane_misses_delta=%" PRIu64 " cane_skipped_delta=%" PRIu64 " cane_sweeps_delta=%" PRIu64 " cane_missed_cycles_delta=%" PRIu64 " cane_query_us_delta=%" PRIu64 " cane_query_max_us=%" PRIu64 " hazard_frequency_millihz=%d hazard_volume_millionths=%d hazard_pan_millionths=%d mixer_calls_delta=%d mixer_passthrough_delta=%d mixer_active_delta=%d mixer_frames_delta=%d mixer_calls_total=%d mixer_active_total=%d",
+			"window_us=%" PRIu64 " render_frames=%d render_fps=%.3f max_frame_gap_us=%" PRIu64 " game_ticks=%d game_tick_rate=%.3f stage=%d lvframe60=%d diffframe60=%d lvupdate60=%d tickmode=%d menu_count=%d memory_available=%d working_set_bytes=%" PRIu64 " working_set_delta=%lld private_bytes=%" PRIu64 " private_delta=%lld tone_enabled=%d chirp_enabled=%d chirp_sequence=%d weapon_function_sequence=%d weapon_function_pulses=%d hazard_enabled=%d combat_enabled_slots=%d tracker_enabled_slots=%d radar_enabled=%d radar_sequence=%d hill_enabled=%d marker_enabled_slots=%d cane_mode=%d cane_requested_mask=0x%x cane_active_mask=0x%x cane_commands_delta=%d cane_tones_started_delta=%d cane_stops_delta=%d cane_queries_delta=%" PRIu64 " cane_hits_delta=%" PRIu64 " cane_misses_delta=%" PRIu64 " cane_skipped_delta=%" PRIu64 " cane_sweeps_delta=%" PRIu64 " cane_missed_cycles_delta=%" PRIu64 " cane_query_us_delta=%" PRIu64 " cane_query_max_us=%" PRIu64 " hazard_frequency_millihz=%d hazard_volume_millionths=%d hazard_pan_millionths=%d mixer_calls_delta=%d mixer_passthrough_delta=%d mixer_active_delta=%d mixer_frames_delta=%d mixer_calls_total=%d mixer_active_total=%d",
 			(uint64_t)elapsed, g_AccessibilityPerformanceFrames, renderfps,
 			(uint64_t)g_AccessibilityPerformanceMaxFrameGapUs,
 			gameticks, gametickrate, mainGetStageNum(), g_Vars.lvframe60,
@@ -532,7 +532,7 @@ void accessibilityPerformanceTick(void)
 			tone.weaponfunctionsequence, tone.weaponfunctionpulses,
 			tone.hazardenabled, tone.combatenabledslots,
 			tone.trackerenabledslots, tone.radarenabled, tone.radarsequence,
-			tone.markerenabledslots,
+			tone.hillenabled, tone.markerenabledslots,
 			accessibilityGetVirtualCaneMode(), tone.canerequestedmask,
 			tone.caneactivemask,
 			tone.canecommands - g_AccessibilityPerformancePreviousTone.canecommands,

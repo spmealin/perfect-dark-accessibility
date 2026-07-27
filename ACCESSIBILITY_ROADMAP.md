@@ -152,6 +152,8 @@ Engineering extension: an active CamSpy now contributes incomplete engine hologr
 - **Risks:** One serialized voice can delay dense snapshots; category timbres and rear/height patterns may mask each other; render capture creates a deliberate dependency on a current native radar frame; thresholds and volume require blind-user tuning. Queue overflow, stale identities, repeated boundary chatter, or sustained performance regression blocks acceptance.
 - **Explicit non-goals:** No world reconstruction, line-of-sight or viewport filtering, route guidance, names, speech per contact, aim automation, split-screen ownership, cooperative/anti composition, or game sound-channel allocation.
 
+Engineering extension: King of the Hill now uses the scenario's exact floor-adjusted center for a dedicated objective beacon. Inside the player-marker range and direct line of sight, the full two-oscillator base and one 800 Hz chirp per second identify the destination. When and only when the native Hill on Radar dot is drawn, a one-quarter-gain no-chirp version provides unrestricted directional guidance until the local beacon dominates. It uses one fixed mixer lane, preserves the four player marker slots, and is implemented pending blind-user and mobile-hill acceptance.
+
 ### Prioritized IR Scanner highlighted-object slice
 
 - **Status:** Engineering implementation added and its Carrington Institute highlighted-object behavior passed project-owner runtime testing. Broader mission coverage and long-session acceptance remain pending.

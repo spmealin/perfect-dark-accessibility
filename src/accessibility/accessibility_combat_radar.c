@@ -98,6 +98,7 @@ struct accessibilitycombatradarframe {
 	u32 displayoptions;
 	s32 totaldots;
 	s32 ownmarkerexcluded;
+	s32 hillmarkerdrawn;
 	s32 retainedcount;
 	s32 overflow[ACCESSIBILITY_COMBAT_RADAR_CATEGORY_COUNT];
 	struct accessibilitycombatradarmarker
@@ -155,6 +156,7 @@ static s32 g_AccessibilityCombatRadarMaximumQueue;
 static s32 g_AccessibilityCombatRadarNextVoiceFrame;
 static s32 g_AccessibilityCombatRadarNextTelemetryFrame;
 static s32 g_AccessibilityCombatRadarLastAvailability = -1;
+static s32 g_AccessibilityCombatRadarLastHillMarker = -1;
 static s32 g_AccessibilityCombatRadarProcessedAvailability = -1;
 static s32 g_AccessibilityCombatRadarSuppressed;
 static s32 g_AccessibilityCombatRadarNeedsBaseline = true;
@@ -305,6 +307,8 @@ static void accessibilityCombatRadarPublish(void)
 
 	if (g_AccessibilityCombatRadarLastAvailability
 			!= g_AccessibilityCombatRadarFrame.available
+			|| g_AccessibilityCombatRadarLastHillMarker
+				!= g_AccessibilityCombatRadarFrame.hillmarkerdrawn
 			|| g_AccessibilityCombatRadarFrame.overflow[
 					ACCESSIBILITY_COMBAT_RADAR_CATEGORY_ENEMY]
 			|| g_AccessibilityCombatRadarFrame.overflow[
@@ -314,7 +318,7 @@ static void accessibilityCombatRadarPublish(void)
 			|| g_AccessibilityCombatRadarFrame.overflow[
 					ACCESSIBILITY_COMBAT_RADAR_CATEGORY_OTHER]) {
 		accessibilityLogEvent("combat_radar", "frame",
-				"generation=%" PRIu64 " available=%d player=%d scenario=%d options=0x%08x display_options=0x%08x total_dots=%d own_excluded=%d retained=%d overflow_enemy=%d overflow_objective=%d overflow_ally=%d overflow_other=%d",
+				"generation=%" PRIu64 " available=%d player=%d scenario=%d options=0x%08x display_options=0x%08x total_dots=%d own_excluded=%d hill_marker=%d retained=%d overflow_enemy=%d overflow_objective=%d overflow_ally=%d overflow_other=%d",
 				(uint64_t)g_AccessibilityCombatRadarFrame.generation,
 				g_AccessibilityCombatRadarFrame.available,
 				g_AccessibilityCombatRadarFrame.playernum,
@@ -323,6 +327,7 @@ static void accessibilityCombatRadarPublish(void)
 				g_AccessibilityCombatRadarFrame.displayoptions,
 				g_AccessibilityCombatRadarFrame.totaldots,
 				g_AccessibilityCombatRadarFrame.ownmarkerexcluded,
+				g_AccessibilityCombatRadarFrame.hillmarkerdrawn,
 				g_AccessibilityCombatRadarFrame.retainedcount,
 				g_AccessibilityCombatRadarFrame.overflow[
 						ACCESSIBILITY_COMBAT_RADAR_CATEGORY_ENEMY],
@@ -334,6 +339,8 @@ static void accessibilityCombatRadarPublish(void)
 						ACCESSIBILITY_COMBAT_RADAR_CATEGORY_OTHER]);
 		g_AccessibilityCombatRadarLastAvailability
 				= g_AccessibilityCombatRadarFrame.available;
+		g_AccessibilityCombatRadarLastHillMarker
+				= g_AccessibilityCombatRadarFrame.hillmarkerdrawn;
 	}
 }
 
@@ -342,7 +349,8 @@ void accessibilityCombatRadarCaptureBegin(s32 available)
 	memset(&g_AccessibilityCombatRadarBuilding, 0,
 			sizeof(g_AccessibilityCombatRadarBuilding));
 	g_AccessibilityCombatRadarBuilding.available = available
-			&& accessibilityIsCombatRadarAudioEnabled()
+			&& (accessibilityIsCombatRadarAudioEnabled()
+				|| accessibilityIsKingOfTheHillBeaconEnabled())
 			&& g_Vars.normmplayerisrunning && PLAYERCOUNT() == 1;
 	g_AccessibilityCombatRadarBuilding.playernum = g_Vars.currentplayernum;
 	g_AccessibilityCombatRadarBuilding.scenario = g_MpSetup.scenario;
@@ -386,6 +394,10 @@ void accessibilityCombatRadarCaptureDot(struct prop *prop,
 	}
 
 	g_AccessibilityCombatRadarBuilding.totaldots++;
+
+	if (!prop && g_MpSetup.scenario == MPSCENARIO_KINGOFTHEHILL) {
+		g_AccessibilityCombatRadarBuilding.hillmarkerdrawn = true;
+	}
 
 	if (g_AccessibilityCombatRadarCapturingOwnMarker
 			|| (g_Vars.currentplayer
@@ -488,6 +500,12 @@ void accessibilityCombatRadarCaptureEnd(void)
 	g_AccessibilityCombatRadarCaptureActive = false;
 	g_AccessibilityCombatRadarCapturingOwnMarker = false;
 	accessibilityCombatRadarPublish();
+}
+
+s32 accessibilityCombatRadarIsHillShown(void)
+{
+	return g_AccessibilityCombatRadarFrame.available
+			&& g_AccessibilityCombatRadarFrame.hillmarkerdrawn;
 }
 
 static void accessibilityCombatRadarClearEvents(s32 manualonly,
@@ -1355,6 +1373,7 @@ void accessibilityCombatRadarReset(const char *reason)
 	g_AccessibilityCombatRadarNextVoiceFrame = 0;
 	g_AccessibilityCombatRadarNextTelemetryFrame = 0;
 	g_AccessibilityCombatRadarLastAvailability = -1;
+	g_AccessibilityCombatRadarLastHillMarker = -1;
 	g_AccessibilityCombatRadarProcessedAvailability = -1;
 	g_AccessibilityCombatRadarSuppressed = false;
 	g_AccessibilityCombatRadarNeedsBaseline = true;

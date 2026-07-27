@@ -21,6 +21,7 @@ s32 accessibilityIsWeaponFunctionCuesEnabled(void);
 s32 accessibilityIsXrayScannerAudioEnabled(void);
 s32 accessibilityIsAudibleMarkersEnabled(void);
 s32 accessibilityIsCombatRadarAudioEnabled(void);
+s32 accessibilityIsKingOfTheHillBeaconEnabled(void);
 s32 accessibilityGetCombatRadarContactAlerts(void);
 void accessibilitySetCombatRadarContactAlerts(s32 enabled);
 void accessibilityGetCombatRadarTuning(f32 *mediumdistance,

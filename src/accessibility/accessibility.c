@@ -11,6 +11,7 @@
 #include "accessibility/accessibility_cane.h"
 #include "accessibility/accessibility_combat_radar.h"
 #include "accessibility/accessibility_hazard.h"
+#include "accessibility/accessibility_hill.h"
 #include "accessibility/accessibility_hud.h"
 #include "accessibility/accessibility_log.h"
 #include "accessibility/accessibility_marker.h"
@@ -37,6 +38,7 @@ static s32 g_AccessibilityXrayScannerAudioEnabledConfig = 1;
 static s32 g_AccessibilityAudibleMarkersEnabledConfig = 1;
 static s32 g_AccessibilityCombatRadarAudioEnabledConfig = 1;
 static s32 g_AccessibilityCombatRadarContactAlertsConfig = 1;
+static s32 g_AccessibilityKingOfTheHillBeaconEnabledConfig = 1;
 static s32 g_AccessibilityVirtualCaneModeConfig = 1;
 static f32 g_AccessibilityVirtualCaneReachConfig = 900.0f;
 static f32 g_AccessibilityVirtualCaneFullVolumeDistanceConfig = 112.5f;
@@ -290,6 +292,7 @@ void accessibilityInit(void)
 	accessibilityCaneReset("init");
 	accessibilityCombatRadarReset("init");
 	accessibilityHazardReset("init");
+	accessibilityHillReset("init");
 	accessibilityHudReset("init");
 	accessibilityMarkerReset("init");
 	accessibilityTargetingReset("init");
@@ -300,7 +303,7 @@ void accessibilityInit(void)
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 		if (g_AccessibilityLoggingEnabledConfig && accessibilityLogInit()) {
 			accessibilityLogEvent("lifecycle", "session_start",
-					"enabled=0 logging=1 speech=0 menu_narration=0 hud_messages=0 environmental_hazards=0 interactable_beacons=0 ir_scanner_audio=0 non_hostile_beacons=0 rtracker_audio=0 combat_radar_audio=0 combat_radar_contact_alerts=0 targeting_feedback=0 weapon_change_announcements=0 weapon_function_cues=0 xray_scanner_audio=0 virtual_cane_mode=0 performance_diagnostics=1 performance_interval_us=1000000 speech_test=0 path=%s diagnostic_control=accessibility_disabled",
+					"enabled=0 logging=1 speech=0 menu_narration=0 hud_messages=0 environmental_hazards=0 interactable_beacons=0 ir_scanner_audio=0 non_hostile_beacons=0 rtracker_audio=0 combat_radar_audio=0 combat_radar_contact_alerts=0 king_of_the_hill_beacon=0 targeting_feedback=0 weapon_change_announcements=0 weapon_function_cues=0 xray_scanner_audio=0 virtual_cane_mode=0 performance_diagnostics=1 performance_interval_us=1000000 speech_test=0 path=%s diagnostic_control=accessibility_disabled",
 					fsFullPath(ACCESSIBILITY_LOG_PATH));
 		}
 #endif
@@ -321,7 +324,7 @@ void accessibilityInit(void)
 	accessibilityGetCombatRadarTuning(&combatRadarMedium,
 			&combatRadarClose, &combatRadarVolume);
 
-	sysLogPrintf(LOG_NOTE, "accessibility: enabled (logging %s, speech %s, HUD messages %s, environmental hazards %s, interactable beacons %s, audible markers %s, IR Scanner audio %s, non-hostile beacons %s, R-Tracker audio %s, combat radar audio %s, combat radar alerts %s, targeting feedback %s, weapon change announcements %s, weapon function cues %s, X-Ray Scanner audio %s, virtual cane mode %d, cane reach %.1f, cane pitch %.1f-%.1f Hz, cane volume %.3f, terrain reach %.1f, enemy maximum %.1f, enemy frequency %.1f Hz, enemy volume %.3f, marker range %.1f, marker volume %.3f, radar medium %.1f, radar close %.1f, radar volume %.3f)",
+	sysLogPrintf(LOG_NOTE, "accessibility: enabled (logging %s, speech %s, HUD messages %s, environmental hazards %s, interactable beacons %s, audible markers %s, IR Scanner audio %s, non-hostile beacons %s, R-Tracker audio %s, combat radar audio %s, combat radar alerts %s, King of the Hill beacon %s, targeting feedback %s, weapon change announcements %s, weapon function cues %s, X-Ray Scanner audio %s, virtual cane mode %d, cane reach %.1f, cane pitch %.1f-%.1f Hz, cane volume %.3f, terrain reach %.1f, enemy maximum %.1f, enemy frequency %.1f Hz, enemy volume %.3f, marker range %.1f, marker volume %.3f, radar medium %.1f, radar close %.1f, radar volume %.3f)",
 			g_AccessibilityLoggingEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilitySpeechEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityHudMessagesEnabledConfig ? "enabled" : "disabled",
@@ -333,6 +336,8 @@ void accessibilityInit(void)
 			g_AccessibilityRTrackerAudioEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityCombatRadarAudioEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityCombatRadarContactAlerts ? "enabled" : "disabled",
+			g_AccessibilityKingOfTheHillBeaconEnabledConfig
+					? "enabled" : "disabled",
 			g_AccessibilityTargetingFeedbackEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityWeaponChangeAnnouncementsEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityWeaponFunctionCuesEnabledConfig ? "enabled" : "disabled",
@@ -346,7 +351,7 @@ void accessibilityInit(void)
 
 	if (g_AccessibilityLoggingEnabledConfig && accessibilityLogInit()) {
 		accessibilityLogEvent("lifecycle", "session_start",
-				"enabled=%d logging=%d speech=%d menu_narration=%d hud_messages=%d environmental_hazards=%d interactable_beacons=%d audible_markers=%d ir_scanner_audio=%d non_hostile_beacons=%d rtracker_audio=%d combat_radar_audio=%d combat_radar_contact_alerts=%d combat_radar_medium_distance=%.3f combat_radar_close_distance=%.3f combat_radar_volume=%.4f targeting_feedback=%d weapon_change_announcements=%d weapon_function_cues=%d xray_scanner_audio=%d virtual_cane_mode=%d cane_reach=%.3f cane_full_distance=%.3f cane_fade_distance=%.3f cane_maximum_audible_distance=%.3f cane_near_frequency_hz=%.3f cane_far_frequency_hz=%.3f cane_volume=%.4f cane_terrain_reach=%.3f cane_terrain_height_threshold=%.3f enemy_full_distance=%.3f enemy_fade_distance=%.3f enemy_maximum_distance=%.3f enemy_frequency_hz=%.3f enemy_volume=%.4f marker_range=%.3f marker_volume=%.4f marker_line_of_sight=1 marker_keys=F9,F10,F11,F12 marker_voices=4 performance_diagnostics=%d performance_interval_us=%d speech_test=%d path=%s",
+				"enabled=%d logging=%d speech=%d menu_narration=%d hud_messages=%d environmental_hazards=%d interactable_beacons=%d audible_markers=%d ir_scanner_audio=%d non_hostile_beacons=%d rtracker_audio=%d combat_radar_audio=%d combat_radar_contact_alerts=%d combat_radar_medium_distance=%.3f combat_radar_close_distance=%.3f combat_radar_volume=%.4f king_of_the_hill_beacon=%d targeting_feedback=%d weapon_change_announcements=%d weapon_function_cues=%d xray_scanner_audio=%d virtual_cane_mode=%d cane_reach=%.3f cane_full_distance=%.3f cane_fade_distance=%.3f cane_maximum_audible_distance=%.3f cane_near_frequency_hz=%.3f cane_far_frequency_hz=%.3f cane_volume=%.4f cane_terrain_reach=%.3f cane_terrain_height_threshold=%.3f enemy_full_distance=%.3f enemy_fade_distance=%.3f enemy_maximum_distance=%.3f enemy_frequency_hz=%.3f enemy_volume=%.4f marker_range=%.3f marker_volume=%.4f marker_line_of_sight=1 marker_keys=F9,F10,F11,F12 marker_voices=4 performance_diagnostics=%d performance_interval_us=%d speech_test=%d path=%s",
 				g_AccessibilityEnabledConfig,
 				g_AccessibilityLoggingEnabledConfig,
 				g_AccessibilitySpeechEnabledConfig,
@@ -361,6 +366,7 @@ void accessibilityInit(void)
 				g_AccessibilityCombatRadarAudioEnabledConfig,
 				g_AccessibilityCombatRadarContactAlerts,
 				combatRadarMedium, combatRadarClose, combatRadarVolume,
+				g_AccessibilityKingOfTheHillBeaconEnabledConfig,
 				g_AccessibilityTargetingFeedbackEnabledConfig,
 				g_AccessibilityWeaponChangeAnnouncementsEnabledConfig,
 				g_AccessibilityWeaponFunctionCuesEnabledConfig,
@@ -407,6 +413,7 @@ void accessibilityShutdown(void)
 	accessibilityCaneReset("shutdown");
 	accessibilityCombatRadarReset("shutdown");
 	accessibilityHazardReset("shutdown");
+	accessibilityHillReset("shutdown");
 	accessibilityHudReset("shutdown");
 	accessibilityMarkerReset("shutdown");
 	accessibilityTargetingReset("shutdown");
@@ -510,6 +517,12 @@ s32 accessibilityIsCombatRadarAudioEnabled(void)
 			&& g_AccessibilityCombatRadarAudioEnabledConfig;
 }
 
+s32 accessibilityIsKingOfTheHillBeaconEnabled(void)
+{
+	return g_AccessibilityEnabled
+			&& g_AccessibilityKingOfTheHillBeaconEnabledConfig;
+}
+
 s32 accessibilityGetCombatRadarContactAlerts(void)
 {
 	return g_AccessibilityCombatRadarContactAlerts;
@@ -561,6 +574,8 @@ PD_CONSTRUCTOR static void accessibilityConfigInit(void)
 			&g_AccessibilityCombatRadarAudioEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.CombatRadarContactAlerts",
 			&g_AccessibilityCombatRadarContactAlertsConfig, 0, 1);
+	configRegisterInt("Accessibility.KingOfTheHillBeacon",
+			&g_AccessibilityKingOfTheHillBeaconEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.VirtualCaneMode", &g_AccessibilityVirtualCaneModeConfig, 0, 2);
 	configRegisterFloat("Accessibility.VirtualCaneReach",
 			&g_AccessibilityVirtualCaneReachConfig, 100.0f, 5000.0f);

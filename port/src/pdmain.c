@@ -78,6 +78,7 @@
 #include "accessibility/accessibility_cane.h"
 #include "accessibility/accessibility_combat_radar.h"
 #include "accessibility/accessibility_hazard.h"
+#include "accessibility/accessibility_hill.h"
 #include "accessibility/accessibility_hud.h"
 #include "accessibility/accessibility_marker.h"
 #include "accessibility/accessibility_targeting.h"
@@ -523,6 +524,7 @@ void mainLoop(void)
 		accessibilityCaneReset("stage_stop");
 		accessibilityCombatRadarReset("stage_stop");
 		accessibilityHazardReset("stage_stop");
+		accessibilityHillReset("stage_stop");
 		accessibilityHudReset("stage_stop");
 		accessibilityMarkerReset("stage_stop");
 		accessibilityTargetingReset("stage_stop");
@@ -565,6 +567,7 @@ void mainTick(void)
 			accessibilityCaneTick();
 			accessibilityCombatRadarTick();
 			accessibilityHazardTick();
+			accessibilityHillTick();
 			accessibilityMarkerTick();
 			accessibilityTrackerTick();
 			playermgrShuffle();
