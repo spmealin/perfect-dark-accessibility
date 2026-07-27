@@ -96,6 +96,7 @@ static SDL_atomic_t g_AccessibilityCombatVolumeMillionths[ACCESSIBILITY_TONE_COM
 static SDL_atomic_t g_AccessibilityCombatPanMillionths[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityCombatPeriodMs[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityCombatDurationMs[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
+static SDL_atomic_t g_AccessibilityCombatFrequencyContour[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityCombatContinuous[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityTrackerEnabled[ACCESSIBILITY_TONE_TRACKER_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityTrackerSequence[ACCESSIBILITY_TONE_TRACKER_SLOT_COUNT];
@@ -386,8 +387,8 @@ void accessibilityToneSetHazard(s32 enabled, f32 frequencyhz, f32 volume, f32 pa
 
 void accessibilityToneSetCombatSlot(s32 slot, s32 enabled,
 		f32 startfrequencyhz, f32 endfrequencyhz, f32 volume, f32 pan,
-		s32 periodms, s32 durationms, s32 continuous, s32 restart,
-		s32 triggernow)
+		s32 periodms, s32 durationms, s32 frequencycontour, s32 continuous,
+		s32 restart, s32 triggernow)
 {
 	if (slot < 0 || slot >= ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT) {
 		return;
@@ -433,6 +434,8 @@ void accessibilityToneSetCombatSlot(s32 slot, s32 enabled,
 			(s32)(pan * 1000000.0f));
 	SDL_AtomicSet(&g_AccessibilityCombatPeriodMs[slot], periodms);
 	SDL_AtomicSet(&g_AccessibilityCombatDurationMs[slot], durationms);
+	SDL_AtomicSet(&g_AccessibilityCombatFrequencyContour[slot],
+			frequencycontour);
 	SDL_AtomicSet(&g_AccessibilityCombatContinuous[slot], continuous != 0);
 	SDL_AtomicSet(&g_AccessibilityCombatEnabled[slot], enabled && volume > 0.0f);
 
@@ -700,6 +703,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 	f32 combatpan[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 	s32 combatperiodsamples[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 	s32 combatdurationsamples[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
+	s32 combatfrequencycontour[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 	s32 combatcontinuous[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 	s32 trackerenabled[ACCESSIBILITY_TONE_TRACKER_SLOT_COUNT];
 	f32 trackerfrequency[ACCESSIBILITY_TONE_TRACKER_SLOT_COUNT];
@@ -776,6 +780,8 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		} else if (combatdurationsamples[slot] > combatperiodsamples[slot]) {
 			combatdurationsamples[slot] = combatperiodsamples[slot];
 		}
+		combatfrequencycontour[slot] = SDL_AtomicGet(
+				&g_AccessibilityCombatFrequencyContour[slot]);
 		combatcontinuous[slot] = SDL_AtomicGet(
 				&g_AccessibilityCombatContinuous[slot]);
 		anycombatenabled |= combatenabled[slot]
@@ -1347,7 +1353,12 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 								/ (f32)ACCESSIBILITY_COMBAT_CHIRP_RELEASE_SAMPLES;
 					}
 
-					if (combatdurationsamples[slot] > 1) {
+					if (combatfrequencycontour[slot]
+							== ACCESSIBILITY_TONE_COMBAT_CONTOUR_BASE_THEN_END) {
+						if (sample >= combatdurationsamples[slot] / 2) {
+							frequency = combatendfrequency[slot];
+						}
+					} else if (combatdurationsamples[slot] > 1) {
 						f32 progress = (f32)sample
 								/ (f32)(combatdurationsamples[slot] - 1);
 

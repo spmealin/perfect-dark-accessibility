@@ -27,6 +27,13 @@
 #define ACCESSIBILITY_TARGETING_RANGE_OUTER_RADIUS 75.0f
 #define ACCESSIBILITY_TARGETING_COMBAT_PROJECTION_CAPACITY \
 	ACCESSIBILITY_TARGETING_MAX_CANDIDATES
+#define ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_NONE 0
+#define ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_CENTER 1
+#define ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_UPPER 2
+#define ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_LOWER 3
+#define ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_UPPER_LEFT 4
+#define ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_UPPER_RIGHT 5
+#define ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_COUNT 5
 
 struct accessibilitytargetinggameaudit {
 	uintptr_t prop;
@@ -65,10 +72,16 @@ struct accessibilitytargetingcombatprojection {
 	s32 projected;
 	s32 finite;
 	s32 lineofsight;
+	s32 visibilitysample;
+	s32 visibilityqueries;
+	s32 hasverticalaimerror;
 	f32 x2;
 	f32 x1;
 	f32 y2;
 	f32 y1;
+	f32 verticalaimerrordegrees;
+	f32 aimscreenx;
+	f32 aimscreeny;
 };
 
 struct accessibilitytargetingdevicetarget {
@@ -394,6 +407,75 @@ static void accessibilityTargetingGameClearProjections(void)
 	g_AccessibilityTargetingCamSpyTargetCount = 0;
 }
 
+static const char *accessibilityTargetingGameVisibilitySampleName(s32 sample)
+{
+	switch (sample) {
+	case ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_CENTER:
+		return "center";
+	case ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_UPPER:
+		return "upper";
+	case ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_LOWER:
+		return "lower";
+	case ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_UPPER_LEFT:
+		return "upper_left";
+	case ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_UPPER_RIGHT:
+		return "upper_right";
+	default:
+		return "none";
+	}
+}
+
+static s32 accessibilityTargetingGameCharacterLineOfSight(
+		struct prop *prop, struct chrdata *chr, RoomNum *camrooms,
+		s32 *sample, s32 *queries)
+{
+	struct coord positions[ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_COUNT];
+	f32 dx = prop->pos.x - g_Vars.currentplayer->cam_pos.x;
+	f32 dz = prop->pos.z - g_Vars.currentplayer->cam_pos.z;
+	f32 horizontal = sqrtf(dx * dx + dz * dz);
+	f32 sideamount = chr->radius * 0.75f;
+	f32 sidex = 0.0f;
+	f32 sidez = 0.0f;
+	s32 i;
+
+	*sample = ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_NONE;
+	*queries = 0;
+
+	if (horizontal > 0.001f) {
+		sidex = dz / horizontal;
+		sidez = -dx / horizontal;
+	}
+
+	positions[0] = prop->pos;
+	positions[0].y = chr->manground + chr->height * 0.50f;
+	positions[1] = prop->pos;
+	positions[1].y = chr->manground + chr->height * 0.82f;
+	positions[2] = prop->pos;
+	positions[2].y = chr->manground + chr->height * 0.20f;
+	positions[3] = prop->pos;
+	positions[3].x += sidex * sideamount;
+	positions[3].z += sidez * sideamount;
+	positions[3].y = chr->manground + chr->height * 0.65f;
+	positions[4] = prop->pos;
+	positions[4].x -= sidex * sideamount;
+	positions[4].z -= sidez * sideamount;
+	positions[4].y = chr->manground + chr->height * 0.65f;
+
+	for (i = 0; i < ARRAYCOUNT(positions); i++) {
+		(*queries)++;
+
+		if (cdTestLos03(&g_Vars.currentplayer->cam_pos, camrooms,
+				&positions[i],
+				CDTYPE_OBJS | CDTYPE_DOORS | CDTYPE_PATHBLOCKER | CDTYPE_BG,
+				GEOFLAG_BLOCK_SHOOT)) {
+			*sample = ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_CENTER + i;
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static void accessibilityTargetingCaptureCombat(void)
 {
 	struct prop **propptr;
@@ -465,6 +547,49 @@ static void accessibilityTargetingCaptureCombat(void)
 				&& isfinite(projection->x2) && isfinite(projection->x1)
 				&& isfinite(projection->y2) && isfinite(projection->y1);
 
+		if (projection->finite
+				&& isfinite(g_Vars.currentplayer->crosspos[0])
+				&& isfinite(g_Vars.currentplayer->crosspos[1])) {
+			f32 targetscreen[2];
+			struct coord targetdir;
+			struct coord aimdir;
+			f32 targethorizontal;
+			f32 aimhorizontal;
+			f32 targetangle;
+			f32 aimangle;
+			f32 angledelta;
+
+			targetscreen[0] = (projection->x1 + projection->x2) * 0.5f;
+			targetscreen[1] = (projection->y1 + projection->y2) * 0.5f;
+			cam0f0b4c3c(targetscreen, &targetdir, 1.0f);
+			cam0f0b4c3c(g_Vars.currentplayer->crosspos, &aimdir, 1.0f);
+			targethorizontal = sqrtf(targetdir.x * targetdir.x
+					+ targetdir.z * targetdir.z);
+			aimhorizontal = sqrtf(aimdir.x * aimdir.x
+					+ aimdir.z * aimdir.z);
+			targetangle = atan2f(targetdir.y, targethorizontal);
+			aimangle = atan2f(aimdir.y, aimhorizontal);
+			angledelta = targetangle - aimangle;
+
+			/*
+			 * The port's atan2f can return angles on a zero-to-tau interval.
+			 * Normalize across that seam before converting to degrees, or a
+			 * sub-degree difference can alternate between +/-359 degrees.
+			 */
+			if (angledelta > M_PI) {
+				angledelta -= M_TAU;
+			} else if (angledelta < -M_PI) {
+				angledelta += M_TAU;
+			}
+
+			projection->verticalaimerrordegrees
+					= angledelta * 180.0f / M_PI;
+			projection->aimscreenx = g_Vars.currentplayer->crosspos[0];
+			projection->aimscreeny = g_Vars.currentplayer->crosspos[1];
+			projection->hasverticalaimerror
+					= isfinite(projection->verticalaimerrordegrees);
+		}
+
 		targetpos = prop->pos;
 		if (chr) {
 			targetpos.y = chr->manground + chr->height * 0.5f;
@@ -485,11 +610,24 @@ static void accessibilityTargetingCaptureCombat(void)
 					|| (obj->type == OBJTYPE_CCTV
 						&& accessibilityTargetingGameCctvCombatCapable(
 							(struct cctvobj *)obj)))))) {
-			projection->lineofsight = cdTestLos03(
-					&g_Vars.currentplayer->cam_pos, camrooms,
-					&targetpos,
-					CDTYPE_OBJS | CDTYPE_DOORS | CDTYPE_PATHBLOCKER | CDTYPE_BG,
-					GEOFLAG_BLOCK_SHOOT);
+			if (chr) {
+				projection->lineofsight
+						= accessibilityTargetingGameCharacterLineOfSight(
+							prop, chr, camrooms,
+							&projection->visibilitysample,
+							&projection->visibilityqueries);
+			} else {
+				projection->visibilityqueries = 1;
+				projection->lineofsight = cdTestLos03(
+						&g_Vars.currentplayer->cam_pos, camrooms,
+						&targetpos,
+						CDTYPE_OBJS | CDTYPE_DOORS | CDTYPE_PATHBLOCKER
+							| CDTYPE_BG,
+						GEOFLAG_BLOCK_SHOOT);
+				projection->visibilitysample = projection->lineofsight
+						? ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_CENTER
+						: ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_NONE;
+			}
 		}
 	}
 }
@@ -814,7 +952,7 @@ static void accessibilityTargetingObserveCombat(
 
 		if (detailed) {
 			accessibilityLogEvent("targeting", "combat_candidate",
-					"frame=%d slot=%d accepted=%d reason=%s aimed=%d aim_source=%s category=%d relationship=%d aimonly=%d prop=%p propnum=%d chr=%p obj=%p obj_type=%d model=%d prop_type=%d prop_flags=0x%02x obj_flags=0x%08x obj_flags2=0x%08x chr_flags=0x%08x chr_hidden=0x%08x action=%d capture_valid=%d projected=%d finite=%d line_of_sight=%d screen=%.3f,%.3f,%.3f,%.3f",
+					"frame=%d slot=%d accepted=%d reason=%s aimed=%d aim_source=%s category=%d relationship=%d aimonly=%d prop=%p propnum=%d chr=%p obj=%p obj_type=%d model=%d prop_type=%d prop_flags=0x%02x obj_flags=0x%08x obj_flags2=0x%08x chr_flags=0x%08x chr_hidden=0x%08x action=%d capture_valid=%d projected=%d finite=%d line_of_sight=%d visibility_sample=%s visibility_queries=%d screen=%.3f,%.3f,%.3f,%.3f target_screen=%.3f,%.3f aim_screen=%.3f,%.3f vertical_aim_error_available=%d raw_elevation_degrees=%.3f",
 					g_Vars.lvframe60, i, eligible, reason, aimed,
 					aimed
 						? (objecttarget ? "raw_query" : "native_filtered")
@@ -836,8 +974,17 @@ static void accessibilityTargetingObserveCombat(
 						&& g_AccessibilityTargetingGameProjectionPlayer
 								== g_Vars.currentplayernum,
 					projection->projected, projection->finite,
-					projection->lineofsight, projection->x1, projection->y1,
-					projection->x2, projection->y2);
+					projection->lineofsight,
+					accessibilityTargetingGameVisibilitySampleName(
+						projection->visibilitysample),
+					projection->visibilityqueries,
+					projection->x1, projection->y1,
+					projection->x2, projection->y2,
+					(projection->x1 + projection->x2) * 0.5f,
+					(projection->y1 + projection->y2) * 0.5f,
+					projection->aimscreenx, projection->aimscreeny,
+					projection->hasverticalaimerror,
+					projection->verticalaimerrordegrees);
 		}
 
 		if (!eligible || observation->candidatecount
@@ -868,6 +1015,11 @@ static void accessibilityTargetingObserveCombat(
 		candidate->screeny1 = projection->y1;
 		candidate->screenx2 = projection->x2;
 		candidate->screeny2 = projection->y2;
+		candidate->hasverticalaimerror = projection->hasverticalaimerror;
+		candidate->verticalaimerrordegrees
+				= projection->verticalaimerrordegrees;
+		candidate->aimscreenx = projection->aimscreenx;
+		candidate->aimscreeny = projection->aimscreeny;
 		candidate->horizontalscreenoffset = fabsf(
 				((projection->x1 + projection->x2) * 0.5f) - viewcenterx);
 		dx = candidate->position.x - g_Vars.currentplayer->prop->pos.x;

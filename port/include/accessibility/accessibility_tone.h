@@ -8,6 +8,11 @@
 #define ACCESSIBILITY_TONE_TRACKER_SLOT_COUNT 10
 #define ACCESSIBILITY_TONE_MARKER_SLOT_COUNT 4
 
+enum accessibilitytonecombatcontour {
+	ACCESSIBILITY_TONE_COMBAT_CONTOUR_LINEAR,
+	ACCESSIBILITY_TONE_COMBAT_CONTOUR_BASE_THEN_END,
+};
+
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 struct accessibilitytonediagnostics {
 	s32 toneenabled;
@@ -49,8 +54,8 @@ void accessibilityToneStopWeaponFunction(void);
 void accessibilityToneSetHazard(s32 enabled, f32 frequencyhz, f32 volume, f32 pan);
 void accessibilityToneSetCombatSlot(s32 slot, s32 enabled,
 		f32 startfrequencyhz, f32 endfrequencyhz, f32 volume, f32 pan,
-		s32 periodms, s32 durationms, s32 continuous, s32 restart,
-		s32 triggernow);
+		s32 periodms, s32 durationms, s32 frequencycontour, s32 continuous,
+		s32 restart, s32 triggernow);
 void accessibilityToneStopCombat(void);
 void accessibilityToneSetTrackerSlot(s32 slot, s32 enabled, f32 frequencyhz,
 		f32 volume, f32 pan, s32 periodms, s32 height, s32 rear,

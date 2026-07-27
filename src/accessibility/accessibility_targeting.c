@@ -622,26 +622,20 @@ static void accessibilityTargetingCombatCadence(f32 distance, f32 reference,
 
 static f32 accessibilityTargetingCombatElevationFrequency(
 		const struct accessibilitytargetingcandidate *candidate,
-		f32 basefrequency, f32 *elevationdegrees, s32 *elevationzone)
+		f32 basefrequency, f32 *rawelevationdegrees,
+		f32 *elevationdegrees, s32 *elevationzone)
 {
-	f32 dx = candidate->position.x - g_Vars.currentplayer->cam_pos.x;
-	f32 dy = candidate->position.y - g_Vars.currentplayer->cam_pos.y;
-	f32 dz = candidate->position.z - g_Vars.currentplayer->cam_pos.z;
-	f32 horizontal = sqrtf(dx * dx + dz * dz);
-	f32 lookhorizontal = sqrtf(
-			g_Vars.currentplayer->cam_look.x
-					* g_Vars.currentplayer->cam_look.x
-			+ g_Vars.currentplayer->cam_look.z
-					* g_Vars.currentplayer->cam_look.z);
-	f32 targetangle = atan2f(dy, horizontal);
-	f32 lookangle = atan2f(g_Vars.currentplayer->cam_look.y, lookhorizontal);
-	/*
-	 * The renderer's camera-look Y axis is negative when looking upward,
-	 * opposite the world-space target delta used above.
-	 */
-	f32 angle = (targetangle + lookangle) * 180.0f / M_PI;
+	f32 angle = candidate->hasverticalaimerror
+			? candidate->verticalaimerrordegrees : 0.0f;
 	f32 normalized;
 	f32 multiplier;
+
+	/*
+	 * The adapter captures this angle with the projected target and crosspos
+	 * before rendering. Do not recompute it here after camera/render state may
+	 * have advanced.
+	 */
+	*rawelevationdegrees = angle;
 
 	if (angle > ACCESSIBILITY_TARGETING_COMBAT_ELEVATION_LIMIT_DEGREES) {
 		angle = ACCESSIBILITY_TARGETING_COMBAT_ELEVATION_LIMIT_DEGREES;
@@ -701,6 +695,7 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 					0.0f, 0.0f,
 					ACCESSIBILITY_TARGETING_COMBAT_FAR_PERIOD_MS,
 					ACCESSIBILITY_TARGETING_COMBAT_FAR_DURATION_MS,
+					ACCESSIBILITY_TONE_COMBAT_CONTOUR_LINEAR,
 					false, true, false);
 			accessibilityLogEvent("targeting", "combat_slot_release",
 					"frame=%d oscillator_slot=%d source=%d slot=%d propnum=%d reason=target_unavailable",
@@ -727,10 +722,12 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 		f32 cuedistance;
 		f32 startfrequency;
 		f32 endfrequency;
+		f32 rawelevationdegrees = 0.0f;
 		f32 elevationdegrees = 0.0f;
 		f32 elevationfrequency;
 		s32 elevationzone = 0;
 		s32 camera;
+		s32 frequencycontour = ACCESSIBILITY_TONE_COMBAT_CONTOUR_LINEAR;
 
 		if (!accessibilityTargetingRecordPresenceEligible(record)) {
 			continue;
@@ -741,6 +738,7 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 		elevationfrequency = camera ? combatfrequency
 				: accessibilityTargetingCombatElevationFrequency(
 					&record->candidate, combatfrequency,
+					&rawelevationdegrees,
 					&elevationdegrees, &elevationzone);
 		startfrequency = camera
 				? ACCESSIBILITY_TARGETING_CAMERA_START_FREQUENCY_HZ
@@ -763,21 +761,27 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 			voice = &g_AccessibilityTargetingCombatSlots[slot];
 			voice->assigned = true;
 			voice->identity = record->candidate.identity;
-			voice->frequencyhz = startfrequency;
+			voice->frequencyhz = elevationfrequency;
 			voice->elevationzone = elevationzone;
 			restart = true;
 			accessibilityLogEvent("targeting", "combat_slot_assign",
-					"frame=%d oscillator_slot=%d source=%d slot=%d propnum=%d prop=%p category=%d cue=%s elevation_degrees=%.2f elevation_zone=%s base_frequency_hz=%.1f target_frequency_hz=%.1f start_frequency_hz=%.1f end_frequency_hz=%.1f punch_range=%.3f",
+					"frame=%d oscillator_slot=%d source=%d slot=%d propnum=%d prop=%p category=%d cue=%s raw_elevation_degrees=%.2f elevation_degrees=%.2f elevation_zone=%s target_screen=%.2f,%.2f aim_screen=%.2f,%.2f base_frequency_hz=%.1f target_frequency_hz=%.1f punch_range=%.3f",
 					frame60, slot, voice->identity.source,
 					voice->identity.sourceslot, voice->identity.propnum,
 					(void *)record->candidate.prop,
 					record->candidate.category,
 					camera ? "security_camera_sweep" : "enemy_proximity",
+					rawelevationdegrees,
 					elevationdegrees,
 					elevationzone > 0 ? "above"
 						: elevationzone < 0 ? "below" : "level",
+					(record->candidate.screenx1
+							+ record->candidate.screenx2) * 0.5f,
+					(record->candidate.screeny1
+							+ record->candidate.screeny2) * 0.5f,
+					record->candidate.aimscreenx,
+					record->candidate.aimscreeny,
 					combatfrequency, elevationfrequency,
-					startfrequency, endfrequency,
 					distancecuereference);
 		}
 
@@ -785,8 +789,6 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 		if (!camera) {
 			voice->frequencyhz += (elevationfrequency - voice->frequencyhz)
 					* ACCESSIBILITY_TARGETING_COMBAT_ELEVATION_SMOOTHING;
-			startfrequency = voice->frequencyhz;
-			endfrequency = voice->frequencyhz;
 		}
 
 		volume = psCalculateVolumeFromDistance(record->candidate.distance,
@@ -816,6 +818,18 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 					&periodms, &durationms,
 					&distancezone, &proximity);
 		}
+		if (camera) {
+			startfrequency = ACCESSIBILITY_TARGETING_CAMERA_START_FREQUENCY_HZ;
+			endfrequency = ACCESSIBILITY_TARGETING_CAMERA_END_FREQUENCY_HZ;
+		} else if (distancezone == 2) {
+			startfrequency = voice->frequencyhz;
+			endfrequency = voice->frequencyhz;
+		} else {
+			startfrequency = combatfrequency;
+			endfrequency = voice->frequencyhz;
+			frequencycontour
+					= ACCESSIBILITY_TONE_COMBAT_CONTOUR_BASE_THEN_END;
+		}
 		if (voice->triggerperiodms <= 0) {
 			voice->triggerperiodms = periodms;
 		} else if (periodms > voice->triggerperiodms) {
@@ -836,7 +850,7 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 #endif
 		) {
 			accessibilityLogEvent("targeting", "combat_slot_cadence",
-					"frame=%d oscillator_slot=%d propnum=%d category=%d cue=%s center_distance=%.3f cue_distance=%.3f cue_distance_available=%d punch_range=%.3f punch_range_exit=%.3f far_threshold=%.3f zone=%s proximity=%.4f period_ms=%d duration_ms=%d continuous=%d trigger_now=%d elevation_degrees=%.2f elevation_zone=%s base_frequency_hz=%.1f target_frequency_hz=%.1f start_frequency_hz=%.1f end_frequency_hz=%.1f volume=%.4f pan=%.4f",
+					"frame=%d oscillator_slot=%d propnum=%d category=%d cue=%s center_distance=%.3f cue_distance=%.3f cue_distance_available=%d punch_range=%.3f punch_range_exit=%.3f far_threshold=%.3f zone=%s proximity=%.4f period_ms=%d duration_ms=%d contour=%s continuous=%d trigger_now=%d raw_elevation_degrees=%.2f elevation_degrees=%.2f elevation_zone=%s target_screen=%.2f,%.2f aim_screen=%.2f,%.2f base_frequency_hz=%.1f target_frequency_hz=%.1f start_frequency_hz=%.1f end_frequency_hz=%.1f volume=%.4f pan=%.4f",
 					frame60, slot, voice->identity.propnum,
 					record->candidate.category,
 					camera ? "security_camera_sweep" : "enemy_proximity",
@@ -848,10 +862,22 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 					distancezone == 2 ? "punch_range"
 						: distancezone == 1 ? "ramping" : "far",
 					proximity, periodms, durationms,
+					camera ? "camera_sweep"
+						: frequencycontour
+								== ACCESSIBILITY_TONE_COMBAT_CONTOUR_BASE_THEN_END
+							? "base_then_elevation"
+						: "continuous_elevation",
 					!camera && distancezone == 2, triggernow,
+					rawelevationdegrees,
 					elevationdegrees,
 					elevationzone > 0 ? "above"
 						: elevationzone < 0 ? "below" : "level",
+					(record->candidate.screenx1
+							+ record->candidate.screenx2) * 0.5f,
+					(record->candidate.screeny1
+							+ record->candidate.screeny2) * 0.5f,
+					record->candidate.aimscreenx,
+					record->candidate.aimscreeny,
 					combatfrequency, elevationfrequency,
 					startfrequency, endfrequency,
 					normalizedvolume, normalizedpan);
@@ -860,7 +886,8 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 		accessibilityToneSetCombatSlot(slot, true,
 				startfrequency, endfrequency,
 				normalizedvolume, normalizedpan, periodms, durationms,
-				!camera && distancezone == 2, restart, triggernow);
+				frequencycontour, !camera && distancezone == 2,
+				restart, triggernow);
 		voice->audible = normalizedvolume > 0.0f;
 		voice->periodms = periodms;
 		voice->durationms = durationms;

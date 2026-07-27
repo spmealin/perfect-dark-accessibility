@@ -68,6 +68,10 @@ struct accessibilitytargetingcandidate {
 	f32 screenx2;
 	f32 screeny2;
 	f32 horizontalscreenoffset;
+	s32 hasverticalaimerror;
+	f32 verticalaimerrordegrees;
+	f32 aimscreenx;
+	f32 aimscreeny;
 	s32 hasdistancecue;
 	f32 distancecue;
 	s32 hasaimquality;
