@@ -285,6 +285,7 @@ Implemented feature keys are also enabled by default for acceptance testing:
 ```ini
 Accessibility.MenuNarration=1
 Accessibility.HudMessages=1
+Accessibility.PlayerStatus=1
 Accessibility.EnvironmentalHazards=1
 Accessibility.InteractableBeacons=1
 Accessibility.IRScannerAudio=1
@@ -323,7 +324,6 @@ Later features may add:
 
 ```ini
 Accessibility.ObjectiveNarration=1
-Accessibility.StatusNarration=1
 Accessibility.Verbosity=1
 ```
 
@@ -367,7 +367,31 @@ Publish an accepted-HUD event after `hudmsgCreateFromArgs` commits a message. Ca
 
 ### Status queries
 
-Capture a per-player snapshot at a stable logical tick: health fraction, shield fraction, equipped weapons/functions, relevant loaded/reserve ammunition, death/pause state, and stage context. A user command formats this snapshot on demand. Automatic threshold announcements compare semantic snapshots and use hysteresis to avoid chatter.
+The status adapter runs after `lvTick`, accepts F1 only in unobscured
+one-local-player gameplay, and formats caller-owned fixed buffers from semantic
+engine state. F1 reports health, nonzero shield, and—during a normal Combat
+Simulator match—team identity, scenario state, player score/rank, applicable
+limit, and match time. Shift+F1 uses the native team score/ranking calculations
+and is silently ignored unless teams are enabled. Alt/Control-modified F1 is
+reserved for other software and ignored.
+
+Scenario fields follow the native HUD/radar visibility contract. A Briefcase
+hold countdown, Hacker Central download percentage, Pop a Cap survival
+countdown, or King of the Hill point countdown is only exposed to the player
+whose HUD shows it. Team queries may name public carriers/control state but
+never reveal another player's private countdown or progress; Capture the Case
+carrier information additionally requires Show on Radar. The adapter
+deliberately omits device telemetry, ammunition, and automatic timer warnings.
+The common HUD path already speaks the native one-minute warning, and the game
+retains its last-ten-seconds alarm.
+
+`lv.c` exposes read-only match-limit getters so the adapter does not own or
+duplicate multiplayer limit state. Output uses the existing replaceable status
+announcement group and records the resolved report or suppression reason in
+the accessibility log. New compact English connective labels are isolated in
+`accessibility_status.c`; they require localization before upstream release.
+Automatic health thresholds remain future work and should compare semantic
+snapshots with hysteresis.
 
 ### Virtual cane
 
@@ -434,7 +458,7 @@ This table records implemented and anticipated changes to established files so f
 | `CMakeLists.txt` | Register core sources, select exactly one native/null speech backend, copy Windows runtimes, and define the clean Windows ZIP target | Build platform/configuration only | `src/accessibility` is outside the game glob; platform backends must not compile together; package staging must never admit ROM, save, log, or personal configuration paths | Implemented through the Windows redistributable target |
 | `port/src/main.c` | Initialize after `configInit`; shut down in `cleanup` | Lifecycle and logger availability | First UI may occur before a later tick; resources need ordered shutdown | Implemented in Milestone 2 with two calls |
 | `port/src/system.c`, `port/include/system.h` | Expose monotonic microsecond timing and read-only process-memory totals | Timing plus Windows working-set/private-byte values when available | Backend-call latency, bounded scan cost, and suspected long-session growth need a shared platform boundary rather than feature-specific native APIs | Implemented; non-Windows memory queries return unavailable while timing remains portable |
-| `port/src/pdmain.c` | Call the compile-time-optional performance observer, call accessibility gameplay ticks immediately after `lvTick`, and reset owned audio before `lvStop` | Timing, input, stage/player context, safe main-thread collision queries, and teardown | Gameplay cues need settled semantic state, cane, marker, and hill collision work must remain on the main thread, and owned sounds must stop before stage memory is disabled | Beacon, virtual-cane, laser-hazard, audible-marker, R-Tracker, Combat Simulator radar, and King of the Hill ticks run after `lvTick`; their stage-stop resets protect owned voices and stage identities |
+| `port/src/pdmain.c` | Call the compile-time-optional performance observer, call accessibility gameplay ticks immediately after `lvTick`, and reset owned state/audio before `lvStop` | Timing, input, stage/player context, safe main-thread collision queries, status-command state, and teardown | Gameplay cues and on-demand status need settled semantic state; cane, marker, and hill collision work must remain on the main thread; owned sounds and input edges must reset before stage memory is disabled | Beacon, virtual-cane, laser-hazard, audible-marker, R-Tracker, Combat Simulator radar, King of the Hill, and F1 status ticks run after `lvTick`; stage-stop resets protect owned voices, identities, and shortcut edges |
 | `port/src/video.c`, `port/include/video.h`, and diagnostic-only boundaries in `port/fast3d/gfx_pc.cpp`, `gfx_sdl2.cpp`, `gfx_opengl.cpp`, and their headers | Under `ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS`, expose fixed per-frame timings and startup graphics metadata without changing rendering | SDL event/dimension time, framebuffer setup/resolve, display-list translation, limiter, swap, finish, window/GL identity | Aggregate main-loop cadence cannot distinguish game work from a blocked OpenGL present; the rare fault must be captured in its first reproduction | Compile-time optional; ordinary builds contain no timing path. Fast3D changes contain only timers/read-only getters and no accessibility policy or logging |
 | `port/src/audio.c` | Mix procedural accessibility voices into each completed stereo buffer before SDL queueing | Centered targeting tone, firing-range presence pulse, single/patterned beacon and cane chirps, marker sweeps/identities, toggle and weapon-function patterns, positioned environmental-hazard tone state, hostile/security-camera combat cues, concurrent R-Tracker markers, serialized Combat Simulator radar events, and the King of the Hill guide | Clean responsive carriers cannot be made from game samples with finite duration or baked-in modulation | Independent fixed voices share one staging buffer: centered fine aim, one harmonic firing-range round-robin lane, one/two/three-pulse beacon patterns, a two/three-beep rising/falling toggle-and-cane-mode lane, seven cane slots, four two-oscillator marker slots with one serialized identity lane, one dedicated hill dual-sweep/identity lane, a one/two-beep weapon-function lane, continuous hazards, ten combat slots with fixed or swept frequency, ten R-Tracker slots, and one Combat Simulator radar lane; none allocate at runtime |
 | `src/game/menutick.c` | Observe the final active dialog/focus once immediately after `menuProcessInput` | Menu slot/player/root/depth and current menu/dialog state | Captures all focus paths after item state settles without hooks in every transition | Implemented in Milestone 4 with one call |
@@ -447,7 +471,7 @@ This table records implemented and anticipated changes to established files so f
 | `src/game/mplayer/mplayer.c` | Publish the direct-rendered post-death overlay once per rendered state | Localized prompt, displayed positive countdown integer, visibility, and player | The modal text bypasses the common HUD queue; polling only `deadtimer` would speak while the overlay is suppressed by death animation, pause, co-op/anti rules, cutscene, or match end | Implemented with fixed per-player deduplication; the prompt is spoken on overlay entry and each changed displayed integer once |
 | `src/game/objectives.c` | Publish inside the changed-status branch of `objectivesCheckAll` | Objective index, previous/new state | The existing HUD text can duplicate or omit useful objective identity | Proposed |
 | `src/game/chraction.c` | Optional later directional damage event after actual player damage | Victim player, magnitude band, direction/source category | Snapshot detects loss but not source/direction | Question; not needed for first status query |
-| `src/game/lv.c` | Capture projected target bounds, onscreen hostile-character props, and the existing query-ray hit coordinate before prop rendering, then observe after player sight/HUD rendering | Finite projected bounds, final filtered `lookingatprop`, exact query hit, native sight state, player viewport, and rendered character membership | PC prop rendering converts float model matrices in place before sight/HUD state is final, so one hook cannot safely obtain both states | Two narrow calls in `lvRender` support both firing-range and generic hostile-character profiles; query hits are accepted only when the prop survives the profile's final semantic filtering |
+| `src/game/lv.c` | Capture projected target bounds, onscreen hostile-character props, and the existing query-ray hit coordinate before prop rendering; observe after player sight/HUD rendering; expose read-only multiplayer limit getters | Finite projected bounds, final filtered `lookingatprop`, exact query hit, native sight state, player viewport, rendered character membership, and time/player/team score limits | PC prop rendering converts float model matrices in place before sight/HUD state is final, so one hook cannot safely obtain both targeting states; status queries must not duplicate private limit globals | Two narrow calls in `lvRender` support firing-range and generic hostile-character profiles; query hits survive final semantic filtering. Three pure getters supply the F1 status adapter with authoritative limits |
 | `src/game/bondgun.c` | Mark forward/back weapon-cycle requests and observe settled weapon/function state after gameplay weapon processing | Requested weapon, player, stage, equipped weapon, final `bgunIsUsingSecondaryFunction()` value, and the localized function label when the native Show Gun Function option makes it visible | Speech must follow a successful semantic switch rather than input alone; the function label is rendered directly rather than admitted to the HUD-message queue, and the visual state also includes persistent configuration and temporary inversion | Two request markers reuse the existing cycle functions; one end-of-tick observation resolves pending weapon speech and publishes visible function-label changes, while initial/stage and weapon changes establish silent baselines |
 | `src/game/prop.c` and `src/include/game/prop.h` | Offer an optional hit-coordinate result from the existing non-shooting aim query | Selected query prop and its already-calculated collision point | Fine aim cannot truthfully use projected bounds, and repeating the collision query would duplicate expensive work | `propFindAimingAtWithHit` wraps the unchanged query path; ordinary callers and shot behavior remain unchanged |
 | `src/game/sight.c` | Expose sight-validity/friendliness helpers to adapter | Eligibility and relationship | Avoid duplicating sight rules | Question; prefer existing public APIs if sufficient |
@@ -455,7 +479,7 @@ This table records implemented and anticipated changes to established files so f
 | `src/game/propobj.c`, `src/include/game/propobj.h` | Expose pure IR/X-Ray renderer queries and the native potential-interaction predicate | Conditional-scenery/infrared highlight state, X-Ray range, and broad object interaction semantics before range/facing checks | Copied flag, movement-state, or eraser math could drift and announce a different object set | `objIsHighlightedByInfrared`, `objGetXrayHighlightDistance`, and `objIsPotentiallyInteractable` are shared with their native consumers |
 | `src/game/propsnd.c` | Reuse public read-only distance-volume and pan calculations for procedural spatial cues | World position, distance, range, volume, and pan | Procedural cues should retain the tested spatial behavior without allocating or stopping gameplay channels | No hook needed; beacon and hazard cores call `psCalculateVolumeFromDistance` and `psCalculatePan` |
 | `src/include/constants.h` | Formerly reserved `PSTYPE_ACCESSIBILITY_TARGETING`; remove the unused owner after every active targeting lane moved to fixed procedural audio | No remaining targeting property-sound payload | Keeping an unreachable native-channel fallback enlarged lifecycle and telemetry state and reserved an engine-global owner value | Removed during the accessibility architecture debt audit; targeting no longer creates or owns a game sound channel |
-| `port/include/input.h` | Use provisional context-sensitive PC F3 through F12 accessibility keys and expose modifier bits | Development-only action identifiers | Combat Simulator uses F3 for a radar pulse and Shift+F3 for contact alerts; gameplay uses F4 for virtual-cane mode, F5/F6/F8 for interactable/door/pickup scanners, F7 for non-hostile people, and F9–F12 for player markers; menus retain their own contexts; modified OS/debug chords must not trigger unmodified actions | F3 and F10–F12 are named SDL scancodes; replacement by Milestone 6 actions/settings remains required |
+| `port/include/input.h` | Use provisional context-sensitive PC F1 and F3 through F12 accessibility keys and expose modifier bits | Development-only action identifiers | Gameplay uses F1 for player status and team-only Shift+F1 for team status; Combat Simulator uses F3 for a radar pulse and Shift+F3 for contact alerts; F4 controls the cane, F5/F6/F8 scanners, F7 people, and F9–F12 markers; menus retain their own contexts; modified OS/debug chords must not trigger unmodified actions | F1, F3, and F10–F12 are named SDL scancodes; replacement by Milestone 6 actions/settings remains required |
 | `port/src/input.c` | Add configurable accessibility actions or a dispatch boundary | Repeat, status, beacon/scan, cancel, navigation commands | Current binding model represents game controls, not a separate action set | Proposed for Milestone 6; provisional keys require no binding-model change |
 | `port/src/input.c`, `port/src/optionsmenu.c`, `src/include/constants.h`, `src/game/bondmove.c` | Add a configurable reset-view gameplay action using the unused extended control bit | Pressed edge from End, R3, or a player-selected replacement binding | Gives a deterministic horizontal-orientation recovery command without changing yaw or bypassing the binding system | Implemented as `CK_1000`/`BUTTON_RESET_VIEW`; PC defaults are End and right-stick click |
 | `port/src/optionsmenu.c` | Add an accessibility settings entry/dialog | Existing registered values, including proven beacon actions | Users need discoverable control without editing `pd.ini` | Proposed for Milestone 6 after beacon behavior is tested |

@@ -312,7 +312,27 @@ Expose accepted HUD messages and subtitle text without duplicating messages that
 
 ### Player status and inventory
 
-Offer deliberate queries for health, shield, weapon, firing mode, ammunition, and inventory. Reserve unsolicited announcements for important changes and thresholds.
+`Accessibility.PlayerStatus` defaults to `1` and is subordinate to
+`Accessibility.Enabled`. During unobscured one-local-player gameplay, F1
+interrupts stale speech with a compact semantic report. Health is always first;
+nonzero shields follow. A Combat Simulator report then adds team identity when
+applicable, player-visible scenario state, score, rank, score limit, and match
+time. Timed matches report time remaining; unlimited matches report elapsed
+time. The query does not repeat the automatic one-minute HUD message or
+last-ten-seconds alarm, and it does not report device telemetry.
+
+In a team Combat Simulator game, Shift+F1 reports team name, team score and
+rank, aggregate enemy kills and deaths, leader gap, player-visible shared
+scenario state, team score limit, and match time. Shift+F1 produces no speech
+outside a team scenario. Both shortcuts are ignored in menus, pause, cutscenes,
+death, split-screen play, and when Alt or Control is held. Scenario additions
+mirror native visibility: private progress/countdowns are only reported to the
+player who receives them visually, while Capture the Case carrier details
+require the native Show on Radar option.
+
+Later work may expand deliberate inventory queries and add carefully tested
+automatic health thresholds. Reserve unsolicited announcements for important
+changes and use hysteresis to avoid chatter.
 
 ### Targeting and interaction
 

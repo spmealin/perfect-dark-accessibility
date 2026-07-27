@@ -45,6 +45,9 @@ void lvSetDifficulty(s32 difficulty);
 void lvSetMpTimeLimit60(u32 limit);
 void lvSetMpScoreLimit(u32 limit);
 void lvSetMpTeamScoreLimit(u32 limit);
+s32 lvGetMpTimeLimit60(void);
+s32 lvGetMpScoreLimit(void);
+s32 lvGetMpTeamScoreLimit(void);
 f32 lvGetStageTimeInSeconds(void);
 s32 lvGetStageTime60(void);
 

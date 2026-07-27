@@ -2567,6 +2567,21 @@ void lvSetMpTeamScoreLimit(u32 limit)
 	g_MpTeamScoreLimit = limit;
 }
 
+s32 lvGetMpTimeLimit60(void)
+{
+	return g_MpTimeLimit60;
+}
+
+s32 lvGetMpScoreLimit(void)
+{
+	return g_MpScoreLimit;
+}
+
+s32 lvGetMpTeamScoreLimit(void)
+{
+	return g_MpTeamScoreLimit;
+}
+
 f32 lvGetStageTimeInSeconds(void)
 {
 	return g_StageTimeElapsed1f;

@@ -597,6 +597,32 @@ Suggested next smallest experiment:
 Rollback/off-switch result:
 ```
 
+## On-demand player and team status
+
+With `Accessibility.PlayerStatus=1`, enter active one-local-player mission
+gameplay and press F1 at known full, damaged, shielded, and unshielded states.
+Confirm the report starts with the rounded health percentage, omits shields at
+zero, includes nonzero shields, interrupts stale speech, and contains no device
+telemetry. Open a menu, pause, enter a cutscene, die, and hold Alt or Control
+while pressing F1; each must remain silent and log the matching suppression
+reason. Disable the setting and confirm F1 remains silent.
+
+In a one-local-player Combat Simulator match, compare F1 against the native
+player ranking, score and limit. Verify timed matches report remaining time and
+unlimited matches report elapsed time. Confirm the native one-minute HUD
+message is still spoken once through HUD narration and the last-ten-seconds
+alarm remains audible without a second automatic status announcement.
+
+Exercise Hold the Briefcase, Capture the Case, Hacker Central, Pop a Cap, and
+King of the Hill. Private countdown/progress values must appear only for the
+player whose native HUD shows them. Capture the Case carrier information must
+not appear when Show on Radar is disabled. In a team match, Shift+F1 must report
+the player's team, native team score/rank, enemy kills, deaths, leader gap,
+public scenario state, applicable team limit, and time. In a free-for-all,
+mission, or any other non-team context, Shift+F1 must produce no speech.
+Correlate accepted and suppressed commands with `status/query` and
+`announcement/output_result group=status`.
+
 ## Coverage language
 
 Use precise statements such as “A blind tester independently opened the Solo Missions destination from the documented main-menu start state on this build.” Avoid “menus are accessible,” “screen-reader support is complete,” or “the game is playable” until the tested coverage truly supports those claims.
