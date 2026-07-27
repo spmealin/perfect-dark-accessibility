@@ -365,10 +365,15 @@ static void accessibilityMenuDescribeItem(struct accessibilitymenusnapshot *snap
 	case MENUITEMTYPE_SELECTABLE:
 		strcpy(snapshot->role, "button");
 
-		/* Some centered buttons render their visible caption from param3. */
-		if (!snapshot->label[0] && item->param3) {
+		/*
+		 * Selectables can render dynamic secondary text on their right side.
+		 * Resolve it through the same path as menuitemSelectableRender.
+		 */
+		if (item->param3
+				&& !(item->flags
+					& (MENUITEMFLAG_LABEL_HASRIGHTTEXT | MENUITEMFLAG_BIGFONT))) {
 #ifndef PLATFORM_N64
-			if (item->flags & MENUITEMFLAG_LITERAL_TEXT) {
+			if (!snapshot->label[0] && item->flags & MENUITEMFLAG_LITERAL_TEXT) {
 				text = (const char *)item->param3;
 			} else
 #endif
@@ -376,8 +381,13 @@ static void accessibilityMenuDescribeItem(struct accessibilitymenusnapshot *snap
 				text = menuResolveText(item->param3, item);
 			}
 
-			accessibilityMenuCopyNormalized(snapshot->label,
-					sizeof(snapshot->label), text);
+			accessibilityMenuCopyNormalized(option, sizeof(option), text);
+
+			if (!snapshot->label[0]) {
+				snprintf(snapshot->label, sizeof(snapshot->label), "%s", option);
+			} else if (option[0] && strcmp(snapshot->label, option) != 0) {
+				snprintf(snapshot->value, sizeof(snapshot->value), "%s", option);
+			}
 		}
 		break;
 	case MENUITEMTYPE_CHECKBOX:
@@ -390,10 +400,18 @@ static void accessibilityMenuDescribeItem(struct accessibilitymenusnapshot *snap
 		strcpy(snapshot->role, "slider");
 		memset(&data, 0, sizeof(data));
 		if (item->handler) {
+			char formatted[ACCESSIBILITY_MENU_FIELD_MAX] = "";
+
 			item->handler(MENUOP_GETSLIDER, item, &data);
 			value = data.slider.value;
+			memset(&data, 0, sizeof(data));
+			data.slider.value = value;
+			data.slider.label = formatted;
+			item->handler(MENUOP_GETSLIDERLABEL, item, &data);
+			accessibilityMenuCopyNormalized(snapshot->value,
+					sizeof(snapshot->value), formatted);
 
-			if ((s32)item->param3 > 0) {
+			if (!snapshot->value[0] && (s32)item->param3 > 0) {
 				s64 percentage = ((s64)value * 100 + (s32)item->param3 / 2)
 						/ (s32)item->param3;
 
@@ -404,7 +422,7 @@ static void accessibilityMenuDescribeItem(struct accessibilitymenusnapshot *snap
 				}
 
 				snprintf(snapshot->value, sizeof(snapshot->value), "%d%%", (s32)percentage);
-			} else {
+			} else if (!snapshot->value[0]) {
 				strcpy(snapshot->value, "0%");
 			}
 

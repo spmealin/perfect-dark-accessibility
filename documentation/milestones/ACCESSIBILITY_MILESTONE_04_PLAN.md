@@ -273,7 +273,7 @@ The resolver must use the active `g_MpPlayerNum` and current-player context esta
 - Label: `menuResolveParam2Text`.
 - Numeric value: `MENUOP_GETSLIDER`.
 - Maximum: `item->param3`, matching existing slider behavior.
-- Display value: report the raw handler value as a rounded percentage of `item->param3`, clamped to 0–100 percent. This acceptance-testing revision replaces the original formatted-label/raw-unit behavior.
+- Display value: after obtaining the numeric value, request `MENUOP_GETSLIDERLABEL` with that value and a bounded caller-owned buffer. Use its nonempty normalized result because it is the semantic value rendered by the control. If the handler supplies no label, report the raw handler value as a rounded percentage of `item->param3`, clamped to 0–100 percent.
 - Role: `slider`.
 - Include position/range only when truthful; do not assume a zero minimum if the particular handler formats another semantic scale.
 - Same-focus value changes replace prior slider speech.
@@ -792,7 +792,9 @@ Remaining limitations: no permanent/discoverable bindings; English role/status w
 
 Acceptance-testing default update: after the implementation pass, the project owner requested that `Accessibility.Enabled`, `Accessibility.LoggingEnabled`, `Accessibility.SpeechEnabled`, and `Accessibility.MenuNarration` all default to one. Existing saved `pd.ini` values continue to override these compiled defaults.
 
-Acceptance-testing speech refinements: dialog titles are now spoken only when entering or returning to a dialog, not for each option within it. Slider values are now rounded percentages of their configured maximum instead of raw engine values or custom render labels.
+Acceptance-testing speech refinements: dialog titles are now spoken only when entering or returning to a dialog, not for each option within it. Slider values without a semantic display label are rounded percentages of their configured maximum instead of raw engine values.
+
+Combat Simulator Advanced Setup follow-up: the Limits and Player Handicaps handlers already provide meaningful visible slider labels, while Simulant slot rows render generated names as right-side selectable text. The shared resolver now prefers a nonempty `MENUOP_GETSLIDERLABEL` result and otherwise retains the percentage fallback. Selectables announce their rendered right-side text as a value, or use it as the label when the left side is empty. This keeps the behavior menu-agnostic and requires no new hook in `src/game/mplayer/setup.c`.
 
 Completion decision: after testing the refinements above, the project owner explicitly marked Milestone 4 complete. The unexecuted exhaustive harness, region matrix, and performance measurements remain documented regression opportunities and do not broaden the user-visible coverage claimed here.
 
