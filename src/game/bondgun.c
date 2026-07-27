@@ -12055,8 +12055,20 @@ void bgunTickGameplay(bool triggeron)
 	}
 
 	invIncrementHeldTime(bgunGetWeaponNum(HAND_RIGHT), bgunGetWeaponNum(HAND_LEFT));
-	accessibilityWeaponFunctionObserve(g_Vars.currentplayernum, g_Vars.stagenum,
-			bgunGetWeaponNum(HAND_RIGHT), bgunIsUsingSecondaryFunction());
+	{
+		s32 weaponnum = bgunGetWeaponNum(HAND_RIGHT);
+		s32 secondary = bgunIsUsingSecondaryFunction();
+		struct weaponfunc *func = weaponGetFunctionById(weaponnum, secondary);
+		const char *visiblefunctionname = NULL;
+
+		if (optionsGetShowGunFunction(g_Vars.currentplayerstats->mpindex)
+				&& func) {
+			visiblefunctionname = langGet(func->name);
+		}
+
+		accessibilityWeaponFunctionObserve(g_Vars.currentplayernum,
+				g_Vars.stagenum, weaponnum, secondary, visiblefunctionname);
+	}
 }
 
 void bgunSetPassiveMode(bool enable)

@@ -18,6 +18,8 @@ s32 accessibilityAnnouncementQueueHud(const char *text, s32 type, u32 flags,
 		s32 playernum, s32 channelnum, u32 id);
 s32 accessibilityAnnouncementWeaponChange(const char *text,
 		const char *source, s32 playernum, s32 interrupt);
+s32 accessibilityAnnouncementWeaponFunction(const char *text,
+		s32 playernum);
 s32 accessibilityAnnouncementStatus(const char *text, const char *source,
 		s32 playernum, s32 interrupt);
 void accessibilityAnnouncementCancel(void);

@@ -230,7 +230,7 @@ void accessibilityWeaponQuickChangeRequested(s32 playernum,
 }
 
 void accessibilityWeaponFunctionObserve(s32 playernum, s32 stagenum,
-		s32 weaponnum, s32 secondary)
+		s32 weaponnum, s32 secondary, const char *visiblefunctionname)
 {
 	struct accessibilityweaponfunctionstate *state;
 
@@ -242,7 +242,8 @@ void accessibilityWeaponFunctionObserve(s32 playernum, s32 stagenum,
 	secondary = secondary != 0;
 
 	if (!accessibilityIsWeaponFunctionCuesEnabled()
-			&& !accessibilityIsWeaponChangeAnnouncementsEnabled()) {
+			&& !accessibilityIsWeaponChangeAnnouncementsEnabled()
+			&& !accessibilityIsHudMessagesEnabled()) {
 		memset(state, 0, sizeof(*state));
 		return;
 	}
@@ -293,6 +294,24 @@ void accessibilityWeaponFunctionObserve(s32 playernum, s32 stagenum,
 				state->secondary ? "secondary" : "primary",
 				secondary ? "secondary" : "primary",
 				secondary ? 2 : 1);
+	}
+
+	if (accessibilityIsHudMessagesEnabled()
+			&& state->secondary != secondary
+			&& visiblefunctionname
+			&& visiblefunctionname[0]) {
+		char functionname[ACCESSIBILITY_WEAPON_TEXT_MAX];
+
+		accessibilityWeaponCopyNormalized(functionname, sizeof(functionname),
+				visiblefunctionname);
+
+		if (functionname[0]) {
+			accessibilityAnnouncementWeaponFunction(functionname, playernum);
+			accessibilityLogEvent("weapon_function", "announced",
+					"player=%d stage=%d weapon=%d function=%s text=%s",
+					playernum, stagenum, weaponnum,
+					secondary ? "secondary" : "primary", functionname);
+		}
 	}
 
 	state->secondary = secondary;

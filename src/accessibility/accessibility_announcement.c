@@ -116,6 +116,29 @@ s32 accessibilityAnnouncementWeaponChange(const char *text,
 	return accepted;
 }
 
+s32 accessibilityAnnouncementWeaponFunction(const char *text, s32 playernum)
+{
+	s32 accepted;
+	u64 started;
+	u64 elapsed;
+
+	if (!text || !text[0]) {
+		accessibilityLogEvent("announcement", "suppressed",
+				"group=weapon_function decision=empty player=%d", playernum);
+		return 0;
+	}
+
+	started = sysGetMicroseconds();
+	accepted = accessibilitySpeechOutput(text, 0);
+	elapsed = sysGetMicroseconds() - started;
+	accessibilityLogEvent("announcement", "output_result",
+			"group=weapon_function priority=normal interrupt=0 accepted=%d available=%d elapsed_us=%llu player=%d text=%s",
+			accepted, accessibilitySpeechIsAvailable(),
+			(unsigned long long)elapsed, playernum, text);
+
+	return accepted;
+}
+
 s32 accessibilityAnnouncementStatus(const char *text, const char *source,
 		s32 playernum, s32 interrupt)
 {

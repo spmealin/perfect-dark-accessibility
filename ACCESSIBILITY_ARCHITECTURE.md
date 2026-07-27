@@ -234,8 +234,8 @@ an experiment only after Tolk thread/COM ownership is proven.
 
 ### Announcements and future queue
 
-The current announcement coordinator owns the replaceable menu group, normal HUD
-and weapon-change output, generic feature status output, cancellation, elapsed
+The current announcement coordinator owns the replaceable menu group, normal HUD,
+weapon-change, and direct-rendered weapon-function output, generic feature status output, cancellation, elapsed
 backend timing, and a fixed 12,288-byte retained menu-repeat buffer. Feature
 adapters do not allocate retained speech text and do not call the platform
 backend. Tolk itself consumes or queues UTF-16 text during its asynchronous
@@ -255,7 +255,7 @@ Suggested behaviour:
 
 - **Critical:** death or immediately blocking failure; interrupts lower output.
 - **High:** objective failure/change or severe status threshold; replaces stale events in its group.
-- **Normal:** focus, selected value, weapon change, accepted HUD message.
+- **Normal:** focus, selected value, weapon change or function label, accepted HUD message.
 - **Low:** exploratory scanner detail and optional hints; expires quickly.
 - Repeated focus on the same semantic item is suppressed unless the user invokes repeat.
 - Rapid slider/list changes replace an earlier value from the same control.
@@ -441,7 +441,7 @@ This table records implemented and anticipated changes to established files so f
 | `src/game/objectives.c` | Publish inside the changed-status branch of `objectivesCheckAll` | Objective index, previous/new state | The existing HUD text can duplicate or omit useful objective identity | Proposed |
 | `src/game/chraction.c` | Optional later directional damage event after actual player damage | Victim player, magnitude band, direction/source category | Snapshot detects loss but not source/direction | Question; not needed for first status query |
 | `src/game/lv.c` | Capture projected target bounds, onscreen hostile-character props, and the existing query-ray hit coordinate before prop rendering, then observe after player sight/HUD rendering | Finite projected bounds, final filtered `lookingatprop`, exact query hit, native sight state, player viewport, and rendered character membership | PC prop rendering converts float model matrices in place before sight/HUD state is final, so one hook cannot safely obtain both states | Two narrow calls in `lvRender` support both firing-range and generic hostile-character profiles; query hits are accepted only when the prop survives the profile's final semantic filtering |
-| `src/game/bondgun.c` | Mark forward/back weapon-cycle requests and observe settled weapon/function state after gameplay weapon processing | Requested weapon, player, stage, equipped weapon, and the final `bgunIsUsingSecondaryFunction()` value | Speech must follow a successful semantic switch rather than input alone; the function visual also includes persistent configuration and temporary inversion | Two request markers reuse the existing cycle functions; one end-of-tick observation resolves pending speech, while initial/stage changes establish silent baselines |
+| `src/game/bondgun.c` | Mark forward/back weapon-cycle requests and observe settled weapon/function state after gameplay weapon processing | Requested weapon, player, stage, equipped weapon, final `bgunIsUsingSecondaryFunction()` value, and the localized function label when the native Show Gun Function option makes it visible | Speech must follow a successful semantic switch rather than input alone; the function label is rendered directly rather than admitted to the HUD-message queue, and the visual state also includes persistent configuration and temporary inversion | Two request markers reuse the existing cycle functions; one end-of-tick observation resolves pending weapon speech and publishes visible function-label changes, while initial/stage and weapon changes establish silent baselines |
 | `src/game/prop.c` and `src/include/game/prop.h` | Offer an optional hit-coordinate result from the existing non-shooting aim query | Selected query prop and its already-calculated collision point | Fine aim cannot truthfully use projected bounds, and repeating the collision query would duplicate expensive work | `propFindAimingAtWithHit` wraps the unchanged query path; ordinary callers and shot behavior remain unchanged |
 | `src/game/sight.c` | Expose sight-validity/friendliness helpers to adapter | Eligibility and relationship | Avoid duplicating sight rules | Question; prefer existing public APIs if sufficient |
 | `src/game/radar.c`, `src/include/game/radar.h` | Expose one read-only R-Tracker marker classification and make the native renderer consume it | None/yellow/blue/character category for an active prop | A second copy of cheat, cloak, death, and flag rules could drift from the visual radar and disclose different targets | Implemented for the nonvisual R-Tracker slice; rendering output is otherwise unchanged |
