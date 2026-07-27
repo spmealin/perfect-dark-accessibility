@@ -76,6 +76,7 @@
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_beacon.h"
 #include "accessibility/accessibility_cane.h"
+#include "accessibility/accessibility_combat_radar.h"
 #include "accessibility/accessibility_hazard.h"
 #include "accessibility/accessibility_hud.h"
 #include "accessibility/accessibility_marker.h"
@@ -520,6 +521,7 @@ void mainLoop(void)
 
 		accessibilityBeaconReset("stage_stop", true);
 		accessibilityCaneReset("stage_stop");
+		accessibilityCombatRadarReset("stage_stop");
 		accessibilityHazardReset("stage_stop");
 		accessibilityHudReset("stage_stop");
 		accessibilityMarkerReset("stage_stop");
@@ -561,6 +563,7 @@ void mainTick(void)
 			lvTick();
 			accessibilityBeaconTick();
 			accessibilityCaneTick();
+			accessibilityCombatRadarTick();
 			accessibilityHazardTick();
 			accessibilityMarkerTick();
 			accessibilityTrackerTick();

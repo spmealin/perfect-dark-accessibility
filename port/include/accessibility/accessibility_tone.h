@@ -13,6 +13,16 @@ enum accessibilitytonecombatcontour {
 	ACCESSIBILITY_TONE_COMBAT_CONTOUR_BASE_THEN_END,
 };
 
+enum accessibilitytoneradarkind {
+	ACCESSIBILITY_TONE_RADAR_ENEMY,
+	ACCESSIBILITY_TONE_RADAR_ALLY,
+	ACCESSIBILITY_TONE_RADAR_OBJECTIVE,
+	ACCESSIBILITY_TONE_RADAR_OTHER,
+	ACCESSIBILITY_TONE_RADAR_LAUNCH,
+	ACCESSIBILITY_TONE_RADAR_EMPTY,
+	ACCESSIBILITY_TONE_RADAR_UNAVAILABLE,
+};
+
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 struct accessibilitytonediagnostics {
 	s32 toneenabled;
@@ -23,6 +33,8 @@ struct accessibilitytonediagnostics {
 	s32 hazardenabled;
 	s32 combatenabledslots;
 	s32 trackerenabledslots;
+	s32 radarenabled;
+	s32 radarsequence;
 	s32 markerenabledslots;
 	s32 canerequestedmask;
 	s32 caneactivemask;
@@ -61,6 +73,9 @@ void accessibilityToneSetTrackerSlot(s32 slot, s32 enabled, f32 frequencyhz,
 		f32 volume, f32 pan, s32 periodms, s32 height, s32 rear,
 		s32 restart);
 void accessibilityToneStopTracker(void);
+void accessibilityTonePlayRadarPing(f32 frequencyhz, f32 volume, f32 pan,
+		s32 height, s32 rear, s32 kind);
+void accessibilityToneStopRadar(void);
 void accessibilityTonePlayCaneSlot(s32 slot, f32 startfrequencyhz,
 		f32 endfrequencyhz, f32 volume, f32 pan, s32 durationms);
 void accessibilityToneStopCane(void);

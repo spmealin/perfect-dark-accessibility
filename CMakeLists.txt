@@ -282,6 +282,7 @@ set(SRC_ACCESSIBILITY
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_announcement.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_beacon.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_cane.c"
+  "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_combat_radar.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_hud.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_hazard.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_log.c"

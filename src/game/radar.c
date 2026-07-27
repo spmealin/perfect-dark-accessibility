@@ -16,6 +16,7 @@
 #include "data.h"
 #include "gbiex.h"
 #include "types.h"
+#include "accessibility/accessibility_combat_radar.h"
 
 u32 g_RadarX;
 u32 g_RadarY;
@@ -128,6 +129,8 @@ Gfx *radarDrawDot(Gfx *gdl, struct prop *prop, struct coord *dist, u32 colour1, 
 	f32 spcc;
 
 	osSyncPrintf("RadarDrawDot : Prop=%x", prop);
+	accessibilityCombatRadarCaptureDot(prop, dist, colour1, colour2,
+			swapcolours, g_RadarYIndicatorsEnabled);
 
 	spcc = (atan2f(dist->x, dist->z) * 180.0f) / M_PI + g_Vars.currentplayer->vv_theta + 180.0f;
 	sqdist = sqrtf(dist->z * dist->z + dist->x * dist->x) * (1.0f / 250.0f);
@@ -256,21 +259,27 @@ Gfx *radarRender(Gfx *gdl)
 
 	if (g_Vars.mplayerisrunning) {
 		if (g_Vars.normmplayerisrunning && (g_MpSetup.options & MPOPTION_NORADAR)) {
+			accessibilityCombatRadarCaptureBegin(false);
 			return gdl;
 		}
 
 		if ((g_PlayerConfigsArray[g_Vars.currentplayerstats->mpindex].base.displayoptions & 0x00000004) == 0) {
+			accessibilityCombatRadarCaptureBegin(false);
 			return gdl;
 		}
 	} else if ((g_Vars.currentplayer->devicesactive & ~g_Vars.currentplayer->devicesinhibit & DEVICE_RTRACKER) == 0) {
 		if (!g_MissionConfig.iscoop || !g_Vars.coopradaron) {
+			accessibilityCombatRadarCaptureBegin(false);
 			return gdl;
 		}
 	}
 
 	if (g_Vars.currentplayer->mpmenuon || g_Vars.currentplayer->isdead) {
+		accessibilityCombatRadarCaptureBegin(false);
 		return gdl;
 	}
+
+	accessibilityCombatRadarCaptureBegin(true);
 
 #if PAL
 	g_ScaleX = 1;
@@ -417,6 +426,7 @@ Gfx *radarRender(Gfx *gdl)
 	}
 
 	// Draw dot for the current player
+	accessibilityCombatRadarCaptureSetOwnMarker(true);
 	if (scenarioRadarChr(&gdl, g_Vars.currentplayer->prop) == false) {
 		pos.x = 0;
 		pos.y = 0;
@@ -431,12 +441,14 @@ Gfx *radarRender(Gfx *gdl)
 
 		gdl = radarDrawDot(gdl, g_Vars.currentplayer->prop, &pos, colour, 0, 0);
 	}
+	accessibilityCombatRadarCaptureSetOwnMarker(false);
 
 #ifndef PLATFORM_N64
 	gSPClearExtraGeometryModeEXT(gdl++, G_ASPECT_MODE_EXT);
 #endif
 
 	g_ScaleX = 1;
+	accessibilityCombatRadarCaptureEnd();
 
 	return gdl;
 }

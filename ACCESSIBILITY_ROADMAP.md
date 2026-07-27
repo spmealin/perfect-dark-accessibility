@@ -140,6 +140,18 @@ Engineering extension: an active CamSpy now contributes incomplete engine hologr
 - **Risks:** Ten concurrent voices may mask speech or other cues; stereo plus modulation may not make front/rear sufficiently distinct; vertical and cadence thresholds require blind-user tuning; the current single-player policy leaves cooperative composition unresolved. A scan above 0.5 ms sustained or 2 ms once requires investigation.
 - **Explicit non-goals:** No target names, objective status, route guidance, line-of-sight filtering, aim automation, multiplayer radar, ordinary scenario/player radar elements, runtime allocation, or game sound-channel consumption.
 
+### Prioritized Combat Simulator audio-radar slice
+
+- **Status:** Detailed design and engineering prototype implemented; blind-user acceptance and dense long-session testing remain pending.
+- **Detailed specification:** `documentation/ACCESSIBILITY_COMBAT_RADAR_AUDIO_PLAN.md` is the authoritative semantic, acoustic, lifecycle, performance, and acceptance contract.
+- **Goal:** Provide an on-demand nonvisual snapshot of exactly the native Combat Simulator radar and restrained automatic awareness of enemy contacts approaching meaningful distance bands.
+- **Systems:** Final native `radarRender` marker capture, a fixed 16-marker snapshot, fixed 16-contact state, fixed 48-event priority queue, one dedicated procedural mixer voice, F3/Shift+F3 input, configuration, lifecycle reset, structured logging, and optional performance diagnostics.
+- **Initial behavior:** F3 plays a clockwise 800 ms snapshot excluding the current player. Pitch rises from 650 Hz at the 4,000-unit edge to 1,400 Hz nearby; pan, rear modulation, native height patterns, and category timbres convey position and marker kind. Shift+F3 toggles automatic alerts for a new enemy and inward crossings at 2,000 and 750 units, with hysteresis, disappearance filtering, cooldown, priority, and a silent baseline.
+- **Acceptance:** Compare audio with native markers across radar options, teams, cloak/death/respawn, and every scenario callback; verify manual replacement/order/empty/unavailable responses; verify contact transitions and suppression; run dense eight-simulant matches for at least 20 minutes; test coexistence with targeting, enemy voices, cane, speech, and other procedural output.
+- **Evidence:** Correlate `combat_radar` frame, marker, command, contact, event, scope, telemetry, and reset records with native radar state and perceived audio. With advanced diagnostics enabled, inspect frame cadence, mixer activity, queue maximum/drops, and process memory.
+- **Risks:** One serialized voice can delay dense snapshots; category timbres and rear/height patterns may mask each other; render capture creates a deliberate dependency on a current native radar frame; thresholds and volume require blind-user tuning. Queue overflow, stale identities, repeated boundary chatter, or sustained performance regression blocks acceptance.
+- **Explicit non-goals:** No world reconstruction, line-of-sight or viewport filtering, route guidance, names, speech per contact, aim automation, split-screen ownership, cooperative/anti composition, or game sound-channel allocation.
+
 ### Prioritized IR Scanner highlighted-object slice
 
 - **Status:** Engineering implementation added and its Carrington Institute highlighted-object behavior passed project-owner runtime testing. Broader mission coverage and long-session acceptance remain pending.

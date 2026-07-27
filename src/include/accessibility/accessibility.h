@@ -20,6 +20,11 @@ s32 accessibilityIsWeaponChangeAnnouncementsEnabled(void);
 s32 accessibilityIsWeaponFunctionCuesEnabled(void);
 s32 accessibilityIsXrayScannerAudioEnabled(void);
 s32 accessibilityIsAudibleMarkersEnabled(void);
+s32 accessibilityIsCombatRadarAudioEnabled(void);
+s32 accessibilityGetCombatRadarContactAlerts(void);
+void accessibilitySetCombatRadarContactAlerts(s32 enabled);
+void accessibilityGetCombatRadarTuning(f32 *mediumdistance,
+		f32 *closedistance, f32 *volume);
 s32 accessibilityGetVirtualCaneMode(void);
 void accessibilitySetVirtualCaneMode(s32 mode);
 void accessibilityGetVirtualCaneTuning(f32 *reach, f32 *fulldistance,
