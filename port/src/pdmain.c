@@ -518,7 +518,7 @@ void mainLoop(void)
 			}
 		}
 
-		accessibilityBeaconReset("stage_stop");
+		accessibilityBeaconReset("stage_stop", true);
 		accessibilityCaneReset("stage_stop");
 		accessibilityHazardReset("stage_stop");
 		accessibilityHudReset("stage_stop");

@@ -1875,13 +1875,26 @@ void accessibilityBeaconTick(void)
 	}
 }
 
-void accessibilityBeaconReset(const char *reason)
+void accessibilityBeaconReset(const char *reason, s32 preservecategories)
 {
-	accessibilityBeaconDeactivateAll(reason ? reason : "reset", true);
+	if (preservecategories) {
+		accessibilityBeaconSuspend(reason ? reason : "reset");
+	} else {
+		accessibilityBeaconDeactivateAll(reason ? reason : "reset", true);
+	}
 
 	accessibilityLogEvent("beacon", "reset",
-			"reason=%s scans=%llu pulses=%llu interactable_enabled=%d non_hostile_enabled=%d radius=%.1f base_cadence_ticks=%d refresh_ticks=%d min_slot_ticks=%d per_category_cap=%d object_frequency_hz=%.1f pickup_pulses=3 door_frequency_hz=%.1f non_hostile_pulses=2 non_hostile_frequency_hz=%.1f lane=procedural_chirp",
+			"reason=%s preserve_categories=%d object_active=%d door_active=%d pickup_active=%d non_hostile_active=%d scans=%llu pulses=%llu interactable_enabled=%d non_hostile_enabled=%d radius=%.1f base_cadence_ticks=%d refresh_ticks=%d min_slot_ticks=%d per_category_cap=%d object_frequency_hz=%.1f pickup_pulses=3 door_frequency_hz=%.1f non_hostile_pulses=2 non_hostile_frequency_hz=%.1f lane=procedural_chirp",
 			reason ? reason : "reset",
+			preservecategories,
+			g_AccessibilityBeaconCategoryActive[
+					ACCESSIBILITY_BEACON_CATEGORY_OBJECT],
+			g_AccessibilityBeaconCategoryActive[
+					ACCESSIBILITY_BEACON_CATEGORY_DOOR],
+			g_AccessibilityBeaconCategoryActive[
+					ACCESSIBILITY_BEACON_CATEGORY_PICKUP],
+			g_AccessibilityBeaconCategoryActive[
+					ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE],
 			(unsigned long long)g_AccessibilityBeaconScanCount,
 			(unsigned long long)g_AccessibilityBeaconPulseCount,
 			accessibilityIsInteractableBeaconsEnabled(),
@@ -1902,5 +1915,6 @@ void accessibilityBeaconReset(const char *reason)
 	accessibilityBeaconResetTelemetry();
 	g_AccessibilityBeaconObserverProp = 0;
 	g_AccessibilityBeaconObserverRemote = false;
-	g_AccessibilityBeaconSuppressed = false;
+	g_AccessibilityBeaconSuppressed
+			= preservecategories && accessibilityBeaconAnyActive();
 }

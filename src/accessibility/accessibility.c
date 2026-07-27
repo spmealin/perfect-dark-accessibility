@@ -246,7 +246,7 @@ void accessibilityInit(void)
 	g_AccessibilityInitialized = 1;
 	g_AccessibilityEnabled = g_AccessibilityEnabledConfig;
 	g_AccessibilityStartTimeUs = sysGetMicroseconds();
-	accessibilityBeaconReset("init");
+	accessibilityBeaconReset("init", false);
 	accessibilityCaneReset("init");
 	accessibilityHazardReset("init");
 	accessibilityHudReset("init");
@@ -354,7 +354,7 @@ void accessibilityShutdown(void)
 	}
 
 	g_AccessibilityShutdownComplete = 1;
-	accessibilityBeaconReset("shutdown");
+	accessibilityBeaconReset("shutdown", false);
 	accessibilityCaneReset("shutdown");
 	accessibilityHazardReset("shutdown");
 	accessibilityHudReset("shutdown");
