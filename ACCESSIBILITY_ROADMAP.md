@@ -51,7 +51,7 @@ This roadmap orders work by user task and evidence. Milestones are not promises 
 
 ## Milestone 5 — Interactable beacons
 
-- **Status:** The original existing-sample implementation, automatic refresh, and multi-target scheduling passed blind-user acceptance. The procedural-chirp cue revision builds successfully and is pending runtime acceptance.
+- **Status:** The original existing-sample implementation, automatic refresh, multi-target scheduling, and the later procedural object/door/pickup chirps passed project-owner blind-user testing. Line-of-sight and on-screen door filtering, duplicate-door canonicalization, menu/pause suspension with state-preserving resume, toggle earcons, and campaign pickup extensions are implemented and have received targeted runtime acceptance. Full campaign and Combat Simulator coverage remains open.
 - **Detailed plan:** `documentation/milestones/ACCESSIBILITY_MILESTONE_05_PLAN.md` is the authoritative implementation handoff.
 - **Goal:** Let a blind player deliberately select and spatially locate useful classes of nearby props: interactable objects, collectible items, and doors.
 - **User-visible result:** F5 toggles one positioned 880 Hz chirp on eligible interactable objects, F6 independently toggles one 440 Hz chirp on eligible doors, and F8 independently toggles three quick positioned 880 Hz chirps on collectible items. Any combination can run; all patterns are staggered and require no new audio asset.
@@ -88,11 +88,12 @@ Weapon-change speech now supplements that HUD slice behind
 settled weapon's total ammunition after release without repeating its focus
 label; quick forward/back switching announces the gun HUD's localized weapon
 name plus total ammunition. This is implemented feature work but remains pending
-blind-user acceptance alongside the rest of this milestone.
+independent-user and broader milestone acceptance; the project owner accepted
+the implemented weapon-change flow in runtime testing.
 
 ## Milestone 8 — Player status and inventory queries
 
-Implementation status: the active weapon/device radial now announces localized highlighted-item labels, including Unarmed, as a bounded inventory-selection slice. Health, shield, ammo, deliberate status/inventory queries, function-screen narration, and the rest of this milestone remain open.
+Implementation status: the active weapon/device radial announces localized highlighted-item labels, including Unarmed. Releasing the radial announces total ammunition, quick weapon changes announce the localized HUD weapon name plus ammunition, and primary/secondary function changes have distinct earcons. These bounded slices passed project-owner runtime testing. Health, shield, deliberate status/inventory queries, broader threshold policy, and the rest of this milestone remain open.
 
 - **Goal:** Provide calm, accurate access to health, shield, equipped weapon/function, ammo, and inventory.
 - **User-visible result:** On-demand status is concise; important health/ammo thresholds are optional and non-repetitive; weapon changes are announced.
@@ -104,8 +105,8 @@ Implementation status: the active weapon/device radial now announces localized h
 
 ## Milestone 9 — Targeting feedback
 
-- **Status:** Firing-range slice implemented; fine-aim tone runtime and blind-user acceptance pending. The branch contains a generic fixed-capacity targeting core, a Carrington Institute firing-range source adapter, serialized positioned visible-target pulses, and a centered continuous pitch lane gated by current shootability. The tone reuses the existing non-random aim-query collision point and maps target-center proximity to 660–1320 Hz; it does not include weapon spread or cast another ray. Back-facing range targets retain presence feedback but do not produce positive alignment feedback. This does not complete broader character/combat, relationship, high-value-zone policy, speech/repeat, special-sight, or multiplayer coverage.
-- **Detailed plan and execution record:** `documentation/ACCESSIBILITY_MILESTONE_09_PLAN.md` remains active until the firing-range proof is runtime-tested and accepted.
+- **Status:** The firing-range presence and fine-aim lanes passed project-owner blind-user testing, including shootability suppression for back-facing targets. The generic fixed-capacity core now also covers admitted hostile characters, autoguns, security cameras, and validated special-device targets. Combat presence uses ten preallocated voices, distance-dependent cadence and punch-range continuity, configurable range/level/base pitch, and a bounded vertical-direction pitch offset; the first vertical-direction proof has project-owner runtime acceptance. Aim stabilization was tightened for campaign combat without changing native auto-aim or shot placement. Broader relationship/high-value-zone policy, target speech/repeat, special-sight coverage, multiplayer composition, and milestone-wide acceptance remain open.
+- **Detailed plan and execution record:** `documentation/ACCESSIBILITY_MILESTONE_09_PLAN.md` is the historical handoff and execution record for the accepted firing-range slice; this roadmap tracks the still-open broader milestone.
 - **Goal:** Tell a player when a valid aimed target changes and provide truthful relationship/distance cues.
 - **User-visible result:** Optional speech/earcons identify acquired/lost targets and a repeat command describes the current known target.
 - **Systems:** `lv.c` aimed-prop selection, `sightTick`, prop/character/object categories, friendliness rules, position/orientation.
@@ -129,7 +130,7 @@ Engineering extension: an active CamSpy now contributes incomplete engine hologr
 
 ### Prioritized R-Tracker nonvisual-interface slice
 
-- **Status:** Detailed specification and engineering implementation added; runtime and blind-user acceptance are pending.
+- **Status:** Detailed specification and engineering implementation added. The corrected bearing mapping passed project-owner runtime testing; broader stage/device and long-session acceptance remain pending.
 - **Detailed specification:** `documentation/ACCESSIBILITY_RTRACKER_AUDIO_SPEC.md` defines the authoritative semantic, acoustic, lifecycle, performance, and acceptance contract.
 - **Goal:** Provide equal nonvisual access to every marker exposed by the native R-Tracker without inventing line-of-sight, navigation, identity, or objective information.
 - **Systems:** Shared radar classification, active-prop traversal, native device/cheat state, ten fixed procedural mixer voices, screen-reader state announcements, configuration, lifecycle reset, structured logging, and optional performance diagnostics.
@@ -141,7 +142,7 @@ Engineering extension: an active CamSpy now contributes incomplete engine hologr
 
 ### Prioritized IR Scanner highlighted-object slice
 
-- **Status:** Engineering implementation added; runtime and blind-user acceptance are pending.
+- **Status:** Engineering implementation added and its Carrington Institute highlighted-object behavior passed project-owner runtime testing. Broader mission coverage and long-session acceptance remain pending.
 - **Goal:** Give nonvisual access to the special objects visually highlighted by the IR Scanner, limited to the player's rendered viewport.
 - **Systems:** Shared object-renderer highlight predicate, previous-frame onscreen state, native IR device state, R-Tracker fixed voices, independent default-on configuration, lifecycle suppression, and structured logs.
 - **Initial behavior:** While the IR Scanner is active, up to ten preceding-frame onscreen objects carrying conditional-scenery or infrared-highlight state use the R-Tracker yellow-object 700 Hz pattern. Ordinary palette-treated scenery and characters are excluded. Turning away removes a cue automatically, and the mutually exclusive scanners share rather than duplicate the ten-voice pool.
@@ -152,7 +153,7 @@ Engineering extension: an active CamSpy now contributes incomplete engine hologr
 
 ### Prioritized X-Ray Scanner object slice
 
-- **Status:** Engineering implementation added alongside the IR Scanner slice; combined runtime and blind-user acceptance are pending.
+- **Status:** Engineering implementation added alongside the IR Scanner slice. A positioning/cadence correction passed project-owner runtime testing; broader mission coverage and long-session acceptance remain pending.
 - **Goal:** Sonify the object/door/weapon props recolored by the native X-Ray Scanner while preserving its viewport and eraser-radius limits.
 - **Systems:** Shared renderer eraser-distance query, previous-frame onscreen state, native device versus Farsight distinction, nearest-ten bounded selection, R-Tracker fixed voices, independent default-on configuration, lifecycle suppression, and logging.
 - **Initial behavior:** The nearest ten X-Ray-rendered object/door/weapon props use the 700 Hz R-Tracker pattern and update automatically as the player turns or moves. Characters are excluded from this generic lane. The Farsight's use of X-Ray vision does not activate the scanner feature.
@@ -163,7 +164,7 @@ Engineering extension: an active CamSpy now contributes incomplete engine hologr
 
 ### Prioritized environmental-hazard slice
 
-- **Status:** Generic damaging-laser implementation builds; runtime and blind-user acceptance are pending.
+- **Status:** The generic damaging-laser implementation and its short-range facing gate passed project-owner runtime testing. Broader hazard coverage and long-session acceptance remain pending.
 - **Goal:** Make nearby, directly faced laser barriers perceptible without creating a constant environmental alarm.
 - **User-visible result:** The nearest active damaging laser within 500 units emits an automatically enabled 220 Hz spatial sweep along its beam and back; turning away or losing sight silences it.
 - **Systems:** Active-prop traversal, semantic laser-door state, live model bounds/rotation, closest-point and camera-facing tests, background line of sight, prop-sound spatial math, and a third fixed procedural mixer voice.
@@ -185,7 +186,7 @@ Engineering extension: an active CamSpy now contributes incomplete engine hologr
 
 ### Weapon-function state cue slice
 
-- **Status:** Implemented; runtime and blind-user acceptance pending.
+- **Status:** Implemented and accepted in project-owner runtime testing.
 - **Goal:** Make the existing visual primary/secondary function indicator available without speech latency or controller-specific assumptions.
 - **Behavior:** Observe the engine's final effective function after weapon processing. A transition to primary produces one centered 1000 Hz, 35 ms beep; secondary produces two, separated by 30 ms. Initial state, stage changes, and weapon changes are silent baselines. The dedicated fixed oscillator lane remains independent of beacon, hazard, aiming, and combat voices.
 - **Acceptance:** With several weapons that have persistent and temporary alternate functions, use R1/right bumper and at least one other supported function-selection path. Confirm exactly two beeps only when secondary becomes effective and exactly one only when primary becomes effective; invalid or unavailable toggles, equipping weapons, stage entry, pause, and menus must not create false output. Check rapid toggles, firing during transitions, dual wielding, and audio overlap. Multiplayer remains unvalidated.
@@ -195,7 +196,7 @@ Engineering extension: an active CamSpy now contributes incomplete engine hologr
 
 ### Prioritized non-hostile-character beacon slice
 
-- **Status:** Engineering implementation builds; runtime and blind-user acceptance are pending.
+- **Status:** Engineering implementation and the initial civilian/neutral-character behavior passed project-owner runtime testing. Broader relationship and mission coverage remain pending.
 - **Goal:** Make nearby people who are not presently hostile spatially discoverable without mixing them with the hostile combat cue vocabulary.
 - **Behavior:** F7 independently toggles up to three automatically refreshed friendly, neutral, or native blue-sight protected character beacons in any single-player gameplay stage. Each retained person emits two rapid positioned 440 Hz chirps on the shared staggered beacon timeline. Protected nonlethal targets also admit the valid-aim alignment tone but never receive hostile enemy-presence cadence. Existing relationship, life/action, hidden, untargetable, cloak/IR, room, range, and shooting-blocker line-of-sight state govern eligibility.
 - **Door visibility refinement:** F6 door candidates must be rendered in the active camera view at scan and playback time. Native sibling leaves retain one canonical doorway identity and at most one rendered positioned source, so paired leaves cannot consume multiple result or schedule slots.
@@ -216,14 +217,16 @@ Engineering extension: door and non-hostile-character beacon queries now follow 
 
 ## Milestone 11 — Navigation prototype
 
-Implementation status: a general single-player virtual-cane slice is implemented as an orientation experiment, but Milestone 11 remains open. F4 cycles off, a two-second seven-angle sweep, and a one-second seven-angle sweep. Each live player-sized movement-cylinder probe reports the nearest background/object/door/path-blocking collision with a fixed-pitch spatial chirp while excluding characters and drop-offs. Route guidance, landmarks, deviation/recovery semantics, controller/settings UI, runtime validation, and the required blind-user iterations remain pending.
+Implementation status: a general single-player virtual-cane slice is implemented as an orientation experiment, but Milestone 11 remains open. F4 cycles off, a two-second seven-angle sweep, and a one-second seven-angle sweep, with distinct mode earcons. Each live player-sized movement-cylinder probe reports the nearest background/object/door/path-blocking collision while excluding characters and drop-offs. Spatial pan and volume communicate impact position; distance changes the chirp pitch; longer rising/falling sweeps report detected upward/downward terrain transitions. Reach and master volume are configurable. These behaviors have received iterative project-owner blind-user acceptance, while route guidance, named landmarks, deviation/recovery semantics, controller/settings UI, and independent-user validation remain pending.
 
 The implemented cane now uses the active player-or-CamSpy observer pose and restarts a partial sweep when the visible perspective changes. CamSpy collision dimensions and rooms replace Joanna's only while its camera mode is effective. This engineering behavior still requires runtime transition, collision, and performance evidence.
 
 ### Prioritized player-authored audible-marker slice
 
-- **Status:** Detailed specification and engineering implementation added;
-  runtime and blind-user acceptance are pending.
+- **Status:** Detailed specification and engineering implementation added. Marker
+  placement, clear-path occlusion, and the slower one-to-four identity patterns
+  passed project-owner runtime testing; broader long-session and independent-user
+  acceptance remain pending.
 - **Detailed specification:** `documentation/ACCESSIBILITY_AUDIBLE_MARKERS_SPEC.md` defines
   the input, acoustic, line-of-sight, lifecycle, performance, logging, and
   acceptance contract.

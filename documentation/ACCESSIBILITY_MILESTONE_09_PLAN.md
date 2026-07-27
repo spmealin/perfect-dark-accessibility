@@ -2,7 +2,9 @@
 
 ## Status and handoff contract
 
-This is the active implementation handoff for the first bounded slice of Roadmap Milestone 9. The implementation must create a reusable targeting-feedback core and prove it with the Carrington Institute firing range. It must not hard-code the audio state machine around `g_FrData`, `MODEL_TARGET`, or the CI stage.
+This is the historical implementation handoff for the first bounded slice of Roadmap Milestone 9. The firing-range presence, shootability, and procedural fine-aim behavior subsequently passed project-owner blind-user testing. The reusable core now also has combat, security-device, and validated special-device adapters. Roadmap Milestone 9 remains open for its broader coverage and acceptance criteria; see the root `ACCESSIBILITY_ROADMAP.md` for current status.
+
+The implementation had to create a reusable targeting-feedback core and prove it with the Carrington Institute firing range. It must not hard-code the audio state machine around `g_FrData`, `MODEL_TARGET`, or the CI stage.
 
 Planning baseline: branch `accessibility`, commit `bb31d26f5c` (`accessibility: rotate beacons across nearby targets`).
 

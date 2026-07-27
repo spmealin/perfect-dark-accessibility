@@ -2,10 +2,11 @@
 
 ## Status
 
-**Engineering implementation present; runtime and blind-user acceptance
-pending.** This document specifies a four-slot audible marker system for
-blind-player exploration and orientation. A successful build proves
-integration only, not accessibility validation.
+**Engineering implementation present; initial project-owner runtime acceptance
+passed.** Placement, clear-path occlusion, and the slower one-to-four identity
+patterns passed blind-user testing. Broader long-session and independent-user
+validation remain pending. This document specifies a four-slot audible marker
+system for blind-player exploration and orientation.
 
 The first implementation targets single-player missions and one-local-player
 Combat Simulator sessions. It must preserve existing gameplay behavior and use

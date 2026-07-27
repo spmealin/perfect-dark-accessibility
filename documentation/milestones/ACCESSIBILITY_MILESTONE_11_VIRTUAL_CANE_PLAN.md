@@ -1,6 +1,14 @@
 # Accessibility Milestone 11: Virtual Cane Prototype Plan
 
-Status: **Implemented; runtime and blind-user acceptance pending**
+Status: **Implemented; iterative project-owner acceptance passed, broader milestone validation pending**
+
+Current-status note: this file preserves the original implementation handoff.
+Later project-owner testing accepted the core sweep, distance pitch, terrain
+transition sweeps, increased/configurable level, and longer reach. The original
+request for no mode-change confirmation was later superseded by accepted F4
+earcons for Off, Slow, and Fast. See the root `ACCESSIBILITY.md` and
+`ACCESSIBILITY_ROADMAP.md` for current behavior and status.
+
 Planning baseline: `accessibility` branch at `2ca16241f`
 Prepared: 2026-07-21
 
