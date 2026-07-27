@@ -36,6 +36,8 @@ This initial slice observes only active-menu screen `0`, the weapon/device scree
 
 The explicit in-game and cutscene subtitle HUD types are never spoken by this feature. This keeps dialogue and subtitles out of generic gameplay-message narration and leaves their timing, splitting, and user preference policy for a separate subtitle feature. Logs retain admitted subtitle metadata and record the exclusion without sending it to speech.
 
+Combat Simulator's death overlay is drawn directly rather than admitted to the common HUD queue. When it becomes visible, this feature speaks the localized `Press START` prompt with the currently displayed respawn-countdown number, then speaks each newly displayed positive integer once. Pausing, leaving the overlay, respawning, ending the match, disabling HUD messages, changing stages, or shutting down clears the fixed per-player observation state. Dialogue and subtitles remain excluded.
+
 ### Environmental laser hazard cue
 
 `Accessibility.EnvironmentalHazards` defaults to `1` and is subordinate to `Accessibility.Enabled`. During single-player gameplay, the adapter recognizes active `DOORTYPE_LASER` objects carrying the game's damaging-contact flag. It does not depend on Carrington Institute tags or holo-training object IDs, so the same policy can cover equivalent laser barriers elsewhere.

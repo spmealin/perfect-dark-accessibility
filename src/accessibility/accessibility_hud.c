@@ -1,5 +1,8 @@
 #include <stddef.h>
+#include <stdio.h>
+#include <string.h>
 #include <PR/ultratypes.h>
+#include "bss.h"
 #include "constants.h"
 #include "system.h"
 #include "accessibility/accessibility.h"
@@ -8,6 +11,14 @@
 #include "accessibility/accessibility_log.h"
 
 #define ACCESSIBILITY_HUD_TEXT_MAX 400
+
+struct accessibilityrespawnstate {
+	s32 active;
+	s32 seconds;
+};
+
+static struct accessibilityrespawnstate
+		g_AccessibilityRespawnStates[MAX_PLAYERS];
 
 static void accessibilityHudNormalizeText(char *dst, size_t dstlen, const char *src)
 {
@@ -82,4 +93,73 @@ void accessibilityHudMessageAccepted(const char *text, s32 type, u32 flags,
 
 	accessibilityAnnouncementQueueHud(normalized, type, flags, playernum,
 			channelnum, id);
+}
+
+void accessibilityHudRespawnCountdownObserve(s32 visible, const char *prompt,
+		s32 seconds, s32 playernum)
+{
+	struct accessibilityrespawnstate *state;
+	char normalized[ACCESSIBILITY_HUD_TEXT_MAX];
+	char utterance[ACCESSIBILITY_HUD_TEXT_MAX];
+	s32 initial;
+
+	if (playernum < 0 || playernum >= MAX_PLAYERS) {
+		return;
+	}
+
+	state = &g_AccessibilityRespawnStates[playernum];
+
+	if (!accessibilityIsHudMessagesEnabled() || !visible) {
+		if (state->active) {
+			accessibilityLogEvent("respawn_countdown", "hidden",
+					"player=%d previous_seconds=%d reason=%s",
+					playernum, state->seconds,
+					visible ? "feature_disabled" : "not_rendered");
+		}
+
+		state->active = false;
+		state->seconds = -1;
+		return;
+	}
+
+	if (seconds < 0) {
+		seconds = 0;
+	}
+
+	initial = !state->active;
+
+	if (!initial && (seconds <= 0 || state->seconds == seconds)) {
+		return;
+	}
+
+	accessibilityHudNormalizeText(normalized, sizeof(normalized), prompt);
+	utterance[0] = '\0';
+
+	if (initial && normalized[0] && seconds > 0) {
+		snprintf(utterance, sizeof(utterance), "%s, %d",
+				normalized, seconds);
+	} else if (initial && normalized[0]) {
+		snprintf(utterance, sizeof(utterance), "%s", normalized);
+	} else if (seconds > 0) {
+		snprintf(utterance, sizeof(utterance), "%d", seconds);
+	}
+
+	state->active = true;
+	state->seconds = seconds;
+
+	if (utterance[0]) {
+		accessibilityAnnouncementRespawnCountdown(utterance, playernum,
+				seconds, initial);
+		accessibilityLogEvent("respawn_countdown", "announced",
+				"player=%d seconds=%d initial=%d text=%s",
+				playernum, seconds, initial, utterance);
+	}
+}
+
+void accessibilityHudReset(const char *reason)
+{
+	memset(g_AccessibilityRespawnStates, 0,
+			sizeof(g_AccessibilityRespawnStates));
+	accessibilityLogEvent("respawn_countdown", "reset", "reason=%s",
+			reason ? reason : "unspecified");
 }

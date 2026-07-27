@@ -30,6 +30,7 @@
 #include "types.h"
 #include "fs.h"
 #include "system.h"
+#include "accessibility/accessibility_hud.h"
 #include "mpsetups.h"
 
 // bss
@@ -1337,6 +1338,27 @@ Gfx *mpRenderModalText(Gfx *gdl)
 	s32 y;
 	char text[50];
 	s32 stack1;
+	s32 showrespawn;
+	s32 respawnseconds;
+
+	showrespawn = !g_MainIsEndscreen
+		&& g_MpSetup.paused == MPPAUSEMODE_UNPAUSED
+		&& g_Vars.currentplayer->isdead
+		&& g_Vars.currentplayer->redbloodfinished
+		&& g_Vars.currentplayer->deathanimfinished
+		&& !(g_Vars.coopplayernum >= 0
+			&& ((g_Vars.bond->isdead && g_Vars.coop->isdead)
+				|| !g_Vars.currentplayer->coopcanrestart || g_InCutscene))
+		&& !(g_Vars.antiplayernum >= 0
+			&& (g_Vars.currentplayer != g_Vars.anti || g_InCutscene))
+		&& g_NumReasonsToEndMpMatch == 0;
+	respawnseconds = g_Vars.currentplayer->deadtimer > 0
+		? (g_Vars.currentplayer->deadtimer + TICKS(60) - 1) / TICKS(60)
+		: 0;
+
+	accessibilityHudRespawnCountdownObserve(showrespawn,
+			showrespawn ? langGet(L_MPWEAPONS_039) : NULL,
+			respawnseconds, g_Vars.currentplayernum);
 
 #if VERSION >= VERSION_JPN_FINAL
 	g_ScaleX = g_ViRes == VIRES_HI ? 2 : 1;
@@ -1386,14 +1408,7 @@ Gfx *mpRenderModalText(Gfx *gdl)
 #endif
 
 		gdl = text0f153780(gdl);
-	} else if (!g_MainIsEndscreen
-			&& g_MpSetup.paused == MPPAUSEMODE_UNPAUSED
-			&& g_Vars.currentplayer->isdead
-			&& g_Vars.currentplayer->redbloodfinished
-			&& g_Vars.currentplayer->deathanimfinished
-			&& !(g_Vars.coopplayernum >= 0 && ((g_Vars.bond->isdead && g_Vars.coop->isdead) || !g_Vars.currentplayer->coopcanrestart || g_InCutscene))
-			&& !(g_Vars.antiplayernum >= 0 && ((g_Vars.currentplayer != g_Vars.anti || g_InCutscene)))
-			&& g_NumReasonsToEndMpMatch == 0) {
+	} else if (showrespawn) {
 		// Render "Press START" text
 		gdl = text0f153628(gdl);
 
@@ -1424,7 +1439,7 @@ Gfx *mpRenderModalText(Gfx *gdl)
 #if VERSION >= VERSION_JPN_FINAL
 			countdownx = countdownx / g_ScaleX;
 #endif
-			sprintf(text, "%d\n", (g_Vars.currentplayer->deadtimer + TICKS(60) - 1) / TICKS(60));
+			sprintf(text, "%d\n", respawnseconds);
 
 			textMeasure(&textheight, &textwidth, text, g_CharsHandelGothicSm, g_FontHandelGothicSm, 0);
 			x = countdownx - textwidth / 2;

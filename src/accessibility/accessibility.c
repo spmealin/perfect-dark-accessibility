@@ -10,6 +10,7 @@
 #include "accessibility/accessibility_beacon.h"
 #include "accessibility/accessibility_cane.h"
 #include "accessibility/accessibility_hazard.h"
+#include "accessibility/accessibility_hud.h"
 #include "accessibility/accessibility_log.h"
 #include "accessibility/accessibility_marker.h"
 #include "accessibility/accessibility_menu.h"
@@ -248,6 +249,7 @@ void accessibilityInit(void)
 	accessibilityBeaconReset("init");
 	accessibilityCaneReset("init");
 	accessibilityHazardReset("init");
+	accessibilityHudReset("init");
 	accessibilityMarkerReset("init");
 	accessibilityTargetingReset("init");
 	accessibilityTrackerReset("init");
@@ -355,6 +357,7 @@ void accessibilityShutdown(void)
 	accessibilityBeaconReset("shutdown");
 	accessibilityCaneReset("shutdown");
 	accessibilityHazardReset("shutdown");
+	accessibilityHudReset("shutdown");
 	accessibilityMarkerReset("shutdown");
 	accessibilityTargetingReset("shutdown");
 	accessibilityTrackerReset("shutdown");

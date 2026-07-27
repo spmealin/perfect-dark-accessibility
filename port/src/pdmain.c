@@ -77,6 +77,7 @@
 #include "accessibility/accessibility_beacon.h"
 #include "accessibility/accessibility_cane.h"
 #include "accessibility/accessibility_hazard.h"
+#include "accessibility/accessibility_hud.h"
 #include "accessibility/accessibility_marker.h"
 #include "accessibility/accessibility_targeting.h"
 #include "accessibility/accessibility_tracker.h"
@@ -520,6 +521,7 @@ void mainLoop(void)
 		accessibilityBeaconReset("stage_stop");
 		accessibilityCaneReset("stage_stop");
 		accessibilityHazardReset("stage_stop");
+		accessibilityHudReset("stage_stop");
 		accessibilityMarkerReset("stage_stop");
 		accessibilityTargetingReset("stage_stop");
 		accessibilityTrackerReset("stage_stop");

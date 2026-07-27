@@ -20,6 +20,8 @@ s32 accessibilityAnnouncementWeaponChange(const char *text,
 		const char *source, s32 playernum, s32 interrupt);
 s32 accessibilityAnnouncementWeaponFunction(const char *text,
 		s32 playernum);
+s32 accessibilityAnnouncementRespawnCountdown(const char *text,
+		s32 playernum, s32 seconds, s32 initial);
 s32 accessibilityAnnouncementStatus(const char *text, const char *source,
 		s32 playernum, s32 interrupt);
 void accessibilityAnnouncementCancel(void);

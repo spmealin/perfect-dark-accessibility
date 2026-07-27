@@ -139,7 +139,7 @@ src/accessibility/
   accessibility_beacon.c         object, door, pickup, and non-hostile-character scanners
   accessibility_cane.c           live seven-angle movement/terrain orientation cue
   accessibility_hazard.c         damaging-laser semantic adapter and sweep policy
-  accessibility_hud.c            admitted non-subtitle HUD-message adapter
+  accessibility_hud.c            admitted HUD messages and direct respawn overlay adapter
   accessibility_log.c            buffered structured development log
   accessibility_marker.c         four player-authored landmark slots and LOS policy
   accessibility_menu.c           menu semantic snapshots, formatting, and repeat/cancel
@@ -235,7 +235,8 @@ an experiment only after Tolk thread/COM ownership is proven.
 ### Announcements and future queue
 
 The current announcement coordinator owns the replaceable menu group, normal HUD,
-weapon-change, and direct-rendered weapon-function output, generic feature status output, cancellation, elapsed
+weapon-change, direct-rendered weapon-function, and respawn-countdown output,
+generic feature status output, cancellation, elapsed
 backend timing, and a fixed 12,288-byte retained menu-repeat buffer. Feature
 adapters do not allocate retained speech text and do not call the platform
 backend. Tolk itself consumes or queues UTF-16 text during its asynchronous
@@ -438,6 +439,7 @@ This table records implemented and anticipated changes to established files so f
 | `src/game/menuitem.c` | Expose type-owned ranking/player-stats summaries only if existing APIs cannot be queried safely by the adapter | Current semantic row/stat labels and values | Compound presentation state is assembled inside type-specific render paths | Audit found no hook necessary; `mplayer/ingame.c` providers query the same ranking and player-stat records used by these renderers |
 | `src/game/activemenu.c`, `endscreen.c`, `filemgr.c`, `mainmenu.c`, `trainingmenus.c`, `mplayer/setup.c`, `mplayer/ingame.c`, `fmb.c`, `src/include/game/mainmenu.h`, and `src/include/game/mplayer/setup.h` | Answer one read-only `MENUOP_GETACCESSIBILITYTEXT` query for focusable custom-rendered rows, carousels, and optional dialog summaries; mark a simple visible label when it is itself the summary; declare shared providers where menu definitions cross translation units | Caller-owned UTF-8 buffer, requested part/index, or the label's normally resolved text | Render callbacks and non-focusable panels otherwise expose pixels/borrowed scratch text, not stable semantics | Implemented in Milestone 4; `trainingmenus.c` supplies firing-range weapon-information, post-session scoring, visible proficiency-star completion, device-training information, and holo-training description summaries; `mainmenu.c` supplies the shared mission-objective provider, rich pause-inventory descriptions, mission difficulty-completion stars, and the marked PC exit prompt; `endscreen.c` supplies mission-result panels and opts every endscreen/retry objective page into the shared provider; `mplayer/setup.c` supplies Combat Simulator challenge descriptions and per-player-count completion stars while preserving the current-challenge hidden-state handler; `mplayer/ingame.c` marks the post-session Save Player question and publishes the complete Game Over, ranking, and player-stat controls; `fmb.c` opts the 4 MB challenge confirmation into that shared provider |
 | `src/game/hudmsg.c` | Publish after a message passes suppression and is queued | Resolved text, type, flags, player, audio channel, message ID | Polling the HUD array loses admission order and reason | Implemented for generic HUD-message narration; types 6 and 11 are logged but explicitly excluded as subtitles |
+| `src/game/mplayer/mplayer.c` | Publish the direct-rendered post-death overlay once per rendered state | Localized prompt, displayed positive countdown integer, visibility, and player | The modal text bypasses the common HUD queue; polling only `deadtimer` would speak while the overlay is suppressed by death animation, pause, co-op/anti rules, cutscene, or match end | Implemented with fixed per-player deduplication; the prompt is spoken on overlay entry and each changed displayed integer once |
 | `src/game/objectives.c` | Publish inside the changed-status branch of `objectivesCheckAll` | Objective index, previous/new state | The existing HUD text can duplicate or omit useful objective identity | Proposed |
 | `src/game/chraction.c` | Optional later directional damage event after actual player damage | Victim player, magnitude band, direction/source category | Snapshot detects loss but not source/direction | Question; not needed for first status query |
 | `src/game/lv.c` | Capture projected target bounds, onscreen hostile-character props, and the existing query-ray hit coordinate before prop rendering, then observe after player sight/HUD rendering | Finite projected bounds, final filtered `lookingatprop`, exact query hit, native sight state, player viewport, and rendered character membership | PC prop rendering converts float model matrices in place before sight/HUD state is final, so one hook cannot safely obtain both states | Two narrow calls in `lvRender` support both firing-range and generic hostile-character profiles; query hits are accepted only when the prop survives the profile's final semantic filtering |
