@@ -21,7 +21,6 @@
 
 #define ACCESSIBILITY_MENU_FIELD_MAX 768
 #define ACCESSIBILITY_MENU_LONG_TEXT_MAX 8192
-#define ACCESSIBILITY_MENU_TEXT_MAX 12288
 
 struct accessibilitymenusnapshot {
 	s32 valid;
@@ -50,7 +49,7 @@ struct accessibilitymenusnapshot {
 	char value[ACCESSIBILITY_MENU_LONG_TEXT_MAX];
 	char summary[ACCESSIBILITY_MENU_LONG_TEXT_MAX];
 	char keyboardtext[MPSETUP_MAXNAME + 1];
-	char utterance[ACCESSIBILITY_MENU_TEXT_MAX];
+	char utterance[ACCESSIBILITY_ANNOUNCEMENT_TEXT_MAX];
 };
 
 struct accessibilityactivemenusnapshot {

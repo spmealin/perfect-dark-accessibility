@@ -130,56 +130,65 @@ Version conditionals such as `VERSION`, `PAL`, and `PLATFORM_N64` occur in relev
 
 ## Accessibility module layout
 
-Milestones 2 and 3 implement:
+The implemented accessibility-owned modules are:
 
 ```text
 src/accessibility/
-  accessibility.c          lifecycle and feature coordinator
-  accessibility_cane.c     live seven-angle movement-collision orientation cue
-  accessibility_log.c      comprehensive structured development log
-  accessibility_marker.c   four player-authored landmark slots and LOS policy
-  accessibility_observer.c active player/CamSpy perspective and collision-pose adapter
-  accessibility_speech.c   speech lifecycle and UTF-8 output boundary
-  accessibility_tracker.c  native R-Tracker semantic adapter and fixed-slot state
-  accessibility_targeting.c generic fixed-capacity target state and owned audio lanes
-  accessibility_targeting_game.c firing-range and hostile-character/autogun/security-camera semantic source adapter
+  accessibility.c                lifecycle, configuration, and feature gates
+  accessibility_announcement.c   centralized speech request groups and retained menu text
+  accessibility_beacon.c         object, door, pickup, and non-hostile-character scanners
+  accessibility_cane.c           live seven-angle movement/terrain orientation cue
+  accessibility_hazard.c         damaging-laser semantic adapter and sweep policy
+  accessibility_hud.c            admitted non-subtitle HUD-message adapter
+  accessibility_log.c            buffered structured development log
+  accessibility_marker.c         four player-authored landmark slots and LOS policy
+  accessibility_menu.c           menu semantic snapshots, formatting, and repeat/cancel
+  accessibility_observer.c       active player/CamSpy perspective and collision-pose adapter
+  accessibility_performance.c    compile-time-optional bounded graphics diagnostics
+  accessibility_speech.c         speech lifecycle and UTF-8 output boundary
+  accessibility_targeting.c      generic fixed-capacity target policy and audio state
+  accessibility_targeting_game.c range/combat/security/device semantic source adapters
+  accessibility_tracker.c        R-Tracker and IR/X-Ray semantic adapters and fixed slots
+  accessibility_weapon.c         weapon-change speech and function-state earcons
 src/include/accessibility/
-  accessibility.h
-  accessibility_cane.h
-  accessibility_log.h
-  accessibility_marker.h
-  accessibility_observer.h
-  accessibility_speech.h
-  accessibility_speech_backend.h
-  accessibility_tracker.h
+  *.h                            narrow contracts corresponding to the modules above
 port/src/accessibility/
-  speech_null.c             unavailable backend for non-Windows targets
-  speech_tolk.c             dynamically loaded Windows Tolk backend
+  accessibility_tone.c           fixed procedural mixer and atomic command bridge
+  speech_null.c                   unavailable backend for non-Windows targets
+  speech_tolk.c                   dynamically loaded Windows Tolk backend
+port/include/accessibility/
+  accessibility_tone.h           platform mixer command/diagnostic contract
 ```
 
-Later milestones propose:
+Likely later modules remain:
 
 ```text
 src/accessibility/
-  accessibility_events.c   normalized event creation
-  accessibility_menu.c     menu semantic adapters
-  accessibility_status.c   queryable player snapshots
-  accessibility_world.c    target/scanner/navigation experiments
+  accessibility_events.c         normalized prioritized event queue, if evidence requires it
+  accessibility_status.c         queryable player snapshots
+  accessibility_navigation.c     route/goal guidance, separate from the virtual cane
 src/include/accessibility/
   accessibility_events.h
+  accessibility_status.h
+  accessibility_navigation.h
 ```
 
 An implementation may use fewer files initially. The dependency direction should remain:
 
 ```text
 game semantic hook/query
-        -> accessibility event core
-        -> queue and logging policy
+        -> accessibility semantic adapter/core
+        -> announcement and logging policy
         -> speech backend interface
         -> Windows technology or null backend
 ```
 
-The game must not depend on a native speech implementation. Logging should observe normalized input and queue outcomes, not intercept backend internals as its only evidence source.
+The game must not depend on a native speech implementation. Feature adapters
+must publish speech through `accessibility_announcement.c`, not call a platform
+backend or Tolk directly. Lifecycle diagnostics may call the core speech
+contract for its explicit backend test. Logging should observe normalized input
+and announcement outcomes, not intercept backend internals as its only evidence
+source.
 
 ## Core contracts
 
@@ -193,7 +202,11 @@ void accessibilityShutdown(void);
 s32 accessibilityIsEnabled(void);
 ```
 
-`port/src/main.c` calls initialization after `configInit` and shutdown before configuration/video/crash cleanup. Both calls are idempotent. Disabled operation is a no-op. A future queue or state observer may add `accessibilityTick`; Milestone 2 deliberately does not modify `port/src/pdmain.c`.
+`port/src/main.c` calls initialization after `configInit` and shutdown before
+configuration/video/crash cleanup. Both calls are idempotent. Disabled operation
+is a no-op except when the compile-time graphics diagnostics explicitly request
+an accessibility-disabled control log. `port/src/pdmain.c` owns the settled
+post-`lvTick` feature coordinator calls and pre-`lvStop` audio/state resets.
 
 ### Speech backend
 
@@ -208,9 +221,25 @@ s32 accessibilitySpeechOutput(const char *utf8, s32 interrupt);
 s32 accessibilitySpeechCancel(void);
 ```
 
-The core owns lifecycle and request logging. The backend owns native initialization, strict UTF-8/UTF-16 conversion, cancellation, and technology-specific error reporting. Windows dynamically loads a separately built `Tolk.dll` from the executable directory and uses Tolk's default screen-reader-only policy; SAPI fallback is not enabled. Non-Windows builds select the null backend. The proof calls Tolk only during startup, explicit test/harness requests, cancellation, and shutdown—never from a frame tick.
+The core owns lifecycle and request logging. The backend owns native
+initialization, strict UTF-8/UTF-16 conversion, cancellation, and
+technology-specific error reporting. Windows dynamically loads a separately
+built `Tolk.dll` from the executable directory and uses Tolk's default
+screen-reader-only policy; SAPI fallback is not enabled. Non-Windows builds
+select the null backend. Tolk output is asynchronous internally, but its
+non-thread-safe API is invoked on the main thread and every call is timed.
+Initialization/detection occurs only at startup; no device enumeration or
+detection polling occurs in a frame tick. A worker-backed speech queue remains
+an experiment only after Tolk thread/COM ownership is proven.
 
-### Events and queue
+### Announcements and future queue
+
+The current announcement coordinator owns the replaceable menu group, normal HUD
+and weapon-change output, generic feature status output, cancellation, elapsed
+backend timing, and a fixed 12,288-byte retained menu-repeat buffer. Feature
+adapters do not allocate retained speech text and do not call the platform
+backend. Tolk itself consumes or queues UTF-16 text during its asynchronous
+output call.
 
 A normalized event should carry only fields needed for policy and diagnosis:
 
@@ -296,7 +325,17 @@ The implemented keys are constructor-registered bounded integers or floats in th
 
 ### Playtest logging
 
-Milestone 2 writes `$S/accessibility.log` only when both accessibility and logging are explicitly enabled. It truncates the prior session, writes synchronous/flushed JSON Lines, and records schema, sequence, session, monotonic microseconds, complete build metadata, category, event, and a detailed message. Open/write/flush/close failures disable the logger nonfatally. The current logger is main-thread-only and records lifecycle events; later hooks will add feature context and queue decisions.
+Normal builds write `$S/accessibility.log` only when both accessibility and
+logging are explicitly enabled; diagnostic builds may also open it for the
+explicit accessibility-disabled graphics control. The logger truncates the
+prior session and records JSON Lines containing schema, sequence, session,
+monotonic microseconds, complete build metadata, category, event, and a detailed
+message. It is main-thread-only. A fixed 64 KiB stdio buffer and fixed 4 KiB
+format buffer avoid allocation and disk flushes for ordinary events; oversized
+messages allocate exact temporary storage so diagnostic detail is not
+truncated. The first record after each one-second interval flushes the batch;
+lifecycle events and shutdown also flush. Open/write/flush/close failures
+disable the logger nonfatally.
 
 The project owner has prioritized diagnostic completeness over privacy minimization during development. The logger may include resolved text, player/profile names, paths, command arguments, precise coordinates, input history, native handles, pointers, and any other feature-relevant state. Do not add redaction or field filtering. The log defaults to enabled for blind-user acceptance testing, remains locally configurable, is ignored by Git, and is never uploaded automatically. Never include ROM contents, extracted copyrighted assets, passwords, authentication tokens, or unrelated operating-system secrets. Size limits, rotation, and public-distribution privacy policy are deferred until actual logging volume is measured.
 
@@ -332,7 +371,7 @@ A shared observer adapter selects the prop and pose that own the currently rende
 
 Each scheduled sample copies the current player movement bbox and follows the walking system's room traversal plus `cdExamCylMove06`/`cdExamCylMove02` ordering. The collision mask is background, objects, doors, and path blockers when normal Bond collision is enabled, otherwise background only; characters and players are excluded. Collision APIs publish through shared global scratch state, so the adapter immediately copies a swept hit's full position/geometry record or derives the destination-overlap fallback from its returned obstacle edge before computing distance, volume, and pan. The query never runs on the audio thread and does not call the state-mutating `bwalkCalculateNewPosition` wrapper.
 
-Seven fixed procedural-mixer slots each own one cane chirp. Atomic sequences transfer start/end frequency, duration, configured master gain, distance attenuation, and pan to audio-owned phase/envelope storage; stop clears all slots. A wall uses a steady distance-pitched 35 ms chirp, while rising or falling terrain uses a 140 ms logarithmic contour centered on the same distance pitch. Both use the bounded `Accessibility.VirtualCaneVolume` master gain, which defaults to 0.184. The F4 command also publishes the selected mode through the centered toggle-confirmation lane: Slow rises in two beeps, Fast rises with two high beeps after the base, and Off falls in two. The path allocates no native game sound channels. One preallocated text buffer aggregates all seven sample records and uses the logger's preformatted event API, avoiding a periodic formatting allocation while retaining the logger's existing synchronous flush behavior. Advanced diagnostics expose collision timing/counters and mixer request/active masks.
+Seven fixed procedural-mixer slots each own one cane chirp. Atomic sequences transfer start/end frequency, duration, configured master gain, distance attenuation, and pan to audio-owned phase/envelope storage; stop clears all slots. A wall uses a steady distance-pitched 35 ms chirp, while rising or falling terrain uses a 140 ms logarithmic contour centered on the same distance pitch. Both use the bounded `Accessibility.VirtualCaneVolume` master gain, which defaults to 0.184. The F4 command also publishes the selected mode through the centered toggle-confirmation lane: Slow rises in two beeps, Fast rises with two high beeps after the base, and Off falls in two. The path allocates no native game sound channels. One preallocated text buffer aggregates all seven sample records and uses the logger's preformatted event API, avoiding periodic formatting allocation; the logger batches ordinary disk flushes. Advanced diagnostics expose collision timing/counters and mixer request/active masks.
 
 ### Target and scanner
 
@@ -388,14 +427,16 @@ This table records implemented and anticipated changes to established files so f
 | --- | --- | --- | --- | --- |
 | `CMakeLists.txt` | Register core sources, select exactly one native/null speech backend, copy Windows runtimes, and define the clean Windows ZIP target | Build platform/configuration only | `src/accessibility` is outside the game glob; platform backends must not compile together; package staging must never admit ROM, save, log, or personal configuration paths | Implemented through the Windows redistributable target |
 | `port/src/main.c` | Initialize after `configInit`; shut down in `cleanup` | Lifecycle and logger availability | First UI may occur before a later tick; resources need ordered shutdown | Implemented in Milestone 2 with two calls |
+| `port/src/system.c`, `port/include/system.h` | Expose monotonic microsecond timing and read-only process-memory totals | Timing plus Windows working-set/private-byte values when available | Backend-call latency, bounded scan cost, and suspected long-session growth need a shared platform boundary rather than feature-specific native APIs | Implemented; non-Windows memory queries return unavailable while timing remains portable |
 | `port/src/pdmain.c` | Call the compile-time-optional performance observer, call accessibility gameplay ticks immediately after `lvTick`, and reset owned audio before `lvStop` | Timing, input, stage/player context, safe main-thread collision queries, and teardown | Gameplay cues need settled semantic state, cane and marker collision work must remain on the main thread, and owned sounds must stop before stage memory is disabled | Beacon, virtual-cane, laser-hazard, audible-marker, and R-Tracker ticks run after `lvTick`; cane, marker, targeting, hazard, and R-Tracker stage-stop resets protect owned voices and stage identities |
 | `port/src/video.c`, `port/include/video.h`, and diagnostic-only boundaries in `port/fast3d/gfx_pc.cpp`, `gfx_sdl2.cpp`, `gfx_opengl.cpp`, and their headers | Under `ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS`, expose fixed per-frame timings and startup graphics metadata without changing rendering | SDL event/dimension time, framebuffer setup/resolve, display-list translation, limiter, swap, finish, window/GL identity | Aggregate main-loop cadence cannot distinguish game work from a blocked OpenGL present; the rare fault must be captured in its first reproduction | Compile-time optional; ordinary builds contain no timing path. Fast3D changes contain only timers/read-only getters and no accessibility policy or logging |
 | `port/src/audio.c` | Mix procedural accessibility voices into each completed stereo buffer before SDL queueing | Centered targeting tone, firing-range presence pulse, single/patterned beacon and cane chirps, marker sweeps/identities, toggle and weapon-function patterns, positioned environmental-hazard tone state, hostile/security-camera combat cues, and concurrent R-Tracker markers | Clean responsive carriers cannot be made from game samples with finite duration or baked-in modulation | Independent fixed voices share one staging buffer: centered fine aim, one harmonic firing-range round-robin lane, one/two/three-pulse beacon patterns, a two/three-beep rising/falling toggle-and-cane-mode lane, seven cane slots, four two-oscillator marker slots with one serialized identity lane, a one/two-beep weapon-function lane, continuous hazards, ten combat slots with fixed or swept frequency, and ten R-Tracker slots; none allocate at runtime |
 | `src/game/menutick.c` | Observe the final active dialog/focus once immediately after `menuProcessInput` | Menu slot/player/root/depth and current menu/dialog state | Captures all focus paths after item state settles without hooks in every transition | Implemented in Milestone 4 with one call |
 | `src/game/activemenutick.c` | Observe the settled active-menu screen and highlighted slot once after all sampled input is processed | Primary-player active-menu mode, screen index, slot index, and the localized `amGetSlotDetails` label | Weapon/device selection is a gameplay radial rather than a normal `struct menu`; observing after input avoids duplicate speech from intermediate controller samples | Weapon/device screen narration implemented; function and bot-order screens remain deferred |
-| `src/game/menu.c` | Expose a read-only focused-item runtime-data lookup | Dialog/item to existing row/block data | Accessibility must not duplicate private row/block mapping | Implemented in Milestone 4 as `menuGetItemData` |
+| `src/game/menu.c`, `src/include/game/menu.h` | Expose a read-only focused-item runtime-data lookup | Dialog/item to existing row/block data | Accessibility must not duplicate private row/block mapping | Implemented in Milestone 4 as `menuGetItemData` |
+| `src/include/types.h`, `src/include/game/menuitem.h` | Define the generic caller-owned accessibility query payload and expose the existing keyboard layout read-only | Requested semantic part/index/buffer plus keyboard rows | Custom handlers need one shared operation contract, and keyboard narration must not duplicate the renderer's private key table | Implemented for `MENUOP_GETACCESSIBILITYTEXT`; no speech policy or accessibility-owned state lives in these headers |
 | `src/game/menuitem.c` | Expose type-owned ranking/player-stats summaries only if existing APIs cannot be queried safely by the adapter | Current semantic row/stat labels and values | Compound presentation state is assembled inside type-specific render paths | Audit found no hook necessary; `mplayer/ingame.c` providers query the same ranking and player-stat records used by these renderers |
-| `src/game/activemenu.c`, `endscreen.c`, `filemgr.c`, `mainmenu.c`, `trainingmenus.c`, `mplayer/setup.c`, `mplayer/ingame.c`, and `fmb.c` | Answer one read-only `MENUOP_GETACCESSIBILITYTEXT` query for focusable custom-rendered rows, carousels, and optional dialog summaries; mark a simple visible label when it is itself the summary | Caller-owned UTF-8 buffer, requested part/index, or the label's normally resolved text | Render callbacks and non-focusable panels otherwise expose pixels/borrowed scratch text, not stable semantics | Implemented in Milestone 4; `trainingmenus.c` supplies firing-range weapon-information, post-session scoring, visible proficiency-star completion, device-training information, and holo-training description summaries; `mainmenu.c` supplies the shared mission-objective provider, rich pause-inventory descriptions, mission difficulty-completion stars, and the marked PC exit prompt; `endscreen.c` supplies mission-result panels and opts every endscreen/retry objective page into the shared provider; `mplayer/setup.c` supplies Combat Simulator challenge descriptions and per-player-count completion stars while preserving the current-challenge hidden-state handler; `mplayer/ingame.c` marks the post-session Save Player question and publishes the complete Game Over, ranking, and player-stat controls; `fmb.c` opts the 4 MB challenge confirmation into that shared provider |
+| `src/game/activemenu.c`, `endscreen.c`, `filemgr.c`, `mainmenu.c`, `trainingmenus.c`, `mplayer/setup.c`, `mplayer/ingame.c`, `fmb.c`, `src/include/game/mainmenu.h`, and `src/include/game/mplayer/setup.h` | Answer one read-only `MENUOP_GETACCESSIBILITYTEXT` query for focusable custom-rendered rows, carousels, and optional dialog summaries; mark a simple visible label when it is itself the summary; declare shared providers where menu definitions cross translation units | Caller-owned UTF-8 buffer, requested part/index, or the label's normally resolved text | Render callbacks and non-focusable panels otherwise expose pixels/borrowed scratch text, not stable semantics | Implemented in Milestone 4; `trainingmenus.c` supplies firing-range weapon-information, post-session scoring, visible proficiency-star completion, device-training information, and holo-training description summaries; `mainmenu.c` supplies the shared mission-objective provider, rich pause-inventory descriptions, mission difficulty-completion stars, and the marked PC exit prompt; `endscreen.c` supplies mission-result panels and opts every endscreen/retry objective page into the shared provider; `mplayer/setup.c` supplies Combat Simulator challenge descriptions and per-player-count completion stars while preserving the current-challenge hidden-state handler; `mplayer/ingame.c` marks the post-session Save Player question and publishes the complete Game Over, ranking, and player-stat controls; `fmb.c` opts the 4 MB challenge confirmation into that shared provider |
 | `src/game/hudmsg.c` | Publish after a message passes suppression and is queued | Resolved text, type, flags, player, audio channel, message ID | Polling the HUD array loses admission order and reason | Implemented for generic HUD-message narration; types 6 and 11 are logged but explicitly excluded as subtitles |
 | `src/game/objectives.c` | Publish inside the changed-status branch of `objectivesCheckAll` | Objective index, previous/new state | The existing HUD text can duplicate or omit useful objective identity | Proposed |
 | `src/game/chraction.c` | Optional later directional damage event after actual player damage | Victim player, magnitude band, direction/source category | Snapshot detects loss but not source/direction | Question; not needed for first status query |
@@ -406,7 +447,7 @@ This table records implemented and anticipated changes to established files so f
 | `src/game/radar.c`, `src/include/game/radar.h` | Expose one read-only R-Tracker marker classification and make the native renderer consume it | None/yellow/blue/character category for an active prop | A second copy of cheat, cloak, death, and flag rules could drift from the visual radar and disclose different targets | Implemented for the nonvisual R-Tracker slice; rendering output is otherwise unchanged |
 | `src/game/propobj.c`, `src/include/game/propobj.h` | Expose pure IR/X-Ray renderer queries and the native potential-interaction predicate | Conditional-scenery/infrared highlight state, X-Ray range, and broad object interaction semantics before range/facing checks | Copied flag, movement-state, or eraser math could drift and announce a different object set | `objIsHighlightedByInfrared`, `objGetXrayHighlightDistance`, and `objIsPotentiallyInteractable` are shared with their native consumers |
 | `src/game/propsnd.c` | Reuse public read-only distance-volume and pan calculations for procedural spatial cues | World position, distance, range, volume, and pan | Procedural cues should retain the tested spatial behavior without allocating or stopping gameplay channels | No hook needed; beacon and hazard cores call `psCalculateVolumeFromDistance` and `psCalculatePan` |
-| `src/include/constants.h` | Reserve `PSTYPE_ACCESSIBILITY_TARGETING` | Legacy/fallback prop-sound ownership retained by the generic targeting core | Any fallback targeting sample must stop/reuse only its own sound, never gameplay sounds | The active firing-range profile moved to its dedicated procedural harmonic lane; the reserved owner remains for compatibility and can be removed with the dormant fallback path later |
+| `src/include/constants.h` | Formerly reserved `PSTYPE_ACCESSIBILITY_TARGETING`; remove the unused owner after every active targeting lane moved to fixed procedural audio | No remaining targeting property-sound payload | Keeping an unreachable native-channel fallback enlarged lifecycle and telemetry state and reserved an engine-global owner value | Removed during the accessibility architecture debt audit; targeting no longer creates or owns a game sound channel |
 | `port/include/input.h` | Use provisional context-sensitive PC F4 through F12 accessibility keys and expose modifier bits | Development-only action identifiers | Gameplay uses F4 for virtual-cane mode, F5/F6/F8 for interactable/door/pickup scanners, F7 for non-hostile people, and F9–F12 for player markers; menus retain their own contexts; modified OS/debug chords must not trigger marker placement | F10–F12 are now named consecutive SDL scancodes; replacement by Milestone 6 actions/settings remains required |
 | `port/src/input.c` | Add configurable accessibility actions or a dispatch boundary | Repeat, status, beacon/scan, cancel, navigation commands | Current binding model represents game controls, not a separate action set | Proposed for Milestone 6; provisional keys require no binding-model change |
 | `port/src/input.c`, `port/src/optionsmenu.c`, `src/include/constants.h`, `src/game/bondmove.c` | Add a configurable reset-view gameplay action using the unused extended control bit | Pressed edge from End, R3, or a player-selected replacement binding | Gives a deterministic horizontal-orientation recovery command without changing yaw or bypassing the binding system | Implemented as `CK_1000`/`BUTTON_RESET_VIEW`; PC defaults are End and right-stick click |
@@ -419,7 +460,7 @@ This table records implemented and anticipated changes to established files so f
 1. **Windows speech technology:** Milestone 3 implements pinned Tolk commit `e5149f0cb6ef9b941673017e0e7b7c409e485fbe` as a dynamically loaded shared library. NVDA 2026.1 runtime requests, Unicode conversion, cancellation, missing-dependency behavior, and clean unload passed; other readers and future compatibility remain unverified.
 2. **Threading:** determine whether native speech can be pumped without blocking and which calls must occur on the main thread or a COM-initialized worker.
 3. **Menu semantics:** Milestone 4 implements the stable post-input observer and current type/provider matrix. Compilation and lifecycle smoke evidence exist; callback lifetime, localization variants, compound-control usefulness, full input parity, first-focus timing, and the complete scripted interaction matrix still need runtime and blind-user verification.
-4. **Localization:** test all supported ROM configurations for string resolution and region-specific control codes; determine how new accessibility-only strings will be translated.
+4. **Localization:** test all supported ROM configurations for string resolution and region-specific control codes. Existing game-derived menu, weapon, objective, and description text follows the normal language APIs. Accessibility-authored R-Tracker state phrases (`R-Tracker on`, `R-Tracker off`, and `No tracked targets`) remain centralized in the accessibility adapter but do not yet have language IDs or translations; add an accessibility string namespace and translation workflow before claiming non-English support rather than editing generated/ROM-derived assets.
 5. **HUD duplication:** correlate subtitle splitting, HUD duplicate suppression, objective-generated HUD messages, audio channels, and cutscene transitions.
 6. **Multiple players:** define which local player's focus/status owns speech and how simultaneous events are identified or suppressed.
 7. **Input:** determine a collision-free binding model and whether accessibility commands work while paused, in menus, and during gameplay.

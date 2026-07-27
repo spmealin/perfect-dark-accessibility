@@ -12,8 +12,8 @@
 #include "game/radar.h"
 #include "system.h"
 #include "accessibility/accessibility.h"
+#include "accessibility/accessibility_announcement.h"
 #include "accessibility/accessibility_log.h"
-#include "accessibility/accessibility_speech.h"
 #include "accessibility/accessibility_tone.h"
 #include "accessibility/accessibility_tracker.h"
 
@@ -209,11 +209,13 @@ static s32 accessibilityTrackerRear(f32 forwarddot, s32 previous)
 static void accessibilityTrackerSpeak(const char *event, const char *text,
 		s32 interrupt)
 {
-	s32 accepted = accessibilitySpeechOutput(text, interrupt);
+	s32 playernum = g_Vars.currentplayernum;
+	s32 accepted = accessibilityAnnouncementStatus(text, "rtracker",
+			playernum, interrupt);
 
 	accessibilityLogEvent("rtracker", "announcement",
-			"event=%s accepted=%d available=%d interrupt=%d text=%s",
-			event, accepted, accessibilitySpeechIsAvailable(), interrupt, text);
+			"event=%s accepted=%d interrupt=%d player=%d text=%s",
+			event, accepted, interrupt, playernum, text);
 }
 
 static s32 accessibilityTrackerNativeActive(void)

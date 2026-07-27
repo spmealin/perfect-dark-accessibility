@@ -3548,8 +3548,6 @@
 #define PSTYPE_COMMHUB     15
 #define PSTYPE_FOOTSTEP    16
 #define PSTYPE_CHRSHOOT    17
-#define PSTYPE_ACCESSIBILITY_TARGETING 19
-
 #define QUADRANT_BACK           0x01
 #define QUADRANT_SIDE1          0x02
 #define QUADRANT_SIDE2          0x04

@@ -12,10 +12,16 @@
 #include "accessibility/accessibility_log.h"
 
 #define ACCESSIBILITY_LOG_SCHEMA 1
+#define ACCESSIBILITY_LOG_BUFFER_SIZE (64 * 1024)
+#define ACCESSIBILITY_LOG_FORMAT_BUFFER_SIZE 4096
+#define ACCESSIBILITY_LOG_FLUSH_INTERVAL_US 1000000
 
 static FILE *g_AccessibilityLogFile = NULL;
 static uint64_t g_AccessibilityLogSequence = 0;
+static uint64_t g_AccessibilityLogNextFlushUs = 0;
 static char g_AccessibilityLogSession[32];
+static char g_AccessibilityLogBuffer[ACCESSIBILITY_LOG_BUFFER_SIZE];
+static char g_AccessibilityLogFormatBuffer[ACCESSIBILITY_LOG_FORMAT_BUFFER_SIZE];
 static s32 g_AccessibilityLogFailureReported = 0;
 
 static size_t accessibilityLogUtf8SequenceLength(const unsigned char *value)
@@ -143,6 +149,7 @@ s32 accessibilityLogInit(void)
 
 	g_AccessibilityLogFailureReported = 0;
 	g_AccessibilityLogSequence = 0;
+	g_AccessibilityLogNextFlushUs = 0;
 	now = time(NULL);
 	snprintf(g_AccessibilityLogSession, sizeof(g_AccessibilityLogSession),
 			"%" PRIu64, (uint64_t)now);
@@ -153,6 +160,12 @@ s32 accessibilityLogInit(void)
 	if (!g_AccessibilityLogFile) {
 		accessibilityLogWarn("open", errno);
 		return 0;
+	}
+
+	if (setvbuf(g_AccessibilityLogFile, g_AccessibilityLogBuffer, _IOFBF,
+			sizeof(g_AccessibilityLogBuffer)) != 0) {
+		sysLogPrintf(LOG_WARNING,
+				"accessibility log: fixed buffering unavailable; using C runtime default");
 	}
 
 	return 1;
@@ -231,8 +244,21 @@ void accessibilityLogEventMessage(const char *category, const char *event,
 	accessibilityLogWriteJsonString(message);
 	fputs("}\n", g_AccessibilityLogFile);
 
-	if (fflush(g_AccessibilityLogFile) != 0 || ferror(g_AccessibilityLogFile)) {
+	if (ferror(g_AccessibilityLogFile)) {
 		accessibilityLogCloseAfterFailure("write");
+		return;
+	}
+
+	if (g_AccessibilityLogNextFlushUs == 0
+			|| timestamp >= g_AccessibilityLogNextFlushUs
+			|| (category && strcmp(category, "lifecycle") == 0)) {
+		if (fflush(g_AccessibilityLogFile) != 0) {
+			accessibilityLogCloseAfterFailure("flush");
+			return;
+		}
+
+		g_AccessibilityLogNextFlushUs
+				= timestamp + ACCESSIBILITY_LOG_FLUSH_INTERVAL_US;
 	}
 }
 
@@ -253,16 +279,19 @@ void accessibilityLogEvent(const char *category, const char *event, const char *
 	if (fmt) {
 		va_start(args, fmt);
 		va_copy(copy, args);
-		length = vsnprintf(NULL, 0, fmt, copy);
-		va_end(copy);
+		length = vsnprintf(g_AccessibilityLogFormatBuffer,
+				sizeof(g_AccessibilityLogFormatBuffer), fmt, args);
+		va_end(args);
 
 		if (length < 0) {
 			message = formaterror;
+		} else if ((size_t)length < sizeof(g_AccessibilityLogFormatBuffer)) {
+			message = g_AccessibilityLogFormatBuffer;
 		} else {
 			allocated = malloc((size_t)length + 1);
 
 			if (allocated) {
-				if (vsnprintf(allocated, (size_t)length + 1, fmt, args) < 0) {
+				if (vsnprintf(allocated, (size_t)length + 1, fmt, copy) < 0) {
 					free(allocated);
 					allocated = NULL;
 					message = formaterror;
@@ -274,7 +303,7 @@ void accessibilityLogEvent(const char *category, const char *event, const char *
 			}
 		}
 
-		va_end(args);
+		va_end(copy);
 	}
 
 	accessibilityLogEventMessage(category, event, message);
