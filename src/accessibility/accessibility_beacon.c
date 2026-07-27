@@ -77,7 +77,16 @@ struct accessibilitybeaconresult {
 	f32 vertical;
 };
 
+struct accessibilitybeacondroneslot {
+	s32 active;
+	s32 restart;
+	struct accessibilitybeaconresult result;
+};
+
 static struct accessibilitybeaconresult g_AccessibilityBeaconResults[ACCESSIBILITY_BEACON_CAPACITY];
+static struct accessibilitybeacondroneslot
+		g_AccessibilityBeaconFriendlySlots[
+				ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
 static s32 g_AccessibilityBeaconResultCount;
 static s32 g_AccessibilityBeaconSelectedIndex[ACCESSIBILITY_BEACON_CATEGORY_COUNT]
 		= { -1, -1, -1, -1, -1 };
@@ -97,6 +106,26 @@ static uintptr_t g_AccessibilityBeaconObserverProp;
 static s32 g_AccessibilityBeaconObserverRemote;
 static s32 g_AccessibilityBeaconSuppressed;
 
+static void accessibilityBeaconStopFriendlyDrones(const char *reason)
+{
+	s32 slot;
+	s32 active = 0;
+
+	for (slot = 0; slot < ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT; slot++) {
+		active += g_AccessibilityBeaconFriendlySlots[slot].active != 0;
+	}
+
+	accessibilityToneStopFriendly();
+	memset(g_AccessibilityBeaconFriendlySlots, 0,
+			sizeof(g_AccessibilityBeaconFriendlySlots));
+
+	if (active > 0) {
+		accessibilityLogEvent("beacon", "friendly_drone_stop",
+				"reason=%s active_slots=%d base_frequency_hz=440 third_frequency_hz=550",
+				reason ? reason : "unknown", active);
+	}
+}
+
 static void accessibilityBeaconResetTelemetry(void)
 {
 	g_AccessibilityBeaconNextTelemetry60 = 0;
@@ -113,6 +142,7 @@ static void accessibilityBeaconLogTelemetry(const char *reason)
 	s32 channels = IS4MB() ? 30 : 40;
 	s32 inuse = 0;
 	s32 stopped = 0;
+	s32 friendlyslots = 0;
 	s32 i;
 
 	for (i = 0; g_PsChannels && i < channels; i++) {
@@ -127,6 +157,10 @@ static void accessibilityBeaconLogTelemetry(const char *reason)
 
 	memoryavailable = sysGetProcessMemoryUsage(&workingset, &privatebytes);
 
+	for (i = 0; i < ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT; i++) {
+		friendlyslots += g_AccessibilityBeaconFriendlySlots[i].active != 0;
+	}
+
 	if (memoryavailable && !g_AccessibilityBeaconMemoryBaselineValid) {
 		g_AccessibilityBeaconMemoryBaselineValid = true;
 		g_AccessibilityBeaconWorkingSetBaseline = workingset;
@@ -134,7 +168,7 @@ static void accessibilityBeaconLogTelemetry(const char *reason)
 	}
 
 	accessibilityLogEvent("beacon", "telemetry",
-			"reason=%s tick=%d scans=%llu pulses=%llu memory_available=%d working_set_bytes=%llu working_set_delta=%lld private_bytes=%llu private_delta=%lld snd_states=%d prop_channels_in_use=%d prop_channels_total=%d prop_channels_stopped=%d procedural_chirp_lane=1 schedule_targets=%d schedule_cursor=%d next_schedule_tick=%d object_active=%d door_active=%d pickup_active=%d non_hostile_active=%d",
+			"reason=%s tick=%d scans=%llu pulses=%llu memory_available=%d working_set_bytes=%llu working_set_delta=%lld private_bytes=%llu private_delta=%lld snd_states=%d prop_channels_in_use=%d prop_channels_total=%d prop_channels_stopped=%d procedural_chirp_lane=1 friendly_drone_slots=%d schedule_targets=%d schedule_cursor=%d next_schedule_tick=%d object_active=%d door_active=%d pickup_active=%d non_hostile_active=%d",
 			reason, g_Vars.lvframe60,
 			(unsigned long long)g_AccessibilityBeaconScanCount,
 			(unsigned long long)g_AccessibilityBeaconPulseCount,
@@ -142,7 +176,7 @@ static void accessibilityBeaconLogTelemetry(const char *reason)
 			(long long)workingset - (long long)g_AccessibilityBeaconWorkingSetBaseline,
 			(unsigned long long)privatebytes,
 			(long long)privatebytes - (long long)g_AccessibilityBeaconPrivateBaseline,
-			g_SndNumPlaying, inuse, channels, stopped,
+			g_SndNumPlaying, inuse, channels, stopped, friendlyslots,
 			g_AccessibilityBeaconScheduleCount,
 			g_AccessibilityBeaconScheduleCursor,
 			g_AccessibilityBeaconNextScheduledPulse60,
@@ -1101,6 +1135,9 @@ static void accessibilityBeaconDeactivateCategory(s32 category, const char *reas
 	s32 wasactive = g_AccessibilityBeaconCategoryActive[category];
 	s32 selected = g_AccessibilityBeaconSelectedIndex[category];
 
+	if (category == ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE) {
+		accessibilityBeaconStopFriendlyDrones(reason);
+	}
 	accessibilityBeaconClearSelection(category, reason);
 
 	if (wasactive || selected >= 0) {
@@ -1161,6 +1198,8 @@ static void accessibilityBeaconSuspend(const char *reason)
 	}
 
 	accessibilityToneStopChirp();
+	accessibilityBeaconStopFriendlyDrones(
+			reason ? reason : "scope_suspended");
 	g_AccessibilityBeaconResultCount = 0;
 	memset(g_AccessibilityBeaconResults, 0,
 			sizeof(g_AccessibilityBeaconResults));
@@ -1244,6 +1283,167 @@ static s32 accessibilityBeaconFindResultIdentity(
 	return -1;
 }
 
+static s32 accessibilityBeaconFriendlyResultAssigned(s32 resultindex)
+{
+	s32 slot;
+
+	for (slot = 0; slot < ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT; slot++) {
+		struct accessibilitybeacondroneslot *drone
+				= &g_AccessibilityBeaconFriendlySlots[slot];
+
+		if (drone->active
+				&& accessibilityBeaconFindResultIdentity(&drone->result)
+						== resultindex) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static void accessibilityBeaconRefreshFriendlyDrones(const char *reason)
+{
+	s32 slot;
+	s32 index;
+
+	if (!g_AccessibilityBeaconCategoryActive[
+			ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE]) {
+		accessibilityBeaconStopFriendlyDrones(reason);
+		return;
+	}
+
+	for (slot = 0; slot < ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT; slot++) {
+		struct accessibilitybeacondroneslot *drone
+				= &g_AccessibilityBeaconFriendlySlots[slot];
+
+		if (!drone->active) {
+			continue;
+		}
+
+		index = accessibilityBeaconFindResultIdentity(&drone->result);
+		if (index >= 0) {
+			drone->result = g_AccessibilityBeaconResults[index];
+		} else {
+			accessibilityLogEvent("beacon", "friendly_drone_release",
+					"slot=%d reason=target_removed propnum=%d entity=%p refresh_reason=%s",
+					slot, drone->result.propnum, drone->result.entity,
+					reason ? reason : "unknown");
+			accessibilityToneSetFriendlySlot(slot, false, 0.0f, 0.0f,
+					false);
+			memset(drone, 0, sizeof(*drone));
+		}
+	}
+
+	for (index = 0; index < g_AccessibilityBeaconResultCount; index++) {
+		struct accessibilitybeaconresult *result
+				= &g_AccessibilityBeaconResults[index];
+		s32 targetslot = -1;
+		s32 farthest = -1;
+
+		if (result->category != ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE
+				|| accessibilityBeaconFriendlyResultAssigned(index)) {
+			continue;
+		}
+
+		for (slot = 0; slot < ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT;
+				slot++) {
+			struct accessibilitybeacondroneslot *drone
+					= &g_AccessibilityBeaconFriendlySlots[slot];
+
+			if (!drone->active) {
+				targetslot = slot;
+				break;
+			}
+
+			if (farthest < 0 || drone->result.distance
+					> g_AccessibilityBeaconFriendlySlots[
+							farthest].result.distance) {
+				farthest = slot;
+			}
+		}
+
+		if (targetslot < 0 && farthest >= 0
+				&& result->distance + ACCESSIBILITY_BEACON_SWITCH_MARGIN
+					< g_AccessibilityBeaconFriendlySlots[
+							farthest].result.distance) {
+			targetslot = farthest;
+			accessibilityLogEvent("beacon", "friendly_drone_release",
+					"slot=%d reason=nearer_target propnum=%d entity=%p replacement_propnum=%d replacement_entity=%p",
+					targetslot,
+					g_AccessibilityBeaconFriendlySlots[
+							targetslot].result.propnum,
+					g_AccessibilityBeaconFriendlySlots[
+							targetslot].result.entity,
+					result->propnum, result->entity);
+		}
+
+		if (targetslot >= 0) {
+			struct accessibilitybeacondroneslot *drone
+					= &g_AccessibilityBeaconFriendlySlots[targetslot];
+
+			drone->active = true;
+			drone->restart = true;
+			drone->result = *result;
+			accessibilityLogEvent("beacon", "friendly_drone_assign",
+					"slot=%d propnum=%d entity=%p distance=%.3f reason=%s base_frequency_hz=440 third_frequency_hz=550 base_gain=0.72 third_gain=0.28",
+					targetslot, result->propnum, result->entity,
+					result->distance, reason ? reason : "unknown");
+		}
+	}
+}
+
+static void accessibilityBeaconUpdateFriendlyDrones(void)
+{
+	s32 slot;
+
+	for (slot = 0; slot < ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT; slot++) {
+		struct accessibilitybeacondroneslot *drone
+				= &g_AccessibilityBeaconFriendlySlots[slot];
+		struct prop *prop;
+		const char *validreason;
+		s32 volume;
+		s32 pan;
+		f32 normalizedvolume;
+		f32 normalizedpan;
+
+		if (!drone->active) {
+			continue;
+		}
+
+		prop = accessibilityBeaconValidateResult(&drone->result,
+				&validreason);
+		if (!prop) {
+			accessibilityLogEvent("beacon", "friendly_drone_release",
+					"slot=%d reason=%s propnum=%d entity=%p",
+					slot, validreason, drone->result.propnum,
+					drone->result.entity);
+			accessibilityToneSetFriendlySlot(slot, false, 0.0f, 0.0f,
+					false);
+			memset(drone, 0, sizeof(*drone));
+			g_AccessibilityBeaconNextRefresh60 = g_Vars.lvframe60;
+			continue;
+		}
+
+		volume = psCalculateVolumeFromDistance(drone->result.distance,
+				ACCESSIBILITY_BEACON_FULL_DISTANCE,
+				ACCESSIBILITY_BEACON_FADE_DISTANCE,
+				ACCESSIBILITY_BEACON_SILENT_DISTANCE, AL_VOL_FULL);
+		pan = psCalculatePan(&prop->pos,
+				ACCESSIBILITY_BEACON_FULL_DISTANCE,
+				ACCESSIBILITY_BEACON_FADE_DISTANCE,
+				ACCESSIBILITY_BEACON_SILENT_DISTANCE,
+				drone->result.distance, false, NULL);
+		normalizedvolume = (f32)volume / (f32)AL_VOL_FULL
+				* ACCESSIBILITY_BEACON_NON_HOSTILE_GAIN;
+		normalizedpan = ((f32)pan - (f32)AL_PAN_CENTER)
+				/ (f32)AL_PAN_CENTER;
+
+		accessibilityToneSetFriendlySlot(slot, volume > 0,
+				normalizedvolume, normalizedpan, drone->restart);
+		drone->restart = false;
+	}
+}
+
 static s32 accessibilityBeaconScheduleContains(s32 *indices, s32 count, s32 index)
 {
 	s32 i;
@@ -1293,7 +1493,8 @@ static void accessibilityBeaconBuildSchedule(
 
 	for (category = ACCESSIBILITY_BEACON_CATEGORY_OBJECT;
 			category < ACCESSIBILITY_BEACON_CATEGORY_COUNT; category++) {
-		if (!g_AccessibilityBeaconCategoryActive[category]) {
+		if (!g_AccessibilityBeaconCategoryActive[category]
+				|| category == ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE) {
 			continue;
 		}
 
@@ -1482,6 +1683,7 @@ static void accessibilityBeaconRefreshActive(void)
 
 	accessibilityBeaconBuildSchedule(previous, previouscount,
 			nextvalid ? &nexttarget : NULL, nextvalid, "automatic_refresh");
+	accessibilityBeaconRefreshFriendlyDrones("automatic_refresh");
 
 	if (g_AccessibilityBeaconScheduleCount > 0
 			&& g_AccessibilityBeaconNextScheduledPulse60 == 0) {
@@ -1501,6 +1703,7 @@ static void accessibilityBeaconRescanActive(const char *reason)
 			ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE, "rescan");
 	accessibilityBeaconScan(true);
 	accessibilityBeaconBuildSchedule(NULL, 0, NULL, false, reason);
+	accessibilityBeaconRefreshFriendlyDrones(reason);
 	g_AccessibilityBeaconNextScheduledPulse60 = g_Vars.lvframe60;
 	g_AccessibilityBeaconNextRefresh60
 			= g_Vars.lvframe60 + ACCESSIBILITY_BEACON_REFRESH_TICKS;
@@ -1522,10 +1725,8 @@ static void accessibilityBeaconPulse(s32 category,
 	f32 normalizedvolume = (f32)volume / (f32)AL_VOL_FULL;
 	f32 normalizedpan = ((f32)pan - (f32)AL_PAN_CENTER)
 			/ (f32)AL_PAN_CENTER;
-	s32 pulses = selected->kind == ACCESSIBILITY_BEACON_KIND_PICKUP ? 3
-			: selected->kind == ACCESSIBILITY_BEACON_KIND_NON_HOSTILE ? 2 : 1;
-	f32 gain = selected->kind == ACCESSIBILITY_BEACON_KIND_NON_HOSTILE
-			? ACCESSIBILITY_BEACON_NON_HOSTILE_GAIN : 1.0f;
+	s32 pulses = selected->kind == ACCESSIBILITY_BEACON_KIND_PICKUP ? 3 : 1;
+	f32 gain = 1.0f;
 
 	accessibilityTonePlayChirpPattern(frequencyhz, normalizedvolume,
 			normalizedpan, pulses, gain);
@@ -1868,6 +2069,12 @@ void accessibilityBeaconTick(void)
 		accessibilityBeaconPlayScheduledPulse();
 	}
 
+	if (g_AccessibilityBeaconCategoryActive[
+			ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE]
+			&& g_Vars.lvupdate60 > 0) {
+		accessibilityBeaconUpdateFriendlyDrones();
+	}
+
 	if (accessibilityBeaconAnyActive() && g_Vars.lvupdate60 > 0
 			&& (g_AccessibilityBeaconNextTelemetry60 == 0
 				|| g_Vars.lvframe60 >= g_AccessibilityBeaconNextTelemetry60)) {
@@ -1884,7 +2091,7 @@ void accessibilityBeaconReset(const char *reason, s32 preservecategories)
 	}
 
 	accessibilityLogEvent("beacon", "reset",
-			"reason=%s preserve_categories=%d object_active=%d door_active=%d pickup_active=%d non_hostile_active=%d scans=%llu pulses=%llu interactable_enabled=%d non_hostile_enabled=%d radius=%.1f base_cadence_ticks=%d refresh_ticks=%d min_slot_ticks=%d per_category_cap=%d object_frequency_hz=%.1f pickup_pulses=3 door_frequency_hz=%.1f non_hostile_pulses=2 non_hostile_frequency_hz=%.1f lane=procedural_chirp",
+			"reason=%s preserve_categories=%d object_active=%d door_active=%d pickup_active=%d non_hostile_active=%d scans=%llu pulses=%llu interactable_enabled=%d non_hostile_enabled=%d radius=%.1f base_cadence_ticks=%d refresh_ticks=%d min_slot_ticks=%d per_category_cap=%d object_frequency_hz=%.1f pickup_pulses=3 door_frequency_hz=%.1f non_hostile_voice=continuous_drone non_hostile_slots=%d non_hostile_base_frequency_hz=440 non_hostile_third_frequency_hz=550 non_hostile_base_gain=0.72 non_hostile_third_gain=0.28 lane=procedural_chirp_and_friendly_drone",
 			reason ? reason : "reset",
 			preservecategories,
 			g_AccessibilityBeaconCategoryActive[
@@ -1904,7 +2111,7 @@ void accessibilityBeaconReset(const char *reason, s32 preservecategories)
 			ACCESSIBILITY_BEACON_MAX_TARGETS_PER_CATEGORY,
 			ACCESSIBILITY_BEACON_OBJECT_FREQUENCY_HZ,
 			ACCESSIBILITY_BEACON_DOOR_FREQUENCY_HZ,
-			ACCESSIBILITY_BEACON_DOOR_FREQUENCY_HZ);
+			ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT);
 
 	g_AccessibilityBeaconScanCount = 0;
 	g_AccessibilityBeaconPulseCount = 0;
