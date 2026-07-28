@@ -13,6 +13,7 @@
 #include "game/chraction.h"
 #include "game/lv.h"
 #include "game/objectives.h"
+#include "game/prop.h"
 #include "game/propobj.h"
 #include "game/propsnd.h"
 #include "game/sight.h"
@@ -612,9 +613,9 @@ static void accessibilityBeaconPullPointTowardCamera(
 	}
 }
 
-static s32 accessibilityBeaconObjectHasLineOfSight(
+static s32 accessibilityBeaconPropHasSurfaceLineOfSight(
 		struct coord *viewpos, RoomNum *camrooms, struct prop *targetprop,
-		s32 *sample, s32 *queries)
+		s32 allowembedded, s32 *sample, s32 *queries)
 {
 	struct defaultobj *obj = targetprop->obj;
 	struct modelrodata_bbox *bbox;
@@ -727,7 +728,8 @@ static s32 accessibilityBeaconObjectHasLineOfSight(
 	 * for an object that was actually rendered on-screen and whose native
 	 * interaction path does not request its own LOS check.
 	 */
-	if ((targetprop->flags & PROPFLAG_ONTHISSCREENTHISTICK)
+	if (allowembedded
+			&& (targetprop->flags & PROPFLAG_ONTHISSCREENTHISTICK)
 			&& (obj->flags2 & OBJFLAG2_INTERACTCHECKLOS) == 0) {
 		for (i = 0; i < ARRAYCOUNT(targets); i++) {
 			accessibilityBeaconPullPointTowardCamera(&targets[i], viewpos,
@@ -744,6 +746,64 @@ static s32 accessibilityBeaconObjectHasLineOfSight(
 	}
 
 	return false;
+}
+
+static s32 accessibilityBeaconDoorHasLineOfSight(
+		struct accessibilitybeaconresult *result,
+		const struct accessibilityobserver *observer,
+		struct prop *targetprop)
+{
+	struct doorobj *door = targetprop ? targetprop->door : NULL;
+	struct doorobj *sibling;
+	struct prop *disabledprops[ACCESSIBILITY_BEACON_MAX_DOOR_SIBLINGS];
+	s32 disabledcount = 0;
+	s32 guard = 0;
+	s32 clear;
+	s32 i;
+	struct coord viewpos = observer->camera;
+	RoomNum camrooms[2];
+
+	camrooms[0] = observer->room;
+	camrooms[1] = -1;
+
+	if (!door) {
+		return accessibilityBeaconPropHasSurfaceLineOfSight(
+				&viewpos, camrooms, targetprop, false,
+				&result->lossample, &result->losqueries);
+	}
+
+	/*
+	 * A physical doorway can be represented by several sibling leaves. The
+	 * selected leaf and every sibling are parts of the target, not intervening
+	 * occluders. Preserve any pre-existing disabled perimeter while excluding
+	 * the whole group for this synchronous query.
+	 */
+	sibling = door;
+
+	do {
+		struct prop *siblingprop = sibling->base.prop;
+
+		if (siblingprop
+				&& siblingprop->obj
+				&& (siblingprop->obj->hidden & OBJHFLAG_PERIMDISABLED) == 0
+				&& disabledcount < ARRAYCOUNT(disabledprops)) {
+			propSetPerimEnabled(siblingprop, false);
+			disabledprops[disabledcount++] = siblingprop;
+		}
+
+		sibling = sibling->sibling;
+	} while (sibling && sibling != door
+			&& guard++ < ACCESSIBILITY_BEACON_MAX_DOOR_SIBLINGS);
+
+	clear = accessibilityBeaconPropHasSurfaceLineOfSight(
+			&viewpos, camrooms, targetprop, false,
+			&result->lossample, &result->losqueries);
+
+	for (i = 0; i < disabledcount; i++) {
+		propSetPerimEnabled(disabledprops[i], true);
+	}
+
+	return clear;
 }
 
 static s32 accessibilityBeaconHasLineOfSight(
@@ -782,9 +842,15 @@ static s32 accessibilityBeaconHasLineOfSight(
 	}
 
 	if (result->kind == ACCESSIBILITY_BEACON_KIND_OBJECT) {
-		return accessibilityBeaconObjectHasLineOfSight(
+		return accessibilityBeaconPropHasSurfaceLineOfSight(
 				&viewpos, camrooms, targetprop,
+				true,
 				&result->lossample, &result->losqueries);
+	}
+
+	if (result->kind == ACCESSIBILITY_BEACON_KIND_DOOR) {
+		return accessibilityBeaconDoorHasLineOfSight(
+				result, observer, targetprop);
 	}
 
 	return accessibilityVisibilityHasVisualLineOfSight(
