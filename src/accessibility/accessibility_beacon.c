@@ -48,6 +48,7 @@
 #define ACCESSIBILITY_BEACON_MAX_DOOR_SIBLINGS 32
 #define ACCESSIBILITY_BEACON_SURFACE_INSET 0.35f
 #define ACCESSIBILITY_BEACON_SURFACE_PULL_FORWARD 0.25f
+#define ACCESSIBILITY_BEACON_EMBEDDED_SURFACE_TOLERANCE 8.0f
 
 enum accessibilitybeaconcategory {
 	ACCESSIBILITY_BEACON_CATEGORY_NONE = 0,
@@ -585,15 +586,15 @@ static void accessibilityBeaconTransformObjectPoint(
 }
 
 static void accessibilityBeaconPullPointTowardCamera(
-		struct coord *point, const struct coord *camera)
+		struct coord *point, const struct coord *camera, f32 amount)
 {
 	f32 x = camera->x - point->x;
 	f32 y = camera->y - point->y;
 	f32 z = camera->z - point->z;
 	f32 distance = sqrtf(x * x + y * y + z * z);
 
-	if (distance > ACCESSIBILITY_BEACON_SURFACE_PULL_FORWARD) {
-		f32 scale = ACCESSIBILITY_BEACON_SURFACE_PULL_FORWARD / distance;
+	if (distance > amount) {
+		f32 scale = amount / distance;
 
 		point->x += x * scale;
 		point->y += y * scale;
@@ -696,13 +697,36 @@ static s32 accessibilityBeaconObjectHasLineOfSight(
 		}
 
 		accessibilityBeaconTransformObjectPoint(obj, &samplelocal, &targets[i]);
-		accessibilityBeaconPullPointTowardCamera(&targets[i], viewpos);
+		accessibilityBeaconPullPointTowardCamera(&targets[i], viewpos,
+				ACCESSIBILITY_BEACON_SURFACE_PULL_FORWARD);
 		(*queries)++;
 
 		if (cdTestLos06(viewpos, camrooms,
 				&targets[i], targetprop->rooms, CDTYPE_BG)) {
 			*sample = i + 1;
 			return true;
+		}
+	}
+
+	/*
+	 * Wall-mounted monitors can place their model anchor and complete bounding
+	 * box just behind the background wall that visually frames them. Preserve
+	 * the ordinary LOS result first, then tolerate only a very shallow embed
+	 * for an object that was actually rendered on-screen and whose native
+	 * interaction path does not request its own LOS check.
+	 */
+	if ((targetprop->flags & PROPFLAG_ONTHISSCREENTHISTICK)
+			&& (obj->flags2 & OBJFLAG2_INTERACTCHECKLOS) == 0) {
+		for (i = 0; i < ARRAYCOUNT(targets); i++) {
+			accessibilityBeaconPullPointTowardCamera(&targets[i], viewpos,
+					ACCESSIBILITY_BEACON_EMBEDDED_SURFACE_TOLERANCE);
+			(*queries)++;
+
+			if (cdTestLos06(viewpos, camrooms,
+					&targets[i], targetprop->rooms, CDTYPE_BG)) {
+				*sample = ARRAYCOUNT(targets) + i + 1;
+				return true;
+			}
 		}
 	}
 
