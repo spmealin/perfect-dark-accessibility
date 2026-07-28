@@ -21,6 +21,7 @@
 #include "lib/vi.h"
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_log.h"
+#include "accessibility/accessibility_path_blocker.h"
 #include "accessibility/accessibility_targeting.h"
 
 #define ACCESSIBILITY_TARGETING_AUDIT_TICKS TICKS(60)
@@ -222,6 +223,31 @@ static s32 accessibilityTargetingGameCctvCombatCapable(
 			&& (obj->flags & (OBJFLAG_DEACTIVATED
 				| OBJFLAG_CAMERA_DISABLED)) == 0
 			&& objIsHealthy(obj);
+}
+
+static s32 accessibilityTargetingGameCurrentAttackCanBreak(
+		const struct prop *prop)
+{
+	struct weaponfunc *func = currentPlayerGetWeaponFunction(HAND_RIGHT);
+	s32 type;
+
+	if (!func || !accessibilityPathBlockerIsBreakable(prop)) {
+		return false;
+	}
+
+	type = func->type & 0xff;
+
+	if (type == INVENTORYFUNCTYPE_THROW
+			|| func->type == INVENTORYFUNCTYPE_SHOOT_PROJECTILE
+			|| (func->flags & (FUNCFLAG_EXPLOSIVESHELLS
+				| FUNCFLAG_20000000))) {
+		return accessibilityPathBlockerCanTakeGunfire(prop)
+				|| accessibilityPathBlockerCanTakeExplosion(prop);
+	}
+
+	return (type == INVENTORYFUNCTYPE_SHOOT
+				|| type == INVENTORYFUNCTYPE_MELEE)
+			&& accessibilityPathBlockerCanTakeGunfire(prop);
 }
 
 static s32 accessibilityTargetingGameAuditEqual(
@@ -1053,6 +1079,80 @@ static void accessibilityTargetingObserveCombat(
 						- g_Vars.currentplayer->cam_pos.z;
 				candidate->aimdistance = sqrtf(dx * dx + dy * dy + dz * dz);
 			}
+		}
+	}
+
+	if (rawaimedprop && g_AccessibilityTargetingGameRawAimHitValid) {
+		struct defaultobj *obj = rawaimedprop->obj;
+		struct weaponfunc *func = currentPlayerGetWeaponFunction(HAND_RIGHT);
+		s32 propnum = accessibilityTargetingGamePropNum(rawaimedprop);
+		s32 breakable = accessibilityPathBlockerIsBreakable(rawaimedprop);
+		s32 attackcompatible
+				= accessibilityTargetingGameCurrentAttackCanBreak(rawaimedprop);
+
+		if (propnum >= 0 && breakable && attackcompatible) {
+			struct accessibilitytargetingcandidate *candidate;
+			f32 dx;
+			f32 dy;
+			f32 dz;
+
+			if (observation->candidatecount
+					>= ACCESSIBILITY_TARGETING_MAX_CANDIDATES) {
+				observation->candidatecount--;
+			}
+			candidate = &observation->candidates[observation->candidatecount++];
+			memset(candidate, 0, sizeof(*candidate));
+			candidate->identity.playernum = g_Vars.currentplayernum;
+			candidate->identity.source = ACCESSIBILITY_TARGETING_SOURCE_COMBAT;
+			candidate->identity.sourceslot = propnum;
+			candidate->identity.propnum = propnum;
+			candidate->identity.proptype = rawaimedprop->type;
+			candidate->identity.objectidentity = (uintptr_t)obj;
+			candidate->prop = rawaimedprop;
+			candidate->category
+					= ACCESSIBILITY_TARGETING_CATEGORY_BREAKABLE_PATH_BLOCKER;
+			candidate->relationship
+					= ACCESSIBILITY_TARGETING_RELATIONSHIP_NEUTRAL;
+			candidate->shootability
+					= ACCESSIBILITY_TARGETING_SHOOTABILITY_SHOOTABLE;
+			candidate->position = g_AccessibilityTargetingGameRawAimHitPos;
+			candidate->aimonly = true;
+			dx = candidate->position.x - g_Vars.currentplayer->prop->pos.x;
+			dy = candidate->position.y - g_Vars.currentplayer->prop->pos.y;
+			dz = candidate->position.z - g_Vars.currentplayer->prop->pos.z;
+			candidate->distance = sqrtf(dx * dx + dy * dy + dz * dz);
+			dx = candidate->position.x - g_Vars.currentplayer->cam_pos.x;
+			dy = candidate->position.y - g_Vars.currentplayer->cam_pos.y;
+			dz = candidate->position.z - g_Vars.currentplayer->cam_pos.z;
+			candidate->aimdistance = sqrtf(dx * dx + dy * dy + dz * dz);
+			observation->hasaimedtarget = true;
+			observation->aimedidentity = candidate->identity;
+			aimedshootability = candidate->shootability;
+			alignmentusesraw = true;
+		}
+
+		if (detailed || (breakable
+				&& (uintptr_t)rawaimedprop
+						!= g_AccessibilityTargetingGameLastRejectedAim)) {
+			accessibilityLogEvent("targeting", "path_blocker_aim",
+					"frame=%d stage=%d player=%d accepted=%d reason=%s prop=%p propnum=%d obj=%p obj_type=%d model=%d obj_flags=0x%08x obj_flags2=0x%08x obj_hidden=0x%08x healthy=%d mortal=%d attack_type=%d hit=%.3f,%.3f,%.3f",
+					g_Vars.lvframe60, g_Vars.stagenum,
+					g_Vars.currentplayernum,
+					propnum >= 0 && breakable && attackcompatible,
+					propnum < 0 ? "invalid_prop"
+						: !breakable ? "not_breakable_path_blocker"
+						: !attackcompatible ? "current_attack_incompatible"
+						: "eligible",
+					(void *)rawaimedprop, propnum, (void *)obj,
+					obj ? obj->type : -1, obj ? obj->modelnum : -1,
+					obj ? obj->flags : 0, obj ? obj->flags2 : 0,
+					obj ? obj->hidden : 0,
+					obj ? objIsHealthy(obj) : false,
+					obj ? objIsMortal(obj) : false,
+					func ? func->type : INVENTORYFUNCTYPE_NONE,
+					g_AccessibilityTargetingGameRawAimHitPos.x,
+					g_AccessibilityTargetingGameRawAimHitPos.y,
+					g_AccessibilityTargetingGameRawAimHitPos.z);
 		}
 	}
 
