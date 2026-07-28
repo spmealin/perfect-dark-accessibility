@@ -23,6 +23,7 @@
 #include "accessibility/accessibility_log.h"
 #include "accessibility/accessibility_path_blocker.h"
 #include "accessibility/accessibility_targeting.h"
+#include "accessibility/accessibility_visibility.h"
 
 #define ACCESSIBILITY_TARGETING_AUDIT_TICKS TICKS(60)
 #define ACCESSIBILITY_TARGETING_RANGE_OUTER_RADIUS 75.0f
@@ -490,10 +491,9 @@ static s32 accessibilityTargetingGameCharacterLineOfSight(
 	for (i = 0; i < ARRAYCOUNT(positions); i++) {
 		(*queries)++;
 
-		if (cdTestLos03(&g_Vars.currentplayer->cam_pos, camrooms,
-				&positions[i],
-				CDTYPE_OBJS | CDTYPE_DOORS | CDTYPE_PATHBLOCKER | CDTYPE_BG,
-				GEOFLAG_BLOCK_SHOOT)) {
+		if (accessibilityVisibilityHasVisualLineOfSight(
+				&g_Vars.currentplayer->cam_pos, camrooms,
+				&positions[i], prop->rooms, prop)) {
 			*sample = ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_CENTER + i;
 			return true;
 		}
@@ -644,12 +644,10 @@ static void accessibilityTargetingCaptureCombat(void)
 							&projection->visibilityqueries);
 			} else {
 				projection->visibilityqueries = 1;
-				projection->lineofsight = cdTestLos03(
-						&g_Vars.currentplayer->cam_pos, camrooms,
-						&targetpos,
-						CDTYPE_OBJS | CDTYPE_DOORS | CDTYPE_PATHBLOCKER
-							| CDTYPE_BG,
-						GEOFLAG_BLOCK_SHOOT);
+				projection->lineofsight
+						= accessibilityVisibilityHasVisualLineOfSight(
+							&g_Vars.currentplayer->cam_pos, camrooms,
+							&targetpos, prop->rooms, prop);
 				projection->visibilitysample = projection->lineofsight
 						? ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_CENTER
 						: ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_NONE;

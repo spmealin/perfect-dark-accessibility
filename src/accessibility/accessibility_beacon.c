@@ -23,6 +23,7 @@
 #include "accessibility/accessibility_log.h"
 #include "accessibility/accessibility_observer.h"
 #include "accessibility/accessibility_tone.h"
+#include "accessibility/accessibility_visibility.h"
 #ifndef PLATFORM_N64
 #include "input.h"
 #endif
@@ -634,8 +635,9 @@ static s32 accessibilityBeaconObjectHasLineOfSight(
 	*sample = 0;
 	*queries = 1;
 
-	if (cdTestLos06(viewpos, camrooms,
-			&targetprop->pos, targetprop->rooms, CDTYPE_BG)) {
+	if (accessibilityVisibilityHasVisualLineOfSight(
+			viewpos, camrooms, &targetprop->pos,
+			targetprop->rooms, targetprop)) {
 		return true;
 	}
 
@@ -710,8 +712,9 @@ static s32 accessibilityBeaconObjectHasLineOfSight(
 				ACCESSIBILITY_BEACON_SURFACE_PULL_FORWARD);
 		(*queries)++;
 
-		if (cdTestLos06(viewpos, camrooms,
-				&targets[i], targetprop->rooms, CDTYPE_BG)) {
+		if (accessibilityVisibilityHasVisualLineOfSight(
+				viewpos, camrooms, &targets[i],
+				targetprop->rooms, targetprop)) {
 			*sample = i + 1;
 			return true;
 		}
@@ -731,8 +734,9 @@ static s32 accessibilityBeaconObjectHasLineOfSight(
 					ACCESSIBILITY_BEACON_EMBEDDED_SURFACE_TOLERANCE);
 			(*queries)++;
 
-			if (cdTestLos06(viewpos, camrooms,
-					&targets[i], targetprop->rooms, CDTYPE_BG)) {
+			if (accessibilityVisibilityHasVisualLineOfSight(
+					viewpos, camrooms, &targets[i],
+					targetprop->rooms, targetprop)) {
 				*sample = ARRAYCOUNT(targets) + i + 1;
 				return true;
 			}
@@ -766,17 +770,15 @@ static s32 accessibilityBeaconHasLineOfSight(
 		targetpos.y = targetprop->chr->manground
 				+ targetprop->chr->height * 0.5f;
 
-		return cdTestLos03(&viewpos, camrooms,
-				&targetpos,
-				CDTYPE_OBJS | CDTYPE_DOORS | CDTYPE_PATHBLOCKER | CDTYPE_BG,
-				GEOFLAG_BLOCK_SHOOT);
+		return accessibilityVisibilityHasVisualLineOfSight(
+				&viewpos, camrooms, &targetpos,
+				targetprop->rooms, targetprop);
 	}
 
 	if (result->kind == ACCESSIBILITY_BEACON_KIND_PICKUP) {
-		return cdTestLos05(&observer->prop->pos, observer->prop->rooms,
-				&targetprop->pos, targetprop->rooms,
-				CDTYPE_DOORS | CDTYPE_BG,
-				GEOFLAG_WALL | GEOFLAG_BLOCK_SIGHT | GEOFLAG_BLOCK_SHOOT);
+		return accessibilityVisibilityHasVisualLineOfSight(
+				&viewpos, camrooms, &targetprop->pos,
+				targetprop->rooms, targetprop);
 	}
 
 	if (result->kind == ACCESSIBILITY_BEACON_KIND_OBJECT) {
@@ -785,8 +787,9 @@ static s32 accessibilityBeaconHasLineOfSight(
 				&result->lossample, &result->losqueries);
 	}
 
-	return cdTestLos06(&viewpos, camrooms,
-			&targetprop->pos, targetprop->rooms, CDTYPE_BG);
+	return accessibilityVisibilityHasVisualLineOfSight(
+			&viewpos, camrooms, &targetprop->pos,
+			targetprop->rooms, targetprop);
 }
 
 static struct prop *accessibilityBeaconCanonicalDoor(struct prop *prop, s32 *siblingcount)
