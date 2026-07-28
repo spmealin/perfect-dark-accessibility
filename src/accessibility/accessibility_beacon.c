@@ -52,6 +52,7 @@
 #define ACCESSIBILITY_BEACON_SURFACE_INSET 0.35f
 #define ACCESSIBILITY_BEACON_SURFACE_PULL_FORWARD 0.25f
 #define ACCESSIBILITY_BEACON_EMBEDDED_SURFACE_TOLERANCE 8.0f
+#define ACCESSIBILITY_BEACON_RENDERPOSTBG_SURFACE_TOLERANCE 24.0f
 #define ACCESSIBILITY_BEACON_DIAGNOSTIC_FOCUS_CAPACITY 16
 #define ACCESSIBILITY_BEACON_DIAGNOSTIC_FOCUS_DOT 0.75f
 
@@ -731,9 +732,22 @@ static s32 accessibilityBeaconPropHasSurfaceLineOfSight(
 	if (allowembedded
 			&& (targetprop->flags & PROPFLAG_ONTHISSCREENTHISTICK)
 			&& (obj->flags2 & OBJFLAG2_INTERACTCHECKLOS) == 0) {
+		f32 tolerance = ACCESSIBILITY_BEACON_EMBEDDED_SURFACE_TOLERANCE;
+
+		/*
+		 * Render-post-background monitor pads can deliberately place their
+		 * visible screen plane farther inside its mounting geometry than the
+		 * generic shallow-embed allowance. Keep the larger retry tied to that
+		 * native monitor semantic rather than widening every interactable.
+		 */
+		if (obj->flags & OBJFLAG_MONITOR_RENDERPOSTBG) {
+			tolerance =
+					ACCESSIBILITY_BEACON_RENDERPOSTBG_SURFACE_TOLERANCE;
+		}
+
 		for (i = 0; i < ARRAYCOUNT(targets); i++) {
 			accessibilityBeaconPullPointTowardCamera(&targets[i], viewpos,
-					ACCESSIBILITY_BEACON_EMBEDDED_SURFACE_TOLERANCE);
+					tolerance);
 			(*queries)++;
 
 			if (accessibilityVisibilityHasVisualLineOfSight(
