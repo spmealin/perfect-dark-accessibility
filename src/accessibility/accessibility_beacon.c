@@ -46,6 +46,8 @@
 			* (ACCESSIBILITY_BEACON_CATEGORY_COUNT - 1))
 #define ACCESSIBILITY_BEACON_TELEMETRY_TICKS TICKS(60 * 30)
 #define ACCESSIBILITY_BEACON_MAX_DOOR_SIBLINGS 32
+#define ACCESSIBILITY_BEACON_SURFACE_INSET 0.35f
+#define ACCESSIBILITY_BEACON_SURFACE_PULL_FORWARD 0.25f
 
 enum accessibilitybeaconcategory {
 	ACCESSIBILITY_BEACON_CATEGORY_NONE = 0,
@@ -75,6 +77,8 @@ struct accessibilitybeaconresult {
 	f32 distance;
 	f32 bearing;
 	f32 vertical;
+	s32 lossample;
+	s32 losqueries;
 };
 
 struct accessibilitybeacondroneslot {
@@ -563,8 +567,150 @@ static s32 accessibilityBeaconRequiresLineOfSight(s32 category)
 			|| category == ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE;
 }
 
+static void accessibilityBeaconTransformObjectPoint(
+		struct defaultobj *obj, struct coord *local, struct coord *world)
+{
+	world->x = obj->prop->pos.x
+			+ obj->realrot[0][0] * local->x
+			+ obj->realrot[1][0] * local->y
+			+ obj->realrot[2][0] * local->z;
+	world->y = obj->prop->pos.y
+			+ obj->realrot[0][1] * local->x
+			+ obj->realrot[1][1] * local->y
+			+ obj->realrot[2][1] * local->z;
+	world->z = obj->prop->pos.z
+			+ obj->realrot[0][2] * local->x
+			+ obj->realrot[1][2] * local->y
+			+ obj->realrot[2][2] * local->z;
+}
+
+static void accessibilityBeaconPullPointTowardCamera(
+		struct coord *point, const struct coord *camera)
+{
+	f32 x = camera->x - point->x;
+	f32 y = camera->y - point->y;
+	f32 z = camera->z - point->z;
+	f32 distance = sqrtf(x * x + y * y + z * z);
+
+	if (distance > ACCESSIBILITY_BEACON_SURFACE_PULL_FORWARD) {
+		f32 scale = ACCESSIBILITY_BEACON_SURFACE_PULL_FORWARD / distance;
+
+		point->x += x * scale;
+		point->y += y * scale;
+		point->z += z * scale;
+	}
+}
+
+static s32 accessibilityBeaconObjectHasLineOfSight(
+		struct coord *viewpos, RoomNum *camrooms, struct prop *targetprop,
+		s32 *sample, s32 *queries)
+{
+	struct defaultobj *obj = targetprop->obj;
+	struct modelrodata_bbox *bbox;
+	struct coord local;
+	struct coord facecenters[6];
+	struct coord targets[5];
+	f32 mins[3];
+	f32 maxs[3];
+	f32 mids[3];
+	f32 halfspans[3];
+	f32 bestdist = 0.0f;
+	s32 bestface = -1;
+	s32 faceaxis;
+	s32 otheraxis1;
+	s32 otheraxis2;
+	s32 i;
+
+	*sample = 0;
+	*queries = 1;
+
+	if (cdTestLos06(viewpos, camrooms,
+			&targetprop->pos, targetprop->rooms, CDTYPE_BG)) {
+		return true;
+	}
+
+	if (!obj || !obj->model || obj->prop != targetprop) {
+		return false;
+	}
+
+	bbox = objFindBboxRodata(obj);
+
+	if (!bbox) {
+		return false;
+	}
+
+	mins[0] = objGetLocalXMin(bbox);
+	mins[1] = objGetLocalYMin(bbox);
+	mins[2] = objGetLocalZMin(bbox);
+	maxs[0] = objGetLocalXMax(bbox);
+	maxs[1] = objGetLocalYMax(bbox);
+	maxs[2] = objGetLocalZMax(bbox);
+
+	for (i = 0; i < 3; i++) {
+		mids[i] = (mins[i] + maxs[i]) * 0.5f;
+		halfspans[i] = (maxs[i] - mins[i]) * 0.5f;
+	}
+
+	for (i = 0; i < 6; i++) {
+		f32 dx;
+		f32 dy;
+		f32 dz;
+		f32 distsq;
+		s32 axis = i / 2;
+
+		local.x = mids[0];
+		local.y = mids[1];
+		local.z = mids[2];
+		local.f[axis] = (i & 1) ? maxs[axis] : mins[axis];
+		accessibilityBeaconTransformObjectPoint(obj, &local, &facecenters[i]);
+
+		dx = facecenters[i].x - viewpos->x;
+		dy = facecenters[i].y - viewpos->y;
+		dz = facecenters[i].z - viewpos->z;
+		distsq = dx * dx + dy * dy + dz * dz;
+
+		if (bestface < 0 || distsq < bestdist) {
+			bestface = i;
+			bestdist = distsq;
+		}
+	}
+
+	faceaxis = bestface / 2;
+	otheraxis1 = (faceaxis + 1) % 3;
+	otheraxis2 = (faceaxis + 2) % 3;
+	local.x = mids[0];
+	local.y = mids[1];
+	local.z = mids[2];
+	local.f[faceaxis] = (bestface & 1) ? maxs[faceaxis] : mins[faceaxis];
+
+	for (i = 0; i < ARRAYCOUNT(targets); i++) {
+		struct coord samplelocal = local;
+
+		if (i > 0) {
+			samplelocal.f[otheraxis1] += halfspans[otheraxis1]
+					* ACCESSIBILITY_BEACON_SURFACE_INSET
+					* ((i & 1) ? 1.0f : -1.0f);
+			samplelocal.f[otheraxis2] += halfspans[otheraxis2]
+					* ACCESSIBILITY_BEACON_SURFACE_INSET
+					* ((i & 2) ? 1.0f : -1.0f);
+		}
+
+		accessibilityBeaconTransformObjectPoint(obj, &samplelocal, &targets[i]);
+		accessibilityBeaconPullPointTowardCamera(&targets[i], viewpos);
+		(*queries)++;
+
+		if (cdTestLos06(viewpos, camrooms,
+				&targets[i], targetprop->rooms, CDTYPE_BG)) {
+			*sample = i + 1;
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static s32 accessibilityBeaconHasLineOfSight(
-		const struct accessibilitybeaconresult *result,
+		struct accessibilitybeaconresult *result,
 		const struct accessibilityobserver *observer,
 		struct prop *targetprop)
 {
@@ -573,6 +719,8 @@ static s32 accessibilityBeaconHasLineOfSight(
 
 	camrooms[0] = observer->room;
 	camrooms[1] = -1;
+	result->lossample = 0;
+	result->losqueries = 1;
 
 	if (result->kind == ACCESSIBILITY_BEACON_KIND_NON_HOSTILE) {
 		struct coord targetpos;
@@ -596,6 +744,12 @@ static s32 accessibilityBeaconHasLineOfSight(
 				&targetprop->pos, targetprop->rooms,
 				CDTYPE_DOORS | CDTYPE_BG,
 				GEOFLAG_WALL | GEOFLAG_BLOCK_SIGHT | GEOFLAG_BLOCK_SHOOT);
+	}
+
+	if (result->kind == ACCESSIBILITY_BEACON_KIND_OBJECT) {
+		return accessibilityBeaconObjectHasLineOfSight(
+				&viewpos, camrooms, targetprop,
+				&result->lossample, &result->losqueries);
 	}
 
 	return cdTestLos06(&viewpos, camrooms,
@@ -992,12 +1146,13 @@ static s32 accessibilityBeaconScan(s32 detailed)
 		struct accessibilitybeaconresult *item = &g_AccessibilityBeaconResults[traversed];
 
 		accessibilityLogEvent("beacon", "scan_result",
-				"scan=%llu index=%d category=%s kind=%s propnum=%d canonical_propnum=%d entity=%p entity_is_chr=%d distance=%.3f bearing=%.3f vertical=%.3f ci_tag=0x%02x",
+				"scan=%llu index=%d category=%s kind=%s propnum=%d canonical_propnum=%d entity=%p entity_is_chr=%d distance=%.3f bearing=%.3f vertical=%.3f ci_tag=0x%02x los_sample=%d los_queries=%d",
 				(unsigned long long)g_AccessibilityBeaconScanCount, traversed,
 				accessibilityBeaconCategoryName(item->category),
 				accessibilityBeaconKindName(item->kind), item->propnum,
 				item->canonicalpropnum, item->entity, item->entityischr, item->distance,
-				item->bearing, item->vertical, item->citag);
+				item->bearing, item->vertical, item->citag,
+				item->lossample, item->losqueries);
 	}
 
 	accessibilityLogEvent("beacon", "scan_complete",
