@@ -81,6 +81,7 @@
 #include "accessibility/accessibility_hill.h"
 #include "accessibility/accessibility_status.h"
 #include "accessibility/accessibility_hud.h"
+#include "accessibility/accessibility_incident.h"
 #include "accessibility/accessibility_marker.h"
 #include "accessibility/accessibility_targeting.h"
 #include "accessibility/accessibility_tracker.h"
@@ -527,6 +528,7 @@ void mainLoop(void)
 		accessibilityHazardReset("stage_stop");
 		accessibilityHillReset("stage_stop");
 		accessibilityHudReset("stage_stop");
+		accessibilityIncidentReset("stage_stop");
 		accessibilityMarkerReset("stage_stop");
 		accessibilityStatusReset("stage_stop");
 		accessibilityTargetingReset("stage_stop");
@@ -573,6 +575,7 @@ void mainTick(void)
 			accessibilityMarkerTick();
 			accessibilityStatusTick();
 			accessibilityTrackerTick();
+			accessibilityIncidentTick();
 			playermgrShuffle();
 
 			if (g_StageNum < STAGE_TITLE) {

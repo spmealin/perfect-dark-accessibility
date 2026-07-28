@@ -2280,3 +2280,54 @@ void accessibilityBeaconReset(const char *reason, s32 preservecategories)
 	g_AccessibilityBeaconSuppressed
 			= preservecategories && accessibilityBeaconAnyActive();
 }
+
+void accessibilityBeaconDumpDiagnostics(u64 captureid)
+{
+	s32 i;
+
+	accessibilityLogEvent("incident", "beacon_state",
+			"capture=%llu suppressed=%d observer_prop=0x%llx observer_remote=%d results=%d schedule_count=%d schedule_cursor=%d next_pulse_tick=%d next_refresh_tick=%d object_active=%d door_active=%d pickup_active=%d non_hostile_active=%d",
+			(unsigned long long)captureid,
+			g_AccessibilityBeaconSuppressed,
+			(unsigned long long)g_AccessibilityBeaconObserverProp,
+			g_AccessibilityBeaconObserverRemote,
+			g_AccessibilityBeaconResultCount,
+			g_AccessibilityBeaconScheduleCount,
+			g_AccessibilityBeaconScheduleCursor,
+			g_AccessibilityBeaconNextScheduledPulse60,
+			g_AccessibilityBeaconNextRefresh60,
+			g_AccessibilityBeaconCategoryActive[
+					ACCESSIBILITY_BEACON_CATEGORY_OBJECT],
+			g_AccessibilityBeaconCategoryActive[
+					ACCESSIBILITY_BEACON_CATEGORY_DOOR],
+			g_AccessibilityBeaconCategoryActive[
+					ACCESSIBILITY_BEACON_CATEGORY_PICKUP],
+			g_AccessibilityBeaconCategoryActive[
+					ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE]);
+
+	for (i = 0; i < g_AccessibilityBeaconResultCount; i++) {
+		struct accessibilitybeaconresult *result
+				= &g_AccessibilityBeaconResults[i];
+
+		accessibilityLogEvent("incident", "beacon_result",
+				"capture=%llu index=%d category=%s kind=%s propnum=%d canonical_propnum=%d entity=%p entity_is_chr=%d ci_tag=0x%02x distance=%.3f bearing=%.3f vertical=%.3f los_sample=%d los_queries=%d scheduled=%d",
+				(unsigned long long)captureid, i,
+				accessibilityBeaconCategoryName(result->category),
+				accessibilityBeaconKindName(result->kind),
+				result->propnum, result->canonicalpropnum,
+				result->entity, result->entityischr, result->citag,
+				result->distance, result->bearing, result->vertical,
+				result->lossample, result->losqueries,
+				accessibilityBeaconScheduleContains(
+						g_AccessibilityBeaconSchedule,
+						g_AccessibilityBeaconScheduleCount, i));
+	}
+
+	for (i = 0; i < g_AccessibilityBeaconScheduleCount; i++) {
+		accessibilityLogEvent("incident", "beacon_schedule",
+				"capture=%llu slot=%d result_index=%d current=%d",
+				(unsigned long long)captureid, i,
+				g_AccessibilityBeaconSchedule[i],
+				i == g_AccessibilityBeaconScheduleCursor);
+	}
+}
