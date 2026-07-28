@@ -442,6 +442,17 @@ invincible glass; each must remain silent. Confirm
 `OBJFLAG_PATHBLOCKER`, including an explosion-only obstruction if available,
 and verify no enemy-presence voice or offscreen/nearby scanner cue is created.
 
+Acceptance evidence, 2026-07-28: the project owner, testing as the blind
+primary user, reported that the implementation in commit `9472c1a69` worked.
+This accepts the user-facing cane distinction and direct-aim feedback for the
+captured DataDyne route-blocking pane in the default `ntsc-final` Windows
+build. No new barrier, masking, performance, or interaction problem was
+reported during that test. The report does not yet validate decorative or
+invincible glass exclusions, incompatible and explosion-only attacks, another
+level's path blockers, CamSpy perspective, or long-session stability; retain
+those cases as open engineering coverage rather than inferring them from this
+single obstruction.
+
 For terrain contours, approach upward and downward stairs, a shallow and steep ramp, a landing, uneven but effectively flat floor, and a sheer edge from several headings. Reproduce the DataDyne staircase regression from session `1784916426`: near position `150.96,-1334.81,-599.92`, the center ray must resolve the lower stair room and report the downward contour before the former late boundary near `146.26,-1357.92,-683.66`. The first height change of at least 12 units and no more than 200 units above or below the current floor within 450 units must produce a clearly rising 140 ms contour for rising terrain and a clearly falling 140 ms contour for descending terrain at the correct horizontal angle. Ordinary barriers must retain their steady 35 ms chirp. Missing floor and a lower floor more than 200 units below a sheer edge must remain silent rather than reporting inaccessible stacked geometry. A slope beyond a nearer closed door or wall must not sound, and a nearer terrain contour must take priority over a farther wall chirp on the same ray. Confirm that ordinary distance still controls the contour's midpoint pitch and attenuation. Compare `terrain`, `terrain_height`, `terrain_distance`, `terrain_room`, `terrain_flags`, `terrain_queries`, `frequency_hz`, `end_frequency_hz`, and `duration_ms` with every compact `probes` entry: each probe must record its position, resolved room list, selected floor room, ground, delta, flags, and one of `no_floor`, `vertical_range`, `below_threshold`, or `selected`. Record false positives from floor seams, decorative geometry, stacked rooms, lifts, and nearby lower floors.
 
 Back up `pd.ini`, then test one valid non-default tuning set and malformed ordering such as fade below full, maximum below reach, near frequency below far frequency, and terrain reach/threshold outside their bounds. Restart between edits. Confirm the session-start log reports the normalized effective values, the configured valid reach changes collision endpoints, reversed pitch endpoints are exchanged, terrain settings alter the look-ahead and minimum elevation, the malformed set remains bounded and audible, and no rebuild is required. Test `nan`, negative, excessive, and zero cane- and enemy-volume inputs plus enemy frequencies outside 100–4,000 Hz; non-finite values must use defaults, registered bounds must clamp finite values, zero cane volume must mute every wall and terrain contour, and zero enemy volume must cleanly mute combat slots without leaving a stuck continuous tone. Restore the acceptance defaults afterward.
