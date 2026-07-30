@@ -411,6 +411,187 @@ static s32 accessibilityTargetingGameNativeAlignmentExpected(struct prop *aimedp
 	return false;
 }
 
+static s32 accessibilityTargetingGameObservationHasProp(
+		const struct accessibilitytargetingobservation *observation,
+		const struct prop *prop)
+{
+	s32 i;
+
+	for (i = 0; i < observation->candidatecount; i++) {
+		if (observation->candidates[i].prop == prop) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static s32 accessibilityTargetingGameThreatDetectorActive(void)
+{
+	return g_Vars.currentplayer
+			&& gsetHasFunctionFlags(
+				&g_Vars.currentplayer->hands[HAND_RIGHT].gset,
+				FUNCFLAG_THREATDETECTOR);
+}
+
+static s32 accessibilityTargetingGameThreatCategory(
+		const struct defaultobj *obj)
+{
+	if (obj && obj->type == OBJTYPE_AUTOGUN) {
+		return ACCESSIBILITY_TARGETING_CATEGORY_TURRET;
+	}
+
+	if (obj && obj->modelnum == MODEL_SK_SHUTTLE) {
+		return ACCESSIBILITY_TARGETING_CATEGORY_VEHICLE;
+	}
+
+	return ACCESSIBILITY_TARGETING_CATEGORY_OBJECT;
+}
+
+static s32 accessibilityTargetingGameVerticalAimError(
+		f32 x1, f32 y1, f32 x2, f32 y2, f32 *degrees)
+{
+	f32 targetscreen[2];
+	struct coord targetdir;
+	struct coord aimdir;
+	f32 targethorizontal;
+	f32 aimhorizontal;
+	f32 targetangle;
+	f32 aimangle;
+	f32 angledelta;
+
+	if (!degrees || !isfinite(x1) || !isfinite(y1)
+			|| !isfinite(x2) || !isfinite(y2)
+			|| !isfinite(g_Vars.currentplayer->crosspos[0])
+			|| !isfinite(g_Vars.currentplayer->crosspos[1])) {
+		return false;
+	}
+
+	targetscreen[0] = (x1 + x2) * 0.5f;
+	targetscreen[1] = (y1 + y2) * 0.5f;
+	cam0f0b4c3c(targetscreen, &targetdir, 1.0f);
+	cam0f0b4c3c(g_Vars.currentplayer->crosspos, &aimdir, 1.0f);
+	targethorizontal = sqrtf(targetdir.x * targetdir.x
+			+ targetdir.z * targetdir.z);
+	aimhorizontal = sqrtf(aimdir.x * aimdir.x + aimdir.z * aimdir.z);
+	targetangle = atan2f(targetdir.y, targethorizontal);
+	aimangle = atan2f(aimdir.y, aimhorizontal);
+	angledelta = targetangle - aimangle;
+
+	/*
+	 * The port's atan2f can return angles on a zero-to-tau interval.
+	 * Normalize across that seam before converting to degrees.
+	 */
+	if (angledelta > M_PI) {
+		angledelta -= M_TAU;
+	} else if (angledelta < -M_PI) {
+		angledelta += M_TAU;
+	}
+
+	*degrees = angledelta * 180.0f / M_PI;
+	return isfinite(*degrees);
+}
+
+static void accessibilityTargetingGameObserveNativeThreats(
+		struct accessibilitytargetingobservation *observation, s32 detailed)
+{
+	f32 viewleft = (f32)viGetViewLeft() / g_ScaleX;
+	f32 viewright = viewleft + (f32)viGetViewWidth() / g_ScaleX;
+	f32 viewcenterx = (viewleft + viewright) * 0.5f;
+	s32 i;
+
+	observation->threatdetectoractive
+			= accessibilityTargetingGameThreatDetectorActive();
+
+	if (!observation->threatdetectoractive) {
+		return;
+	}
+
+	for (i = 0; i < ARRAYCOUNT(g_Vars.currentplayer->trackedprops)
+			&& observation->threatcount
+					< ACCESSIBILITY_TARGETING_MAX_NATIVE_THREATS; i++) {
+		struct trackedprop *tracked = &g_Vars.currentplayer->trackedprops[i];
+		struct prop *prop = tracked->prop;
+		s32 objectprop = prop && (prop->type == PROPTYPE_OBJ
+				|| prop->type == PROPTYPE_WEAPON);
+		struct defaultobj *obj = objectprop ? prop->obj : NULL;
+		struct accessibilitytargetingcandidate *threat;
+		s32 propnum = accessibilityTargetingGamePropNum(prop);
+		s32 eligible = propnum >= 0 && objectprop && obj
+				&& prop->active
+				&& (prop->flags & PROPFLAG_ENABLED)
+				&& (prop->flags & PROPFLAG_ONTHISSCREENTHISTICK)
+				&& tracked->x1 <= tracked->x2
+				&& tracked->y1 <= tracked->y2;
+		const char *reason = eligible ? "native_threat"
+				: propnum < 0 ? "invalid_prop"
+				: !objectprop ? "wrong_prop_type"
+				: !obj ? "object_unavailable"
+				: !prop->active || (prop->flags & PROPFLAG_ENABLED) == 0
+						? "inactive_or_disabled"
+				: (prop->flags & PROPFLAG_ONTHISSCREENTHISTICK) == 0
+						? "not_rendered_this_tick"
+				: "invalid_native_bounds";
+		f32 dx;
+		f32 dy;
+		f32 dz;
+
+		if (detailed) {
+			accessibilityLogEvent("targeting",
+					"threat_detector_candidate",
+					"frame=%d slot=%d accepted=%d reason=%s prop=%p propnum=%d prop_type=%d obj=%p obj_type=%d model=%d screen=%d,%d,%d,%d",
+					g_Vars.lvframe60, i, eligible, reason,
+					(void *)prop, propnum, prop ? prop->type : -1,
+					(void *)obj, obj ? obj->type : -1,
+					obj ? obj->modelnum : -1,
+					tracked->x1, tracked->y1,
+					tracked->x2, tracked->y2);
+		}
+
+		if (!eligible) {
+			continue;
+		}
+
+		threat = &observation->threats[observation->threatcount++];
+		memset(threat, 0, sizeof(*threat));
+		threat->identity.playernum = g_Vars.currentplayernum;
+		threat->identity.source = ACCESSIBILITY_TARGETING_SOURCE_COMBAT;
+		threat->identity.sourceslot = propnum;
+		threat->identity.propnum = propnum;
+		threat->identity.proptype = prop->type;
+		threat->identity.objectidentity = (uintptr_t)obj;
+		threat->prop = prop;
+		threat->category = accessibilityTargetingGameThreatCategory(obj);
+		threat->relationship = ACCESSIBILITY_TARGETING_RELATIONSHIP_HOSTILE;
+		threat->shootability
+				= ACCESSIBILITY_TARGETING_SHOOTABILITY_SHOOTABLE;
+		threat->position = prop->pos;
+		threat->screenx1 = tracked->x1;
+		threat->screeny1 = tracked->y1;
+		threat->screenx2 = tracked->x2;
+		threat->screeny2 = tracked->y2;
+		threat->aimscreenx = g_Vars.currentplayer->crosspos[0];
+		threat->aimscreeny = g_Vars.currentplayer->crosspos[1];
+		threat->hasverticalaimerror
+				= accessibilityTargetingGameVerticalAimError(
+					threat->screenx1, threat->screeny1,
+					threat->screenx2, threat->screeny2,
+					&threat->verticalaimerrordegrees);
+		threat->horizontalscreenoffset = fabsf(
+				((threat->screenx1 + threat->screenx2) * 0.5f)
+					- viewcenterx);
+		dx = threat->position.x - g_Vars.currentplayer->prop->pos.x;
+		dy = threat->position.y - g_Vars.currentplayer->prop->pos.y;
+		dz = threat->position.z - g_Vars.currentplayer->prop->pos.z;
+		threat->distance = sqrtf(dx * dx + dy * dy + dz * dz);
+		dx = threat->position.x - g_Vars.currentplayer->cam_pos.x;
+		dy = threat->position.y - g_Vars.currentplayer->cam_pos.y;
+		dz = threat->position.z - g_Vars.currentplayer->cam_pos.z;
+		threat->hasdistancecue = true;
+		threat->distancecue = sqrtf(dx * dx + dy * dy + dz * dz);
+	}
+}
+
 static void accessibilityTargetingGameClearProjections(void)
 {
 	memset(g_AccessibilityTargetingGameProjections, 0,
@@ -574,46 +755,13 @@ static void accessibilityTargetingCaptureCombat(void)
 				&& isfinite(projection->y2) && isfinite(projection->y1);
 
 		if (projection->finite
-				&& isfinite(g_Vars.currentplayer->crosspos[0])
-				&& isfinite(g_Vars.currentplayer->crosspos[1])) {
-			f32 targetscreen[2];
-			struct coord targetdir;
-			struct coord aimdir;
-			f32 targethorizontal;
-			f32 aimhorizontal;
-			f32 targetangle;
-			f32 aimangle;
-			f32 angledelta;
-
-			targetscreen[0] = (projection->x1 + projection->x2) * 0.5f;
-			targetscreen[1] = (projection->y1 + projection->y2) * 0.5f;
-			cam0f0b4c3c(targetscreen, &targetdir, 1.0f);
-			cam0f0b4c3c(g_Vars.currentplayer->crosspos, &aimdir, 1.0f);
-			targethorizontal = sqrtf(targetdir.x * targetdir.x
-					+ targetdir.z * targetdir.z);
-			aimhorizontal = sqrtf(aimdir.x * aimdir.x
-					+ aimdir.z * aimdir.z);
-			targetangle = atan2f(targetdir.y, targethorizontal);
-			aimangle = atan2f(aimdir.y, aimhorizontal);
-			angledelta = targetangle - aimangle;
-
-			/*
-			 * The port's atan2f can return angles on a zero-to-tau interval.
-			 * Normalize across that seam before converting to degrees, or a
-			 * sub-degree difference can alternate between +/-359 degrees.
-			 */
-			if (angledelta > M_PI) {
-				angledelta -= M_TAU;
-			} else if (angledelta < -M_PI) {
-				angledelta += M_TAU;
-			}
-
-			projection->verticalaimerrordegrees
-					= angledelta * 180.0f / M_PI;
+				&& accessibilityTargetingGameVerticalAimError(
+					projection->x1, projection->y1,
+					projection->x2, projection->y2,
+					&projection->verticalaimerrordegrees)) {
 			projection->aimscreenx = g_Vars.currentplayer->crosspos[0];
 			projection->aimscreeny = g_Vars.currentplayer->crosspos[1];
-			projection->hasverticalaimerror
-					= isfinite(projection->verticalaimerrordegrees);
+			projection->hasverticalaimerror = true;
 		}
 
 		targetpos = prop->pos;
@@ -862,6 +1010,46 @@ static void accessibilityTargetingObserveCombat(
 	observation->sighton = g_Vars.currentplayer->lastsighton;
 	observation->targetindicatorvisible = !g_Vars.currentplayer->gunsightoff;
 
+	/*
+	 * Native threats are admitted before the generic combat scan so a
+	 * crowded candidate list cannot hide an object already boxed by the
+	 * detector. The observation also carries this list independently so the
+	 * new-threat alert remains available in the firing-range profile.
+	 */
+	for (i = 0; i < observation->threatcount
+			&& observation->candidatecount
+					< ACCESSIBILITY_TARGETING_MAX_CANDIDATES; i++) {
+		struct accessibilitytargetingcandidate *threat
+				= &observation->threats[i];
+		struct accessibilitytargetingcandidate *candidate;
+		s32 aimed = threat->prop == rawaimedprop;
+		f32 dx;
+		f32 dy;
+		f32 dz;
+
+		if (accessibilityTargetingGameObservationHasProp(
+				observation, threat->prop)) {
+			continue;
+		}
+
+		candidate = &observation->candidates[observation->candidatecount++];
+		*candidate = *threat;
+
+		if (aimed) {
+			observation->hasaimedtarget = true;
+			observation->aimedidentity = candidate->identity;
+			aimedshootability = candidate->shootability;
+			alignmentusesraw = true;
+			dx = g_AccessibilityTargetingGameRawAimHitPos.x
+					- g_Vars.currentplayer->cam_pos.x;
+			dy = g_AccessibilityTargetingGameRawAimHitPos.y
+					- g_Vars.currentplayer->cam_pos.y;
+			dz = g_AccessibilityTargetingGameRawAimHitPos.z
+					- g_Vars.currentplayer->cam_pos.z;
+			candidate->aimdistance = sqrtf(dx * dx + dy * dy + dz * dz);
+		}
+	}
+
 	for (i = 0; i < g_AccessibilityTargetingCombatProjectionCount; i++) {
 		struct accessibilitytargetingcombatprojection *projection
 				= &g_AccessibilityTargetingCombatProjections[i];
@@ -882,6 +1070,16 @@ static void accessibilityTargetingObserveCombat(
 		f32 dx;
 		f32 dy;
 		f32 dz;
+
+		if (accessibilityTargetingGameObservationHasProp(observation, prop)) {
+			if (detailed) {
+				accessibilityLogEvent("targeting", "combat_candidate",
+						"frame=%d slot=%d accepted=0 reason=native_threat_duplicate prop=%p propnum=%d",
+						g_Vars.lvframe60, i, (void *)prop,
+						projection->propnum);
+			}
+			continue;
+		}
 
 		if (projection->propnum < 0 || !prop
 				|| accessibilityTargetingGamePropNum(prop) != projection->propnum
@@ -1088,7 +1286,9 @@ static void accessibilityTargetingObserveCombat(
 		s32 attackcompatible
 				= accessibilityTargetingGameCurrentAttackCanBreak(rawaimedprop);
 
-		if (propnum >= 0 && breakable && attackcompatible) {
+		if (propnum >= 0 && breakable && attackcompatible
+				&& !accessibilityTargetingGameObservationHasProp(
+					observation, rawaimedprop)) {
 			struct accessibilitytargetingcandidate *candidate;
 			f32 dx;
 			f32 dy;
@@ -1173,10 +1373,11 @@ static void accessibilityTargetingObserveCombat(
 
 	if (detailed || scopechanged) {
 		accessibilityLogEvent("targeting", "scope_gate",
-				"frame=%d stage=%d player=%d accepted=1 reason=in_scope mode=combat weapon=%d function=%d autoaim_x_enabled=%d autoaim_y_enabled=%d autoaim_x_prop=%p autoaim_y_prop=%p candidates=%d captured=%d aimed=%d aimed_prop=%p raw_aim_prop=%p raw_aim_valid=%d alignment_source=%s aimed_shootability=%d native_alignment_expected=%d viewport=%.3f,%.3f,%.3f,%.3f",
+				"frame=%d stage=%d player=%d accepted=1 reason=in_scope mode=combat weapon=%d function=%d threat_detector=%d autoaim_x_enabled=%d autoaim_y_enabled=%d autoaim_x_prop=%p autoaim_y_prop=%p candidates=%d captured=%d aimed=%d aimed_prop=%p raw_aim_prop=%p raw_aim_valid=%d alignment_source=%s aimed_shootability=%d native_alignment_expected=%d viewport=%.3f,%.3f,%.3f,%.3f",
 				g_Vars.lvframe60, g_Vars.stagenum, g_Vars.currentplayernum,
 				bgunGetWeaponNum(HAND_RIGHT),
 				g_Vars.currentplayer->hands[HAND_RIGHT].gset.weaponfunc,
+				accessibilityTargetingGameThreatDetectorActive(),
 				bmoveIsAutoAimXEnabledForCurrentWeapon(),
 				bmoveIsAutoAimYEnabledForCurrentWeapon(),
 				(void *)g_Vars.currentplayer->autoxaimprop,
@@ -1457,6 +1658,7 @@ void accessibilityTargetingObserveGame(void)
 	}
 	scopechanged = g_AccessibilityTargetingGameLastScopeReason != NULL;
 	g_AccessibilityTargetingGameLastScopeReason = NULL;
+	accessibilityTargetingGameObserveNativeThreats(&observation, detailed);
 
 	if (hasdevicetargets) {
 		accessibilityTargetingObserveDevice(&observation, detailed, scopechanged);

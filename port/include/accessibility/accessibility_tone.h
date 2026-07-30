@@ -62,6 +62,8 @@ void accessibilityToneStopChirp(void);
 void accessibilityTonePlayTargetPresence(f32 frequencyhz,
 		f32 volume, f32 pan);
 void accessibilityToneStopTargetPresence(void);
+void accessibilityTonePlayThreatAlert(f32 volume, f32 pan);
+void accessibilityToneStopThreatAlert(void);
 void accessibilityTonePlayToggleConfirmation(s32 enabled);
 void accessibilityTonePlayCaneModeConfirmation(s32 mode);
 void accessibilityTonePlayWeaponFunction(s32 secondary);

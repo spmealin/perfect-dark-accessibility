@@ -8,6 +8,7 @@
 #include "data.h"
 #include "system.h"
 #include "game/inv.h"
+#include "game/game_0b0fd0.h"
 #include "game/lang.h"
 #include "game/lv.h"
 #include "game/objectives.h"
@@ -261,6 +262,7 @@ static void accessibilityIncidentDumpPlayer(u64 captureid)
 	struct player *player = g_Vars.currentplayer;
 	struct accessibilityobserver observer;
 	s32 observervalid = accessibilityObserverGet(&observer);
+	s32 i;
 
 	accessibilityLogEvent("incident", "state",
 			"capture=%llu stage=%d difficulty=%d tick=%d frame=%d update60=%d player=%d player_count=%d tickmode=%d menus=%d paused=%d cutscene=%d mplayer=%d normal_mplayer=%d observer_valid=%d observer_remote=%d observer_prop=%p observer_propnum=%d origin=%.3f,%.3f,%.3f camera=%.3f,%.3f,%.3f look=%.6f,%.6f,%.6f observer_room=%d player_prop=%p player_propnum=%d player_rooms=%d,%d,%d,%d,%d,%d,%d,%d camera_mode=%d dead=%d health=%.5f shield=%.5f devices_active=0x%08x devices_inhibit=0x%08x weapon=%d weapon_previous=%d weapon_pending=%d weapon_function_inverted=%d inventory_count=%d current_inventory_index=%u cane_mode=%d radar_contact_alerts=%d",
@@ -307,6 +309,32 @@ static void accessibilityIncidentDumpPlayer(u64 captureid)
 			player ? invGetCurrentIndex() : 0,
 			accessibilityGetVirtualCaneMode(),
 			accessibilityGetCombatRadarContactAlerts());
+
+	for (i = 0; player && i < ARRAYCOUNT(player->trackedprops); i++) {
+		struct trackedprop *tracked = &player->trackedprops[i];
+		struct prop *prop = tracked->prop;
+		struct defaultobj *obj = prop
+				&& (prop->type == PROPTYPE_OBJ
+					|| prop->type == PROPTYPE_WEAPON
+					|| prop->type == PROPTYPE_DOOR)
+				? prop->obj : NULL;
+
+		accessibilityLogEvent("incident", "threat_detector_state",
+				"capture=%llu active=%d sight_track_type=%d slot=%d occupied=%d prop=%p propnum=%d prop_type=%d active_prop=%d onscreen=%d object=%p object_type=%d model=%d weapon=%d bounds=%d,%d,%d,%d",
+				(unsigned long long)captureid,
+				gsetHasFunctionFlags(
+					&player->hands[HAND_RIGHT].gset,
+					FUNCFLAG_THREATDETECTOR),
+				player->sighttracktype, i, prop != NULL, (void *)prop,
+				accessibilityIncidentPropNum(prop),
+				prop ? prop->type : -1, prop ? prop->active : 0,
+				prop ? (prop->flags & PROPFLAG_ONTHISSCREENTHISTICK) != 0 : 0,
+				(void *)obj, obj ? obj->type : -1,
+				obj ? obj->modelnum : -1,
+				obj && obj->type == OBJTYPE_WEAPON
+					? ((struct weaponobj *)obj)->weaponnum : -1,
+				tracked->x1, tracked->y1, tracked->x2, tracked->y2);
+	}
 }
 
 static void accessibilityIncidentDumpObjectives(u64 captureid)

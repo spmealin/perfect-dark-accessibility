@@ -6,6 +6,7 @@
 #include "types.h"
 
 #define ACCESSIBILITY_TARGETING_MAX_CANDIDATES 32
+#define ACCESSIBILITY_TARGETING_MAX_NATIVE_THREATS 4
 
 enum accessibilitytargetingsource {
 	ACCESSIBILITY_TARGETING_SOURCE_NONE = 0,
@@ -93,6 +94,10 @@ struct accessibilitytargetingobservation {
 	s32 sighton;
 	s32 targetindicatorvisible;
 	s32 nativealignmentexpected;
+	s32 threatdetectoractive;
+	s32 threatcount;
+	struct accessibilitytargetingcandidate
+			threats[ACCESSIBILITY_TARGETING_MAX_NATIVE_THREATS];
 	f32 distancecuereference;
 	s32 candidatecount;
 	struct accessibilitytargetingcandidate candidates[ACCESSIBILITY_TARGETING_MAX_CANDIDATES];

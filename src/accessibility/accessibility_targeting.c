@@ -46,6 +46,15 @@
 #define ACCESSIBILITY_TARGETING_CAMERA_END_FREQUENCY_HZ 1000.0f
 #define ACCESSIBILITY_TARGETING_CAMERA_PERIOD_MS 500
 #define ACCESSIBILITY_TARGETING_CAMERA_DURATION_MS 140
+#define ACCESSIBILITY_TARGETING_THREAT_KNOWN_CAPACITY 8
+#define ACCESSIBILITY_TARGETING_THREAT_ALERT_CAPACITY 8
+#define ACCESSIBILITY_TARGETING_THREAT_MISSING_GRACE_FRAMES 2
+#define ACCESSIBILITY_TARGETING_THREAT_ALERT_GAP_TICKS TICKS(12)
+#define ACCESSIBILITY_TARGETING_THREAT_AIM_REPEAT_TICKS TICKS(15)
+#define ACCESSIBILITY_TARGETING_THREAT_ALERT_DURATION_TICKS TICKS(8)
+#define ACCESSIBILITY_TARGETING_THREAT_SOUND_NONE 0
+#define ACCESSIBILITY_TARGETING_THREAT_SOUND_NEW 1
+#define ACCESSIBILITY_TARGETING_THREAT_SOUND_AIM 2
 
 struct accessibilitytargetingrecord {
 	struct accessibilitytargetingcandidate candidate;
@@ -75,6 +84,15 @@ struct accessibilitytargetingcombatslot {
 	s32 elevationzone;
 	f32 frequencyhz;
 	s32 nextcadencelog60;
+};
+
+struct accessibilitytargetingthreatknown {
+	struct accessibilitytargetingidentity identity;
+	s32 missingframes;
+};
+
+struct accessibilitytargetingthreatalert {
+	struct accessibilitytargetingcandidate candidate;
 };
 
 struct accessibilitytargetingstate {
@@ -107,6 +125,22 @@ struct accessibilitytargetingstate {
 	u64 workingsetbaseline;
 	u64 privatebaseline;
 	s32 profile;
+	s32 threatdetectoractive;
+	struct accessibilitytargetingthreatknown
+			knownthreats[ACCESSIBILITY_TARGETING_THREAT_KNOWN_CAPACITY];
+	s32 knownthreatcount;
+	struct accessibilitytargetingthreatalert
+			threatalerts[ACCESSIBILITY_TARGETING_THREAT_ALERT_CAPACITY];
+	s32 threatalertcount;
+	s32 nextthreatalert60;
+	s32 nextthreataimalert60;
+	s32 lastthreatsound60;
+	s32 lastthreatsoundkind;
+	struct accessibilitytargetingidentity lastthreatsoundidentity;
+	s32 hasaimedthreat;
+	struct accessibilitytargetingidentity aimedthreatidentity;
+	u64 threatalertscount;
+	u64 threataimpulsecount;
 	struct accessibilitytargetingcombatslot
 			combatslots[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 };
@@ -274,6 +308,341 @@ static s32 accessibilityTargetingIdentityEqual(
 			&& a->propnum == b->propnum
 			&& a->proptype == b->proptype
 			&& a->objectidentity == b->objectidentity;
+}
+
+static s32 accessibilityTargetingFindCurrentThreat(
+		const struct accessibilitytargetingobservation *observation,
+		const struct accessibilitytargetingidentity *identity)
+{
+	s32 i;
+
+	for (i = 0; i < observation->threatcount; i++) {
+		if (accessibilityTargetingIdentityEqual(
+				&observation->threats[i].identity, identity)) {
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+static s32 accessibilityTargetingThreatAlertQueued(
+		const struct accessibilitytargetingstate *state,
+		const struct accessibilitytargetingidentity *identity)
+{
+	s32 i;
+
+	for (i = 0; i < state->threatalertcount; i++) {
+		if (accessibilityTargetingIdentityEqual(
+				&state->threatalerts[i].candidate.identity, identity)) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static void accessibilityTargetingPopThreatAlert(
+		struct accessibilitytargetingstate *state)
+{
+	if (state->threatalertcount > 1) {
+		memmove(&state->threatalerts[0], &state->threatalerts[1],
+				sizeof(state->threatalerts[0])
+					* (state->threatalertcount - 1));
+	}
+
+	if (state->threatalertcount > 0) {
+		state->threatalertcount--;
+		memset(&state->threatalerts[state->threatalertcount], 0,
+				sizeof(state->threatalerts[state->threatalertcount]));
+	}
+}
+
+static s32 accessibilityTargetingThreatSoundBusy(
+		const struct accessibilitytargetingstate *state, s32 frame60)
+{
+	return state->lastthreatsoundkind
+				!= ACCESSIBILITY_TARGETING_THREAT_SOUND_NONE
+			&& frame60 - state->lastthreatsound60
+				< ACCESSIBILITY_TARGETING_THREAT_ALERT_DURATION_TICKS;
+}
+
+static void accessibilityTargetingUpdateThreatAlerts(
+		const struct accessibilitytargetingobservation *observation)
+{
+	struct accessibilitytargetingstate *state
+			= g_AccessibilityTargetingCurrentState;
+	s32 i;
+
+	if (!observation->threatdetectoractive) {
+		if (state->threatdetectoractive || state->threatalertcount > 0) {
+			accessibilityToneStopThreatAlert();
+			accessibilityLogEvent("targeting", "threat_detector_alert_reset",
+					"frame=%d reason=detector_inactive known=%d queued=%d alerts=%llu",
+					observation->frame60, state->knownthreatcount,
+					state->threatalertcount,
+					(unsigned long long)state->threatalertscount);
+		}
+
+		state->threatdetectoractive = false;
+		state->knownthreatcount = 0;
+		state->threatalertcount = 0;
+		state->nextthreatalert60 = 0;
+		state->nextthreataimalert60 = 0;
+		state->lastthreatsound60 = 0;
+		state->lastthreatsoundkind = ACCESSIBILITY_TARGETING_THREAT_SOUND_NONE;
+		memset(&state->lastthreatsoundidentity, 0,
+				sizeof(state->lastthreatsoundidentity));
+		memset(state->knownthreats, 0, sizeof(state->knownthreats));
+		memset(state->threatalerts, 0, sizeof(state->threatalerts));
+		return;
+	}
+
+	state->threatdetectoractive = true;
+
+	for (i = 0; i < state->knownthreatcount; i++) {
+		state->knownthreats[i].missingframes++;
+	}
+
+	for (i = 0; i < observation->threatcount; i++) {
+		const struct accessibilitytargetingcandidate *threat
+				= &observation->threats[i];
+		s32 knownindex = -1;
+		s32 newlyknown = false;
+		s32 j;
+
+		for (j = 0; j < state->knownthreatcount; j++) {
+			if (accessibilityTargetingIdentityEqual(
+					&state->knownthreats[j].identity,
+					&threat->identity)) {
+				knownindex = j;
+				break;
+			}
+		}
+
+		if (knownindex >= 0) {
+			state->knownthreats[knownindex].missingframes = 0;
+			continue;
+		}
+
+		if (state->knownthreatcount
+				< ACCESSIBILITY_TARGETING_THREAT_KNOWN_CAPACITY) {
+			knownindex = state->knownthreatcount++;
+			state->knownthreats[knownindex].identity = threat->identity;
+			state->knownthreats[knownindex].missingframes = 0;
+			newlyknown = true;
+		}
+
+		if (newlyknown && !accessibilityTargetingThreatAlertQueued(
+					state, &threat->identity)
+				&& state->threatalertcount
+					< ACCESSIBILITY_TARGETING_THREAT_ALERT_CAPACITY) {
+			state->threatalerts[state->threatalertcount++].candidate = *threat;
+			accessibilityLogEvent("targeting", "threat_detector_new",
+					"frame=%d prop=%p propnum=%d category=%d native_slot=%d distance=%.3f screen=%.3f,%.3f,%.3f,%.3f queued=%d",
+					observation->frame60, (void *)threat->prop,
+					threat->identity.propnum, threat->category, i,
+					threat->distance, threat->screenx1, threat->screeny1,
+					threat->screenx2, threat->screeny2,
+					state->threatalertcount);
+		}
+	}
+
+	for (i = state->knownthreatcount - 1; i >= 0; i--) {
+		if (state->knownthreats[i].missingframes
+				> ACCESSIBILITY_TARGETING_THREAT_MISSING_GRACE_FRAMES) {
+			if (i + 1 < state->knownthreatcount) {
+				memmove(&state->knownthreats[i],
+						&state->knownthreats[i + 1],
+						sizeof(state->knownthreats[0])
+							* (state->knownthreatcount - i - 1));
+			}
+			state->knownthreatcount--;
+			memset(&state->knownthreats[state->knownthreatcount], 0,
+					sizeof(state->knownthreats[state->knownthreatcount]));
+		}
+	}
+
+	if (observation->frame60 >= state->nextthreatalert60
+			&& !accessibilityTargetingThreatSoundBusy(
+				state, observation->frame60)) {
+		while (state->threatalertcount > 0) {
+			s32 threatindex = accessibilityTargetingFindCurrentThreat(
+					observation,
+					&state->threatalerts[0].candidate.identity);
+
+			if (threatindex >= 0) {
+				const struct accessibilitytargetingcandidate *threat
+						= &observation->threats[threatindex];
+				f32 fulldistance;
+				f32 fadedistance;
+				f32 silentdistance;
+				struct coord position = threat->position;
+				s32 volume;
+				s32 pan;
+				f32 normalizedvolume;
+				f32 normalizedpan;
+
+				accessibilityGetEnemyTuning(&fulldistance, &fadedistance,
+						&silentdistance, NULL);
+				volume = psCalculateVolumeFromDistance(threat->distance,
+						fulldistance, fadedistance, silentdistance,
+						AL_VOL_FULL);
+				pan = psCalculatePan(&position,
+						fulldistance, fadedistance, silentdistance,
+						threat->distance, false, NULL);
+				normalizedvolume = (f32)volume / (f32)AL_VOL_FULL;
+				normalizedpan = ((f32)pan - (f32)AL_PAN_CENTER)
+						/ (f32)AL_PAN_CENTER;
+				accessibilityTonePlayThreatAlert(
+						normalizedvolume, normalizedpan);
+				state->threatalertscount++;
+				state->lastthreatsound60 = observation->frame60;
+				state->lastthreatsoundkind
+						= ACCESSIBILITY_TARGETING_THREAT_SOUND_NEW;
+				state->lastthreatsoundidentity = threat->identity;
+				state->nextthreatalert60 = observation->frame60
+						+ ACCESSIBILITY_TARGETING_THREAT_ALERT_GAP_TICKS;
+				accessibilityLogEvent("targeting",
+						"threat_detector_alert",
+						"alert=%llu frame=%d next_frame=%d prop=%p propnum=%d category=%d distance=%.3f volume=%.4f pan=%.4f queued_after=%d",
+						(unsigned long long)state->threatalertscount,
+						observation->frame60, state->nextthreatalert60,
+						(void *)threat->prop, threat->identity.propnum,
+						threat->category, threat->distance,
+						normalizedvolume, normalizedpan,
+						state->threatalertcount - 1);
+				accessibilityTargetingPopThreatAlert(state);
+				break;
+			}
+
+			accessibilityLogEvent("targeting",
+					"threat_detector_alert_drop",
+					"frame=%d propnum=%d reason=no_longer_visible queued_after=%d",
+					observation->frame60,
+					state->threatalerts[0].candidate.identity.propnum,
+					state->threatalertcount - 1);
+			accessibilityTargetingPopThreatAlert(state);
+		}
+	}
+}
+
+static void accessibilityTargetingUpdateThreatAim(
+		const struct accessibilitytargetingobservation *observation,
+		s32 aimedvalid,
+		const struct accessibilitytargetingcandidate *aimedcandidate)
+{
+	struct accessibilitytargetingstate *state
+			= g_AccessibilityTargetingCurrentState;
+	const struct accessibilitytargetingcandidate *threat = NULL;
+	s32 changed;
+	s32 i;
+
+	if (observation->threatdetectoractive && aimedvalid && aimedcandidate) {
+		for (i = 0; i < observation->threatcount; i++) {
+			if (observation->threats[i].prop == aimedcandidate->prop) {
+				threat = &observation->threats[i];
+				break;
+			}
+		}
+	}
+
+	if (!threat) {
+		if (state->hasaimedthreat) {
+			accessibilityLogEvent("targeting", "threat_detector_aim_stop",
+					"frame=%d propnum=%d pulses=%llu reason=%s",
+					observation->frame60,
+					state->aimedthreatidentity.propnum,
+					(unsigned long long)state->threataimpulsecount,
+					observation->threatdetectoractive
+						? "aim_left_threat" : "detector_inactive");
+			if (state->lastthreatsoundkind
+					== ACCESSIBILITY_TARGETING_THREAT_SOUND_AIM) {
+				accessibilityToneStopThreatAlert();
+				state->lastthreatsoundkind
+						= ACCESSIBILITY_TARGETING_THREAT_SOUND_NONE;
+				memset(&state->lastthreatsoundidentity, 0,
+						sizeof(state->lastthreatsoundidentity));
+			}
+		}
+
+		state->hasaimedthreat = false;
+		state->nextthreataimalert60 = 0;
+		memset(&state->aimedthreatidentity, 0,
+				sizeof(state->aimedthreatidentity));
+		return;
+	}
+
+	changed = !state->hasaimedthreat
+			|| !accessibilityTargetingIdentityEqual(
+				&state->aimedthreatidentity, &threat->identity);
+
+	if (changed) {
+		state->hasaimedthreat = true;
+		state->aimedthreatidentity = threat->identity;
+		state->nextthreataimalert60 = observation->frame60;
+		accessibilityLogEvent("targeting", "threat_detector_aim_start",
+				"frame=%d prop=%p propnum=%d category=%d distance=%.3f",
+				observation->frame60, (void *)threat->prop,
+				threat->identity.propnum, threat->category,
+				threat->distance);
+	}
+
+	if (observation->frame60 >= state->nextthreataimalert60) {
+		s32 soundbusy = accessibilityTargetingThreatSoundBusy(
+				state, observation->frame60);
+		s32 recentnewalert = soundbusy
+				&& state->lastthreatsoundkind
+					== ACCESSIBILITY_TARGETING_THREAT_SOUND_NEW
+				&& accessibilityTargetingIdentityEqual(
+					&state->lastthreatsoundidentity, &threat->identity);
+		f32 fulldistance;
+		f32 fadedistance;
+		f32 silentdistance;
+		struct coord position = threat->position;
+		s32 volume;
+		s32 pan;
+		f32 normalizedvolume;
+		f32 normalizedpan;
+
+		accessibilityGetEnemyTuning(&fulldistance, &fadedistance,
+				&silentdistance, NULL);
+		volume = psCalculateVolumeFromDistance(threat->distance,
+				fulldistance, fadedistance, silentdistance, AL_VOL_FULL);
+		pan = psCalculatePan(&position,
+				fulldistance, fadedistance, silentdistance,
+				threat->distance, false, NULL);
+		normalizedvolume = (f32)volume / (f32)AL_VOL_FULL;
+		normalizedpan = ((f32)pan - (f32)AL_PAN_CENTER)
+				/ (f32)AL_PAN_CENTER;
+
+		if (soundbusy && !recentnewalert) {
+			state->nextthreataimalert60 = state->lastthreatsound60
+					+ ACCESSIBILITY_TARGETING_THREAT_ALERT_DURATION_TICKS;
+			return;
+		}
+
+		if (!recentnewalert) {
+			accessibilityTonePlayThreatAlert(
+					normalizedvolume, normalizedpan);
+			state->lastthreatsound60 = observation->frame60;
+			state->lastthreatsoundkind
+					= ACCESSIBILITY_TARGETING_THREAT_SOUND_AIM;
+			state->lastthreatsoundidentity = threat->identity;
+		}
+
+		state->threataimpulsecount++;
+		state->nextthreataimalert60 = (recentnewalert
+					? state->lastthreatsound60 : observation->frame60)
+				+ ACCESSIBILITY_TARGETING_THREAT_AIM_REPEAT_TICKS;
+		accessibilityLogEvent("targeting", "threat_detector_aim_pulse",
+				"pulse=%llu frame=%d next_frame=%d prop=%p propnum=%d distance=%.3f volume=%.4f pan=%.4f reused_new_alert=%d",
+				(unsigned long long)state->threataimpulsecount,
+				observation->frame60, state->nextthreataimalert60,
+				(void *)threat->prop, threat->identity.propnum,
+				threat->distance, normalizedvolume, normalizedpan,
+				recentnewalert);
+	}
 }
 
 static s32 accessibilityTargetingPropNum(const struct prop *prop)
@@ -1032,6 +1401,7 @@ void accessibilityTargetingObserve(
 		accessibilityTargetingResetCurrent("profile_changed");
 	}
 	g_AccessibilityTargetingCurrentState->profile = observation->profile;
+	accessibilityTargetingUpdateThreatAlerts(observation);
 
 	g_AccessibilityTargetingObservationCount++;
 	aimedcandidate = false;
@@ -1108,6 +1478,8 @@ void accessibilityTargetingObserve(
 	acquisition = aimedvalid && (!g_AccessibilityTargetingHasAimedIdentity
 			|| !accessibilityTargetingIdentityEqual(&effectiveaimidentity,
 				&g_AccessibilityTargetingAimedIdentity));
+	accessibilityTargetingUpdateThreatAim(
+			observation, aimedvalid, aimedrecord);
 
 	if (!aimedvalid) {
 		if (g_AccessibilityTargetingHasAimedIdentity) {
@@ -1243,11 +1615,15 @@ static void accessibilityTargetingResetCurrent(const char *reason)
 			|| g_AccessibilityTargetingHasAimedIdentity
 			|| g_AccessibilityTargetingProceduralPresenceActive
 			|| accessibilityTargetingCombatSlotCount() > 0
-			|| g_AccessibilityTargetingAlignmentActive;
+			|| g_AccessibilityTargetingAlignmentActive
+			|| g_AccessibilityTargetingCurrentState->threatdetectoractive
+			|| g_AccessibilityTargetingCurrentState->threatalertcount > 0
+			|| g_AccessibilityTargetingCurrentState->hasaimedthreat;
 
 	accessibilityTargetingStopPresence(reason ? reason : "reset");
 	accessibilityTargetingStopCombatPresence(reason ? reason : "reset");
 	accessibilityTargetingStopAlignment(reason ? reason : "reset");
+	accessibilityToneStopThreatAlert();
 
 	if (hadstate) {
 		accessibilityLogEvent("targeting", "reset",
@@ -1285,6 +1661,26 @@ static void accessibilityTargetingResetCurrent(const char *reason)
 	g_AccessibilityTargetingCurrentState->memorybaselinevalid = false;
 	g_AccessibilityTargetingCurrentState->workingsetbaseline = 0;
 	g_AccessibilityTargetingCurrentState->privatebaseline = 0;
+	g_AccessibilityTargetingCurrentState->threatdetectoractive = false;
+	g_AccessibilityTargetingCurrentState->knownthreatcount = 0;
+	g_AccessibilityTargetingCurrentState->threatalertcount = 0;
+	g_AccessibilityTargetingCurrentState->nextthreatalert60 = 0;
+	g_AccessibilityTargetingCurrentState->nextthreataimalert60 = 0;
+	g_AccessibilityTargetingCurrentState->lastthreatsound60 = 0;
+	g_AccessibilityTargetingCurrentState->lastthreatsoundkind
+			= ACCESSIBILITY_TARGETING_THREAT_SOUND_NONE;
+	memset(&g_AccessibilityTargetingCurrentState->lastthreatsoundidentity, 0,
+			sizeof(g_AccessibilityTargetingCurrentState
+				->lastthreatsoundidentity));
+	g_AccessibilityTargetingCurrentState->hasaimedthreat = false;
+	g_AccessibilityTargetingCurrentState->threatalertscount = 0;
+	g_AccessibilityTargetingCurrentState->threataimpulsecount = 0;
+	memset(&g_AccessibilityTargetingCurrentState->aimedthreatidentity, 0,
+			sizeof(g_AccessibilityTargetingCurrentState->aimedthreatidentity));
+	memset(g_AccessibilityTargetingCurrentState->knownthreats, 0,
+			sizeof(g_AccessibilityTargetingCurrentState->knownthreats));
+	memset(g_AccessibilityTargetingCurrentState->threatalerts, 0,
+			sizeof(g_AccessibilityTargetingCurrentState->threatalerts));
 }
 
 void accessibilityTargetingReset(const char *reason)

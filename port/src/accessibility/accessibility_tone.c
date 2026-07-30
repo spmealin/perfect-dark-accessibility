@@ -40,6 +40,11 @@
 #define ACCESSIBILITY_TARGET_PRESENCE_DURATION_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.10f))
 #define ACCESSIBILITY_TARGET_PRESENCE_ATTACK_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.004f))
 #define ACCESSIBILITY_TARGET_PRESENCE_RELEASE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.012f))
+#define ACCESSIBILITY_THREAT_ALERT_START_FREQUENCY_HZ 1000.0f
+#define ACCESSIBILITY_THREAT_ALERT_END_FREQUENCY_HZ 2000.0f
+#define ACCESSIBILITY_THREAT_ALERT_DURATION_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.12f))
+#define ACCESSIBILITY_THREAT_ALERT_ATTACK_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.004f))
+#define ACCESSIBILITY_THREAT_ALERT_RELEASE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.018f))
 #define ACCESSIBILITY_TRACKER_VOLUME 0.065f
 #define ACCESSIBILITY_TRACKER_LEVEL_BEEP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.045f))
 #define ACCESSIBILITY_TRACKER_DOUBLE_BEEP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.035f))
@@ -96,6 +101,10 @@ static SDL_atomic_t g_AccessibilityTargetPresenceEnabled;
 static SDL_atomic_t g_AccessibilityTargetPresenceFrequencyMilliHz;
 static SDL_atomic_t g_AccessibilityTargetPresenceVolumeMillionths;
 static SDL_atomic_t g_AccessibilityTargetPresencePanMillionths;
+static SDL_atomic_t g_AccessibilityThreatAlertSequence;
+static SDL_atomic_t g_AccessibilityThreatAlertEnabled;
+static SDL_atomic_t g_AccessibilityThreatAlertVolumeMillionths;
+static SDL_atomic_t g_AccessibilityThreatAlertPanMillionths;
 static SDL_atomic_t g_AccessibilityToggleSequence;
 static SDL_atomic_t g_AccessibilityTogglePattern;
 static SDL_atomic_t g_AccessibilityWeaponFunctionSequence;
@@ -184,6 +193,12 @@ static f32 g_AccessibilityTargetPresencePhase;
 static f32 g_AccessibilityTargetPresenceFrequencyHz;
 static f32 g_AccessibilityTargetPresenceVolume;
 static f32 g_AccessibilityTargetPresencePan;
+static s32 g_AccessibilityThreatAlertObservedSequence;
+static s32 g_AccessibilityThreatAlertSamplesRemaining;
+static s32 g_AccessibilityThreatAlertSample;
+static f32 g_AccessibilityThreatAlertPhase;
+static f32 g_AccessibilityThreatAlertVolume;
+static f32 g_AccessibilityThreatAlertPan;
 static s32 g_AccessibilityToggleObservedSequence;
 static s32 g_AccessibilityToggleSamplesRemaining;
 static s32 g_AccessibilityToggleSample;
@@ -380,6 +395,34 @@ void accessibilityToneStopTargetPresence(void)
 {
 	SDL_AtomicSet(&g_AccessibilityTargetPresenceEnabled, 0);
 	SDL_AtomicAdd(&g_AccessibilityTargetPresenceSequence, 1);
+}
+
+void accessibilityTonePlayThreatAlert(f32 volume, f32 pan)
+{
+	if (volume < 0.0f) {
+		volume = 0.0f;
+	} else if (volume > 1.0f) {
+		volume = 1.0f;
+	}
+
+	if (pan < -1.0f) {
+		pan = -1.0f;
+	} else if (pan > 1.0f) {
+		pan = 1.0f;
+	}
+
+	SDL_AtomicSet(&g_AccessibilityThreatAlertVolumeMillionths,
+			(s32)(volume * 1000000.0f));
+	SDL_AtomicSet(&g_AccessibilityThreatAlertPanMillionths,
+			(s32)(pan * 1000000.0f));
+	SDL_AtomicSet(&g_AccessibilityThreatAlertEnabled, volume > 0.0f);
+	SDL_AtomicAdd(&g_AccessibilityThreatAlertSequence, 1);
+}
+
+void accessibilityToneStopThreatAlert(void)
+{
+	SDL_AtomicSet(&g_AccessibilityThreatAlertEnabled, 0);
+	SDL_AtomicAdd(&g_AccessibilityThreatAlertSequence, 1);
 }
 
 void accessibilityTonePlayToggleConfirmation(s32 enabled)
@@ -875,6 +918,8 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 	s32 chirpsequence = SDL_AtomicGet(&g_AccessibilityChirpSequence);
 	s32 targetpresencesequence = SDL_AtomicGet(
 			&g_AccessibilityTargetPresenceSequence);
+	s32 threatalertsequence = SDL_AtomicGet(
+			&g_AccessibilityThreatAlertSequence);
 	s32 togglesequence = SDL_AtomicGet(&g_AccessibilityToggleSequence);
 	s32 weaponfunctionsequence = SDL_AtomicGet(
 			&g_AccessibilityWeaponFunctionSequence);
@@ -1279,6 +1324,27 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		}
 	}
 
+	if (threatalertsequence != g_AccessibilityThreatAlertObservedSequence) {
+		g_AccessibilityThreatAlertObservedSequence = threatalertsequence;
+
+		if (SDL_AtomicGet(&g_AccessibilityThreatAlertEnabled)) {
+			g_AccessibilityThreatAlertVolume
+					= (f32)SDL_AtomicGet(
+							&g_AccessibilityThreatAlertVolumeMillionths)
+						/ 1000000.0f;
+			g_AccessibilityThreatAlertPan
+					= (f32)SDL_AtomicGet(
+							&g_AccessibilityThreatAlertPanMillionths)
+						/ 1000000.0f;
+			g_AccessibilityThreatAlertSamplesRemaining
+					= ACCESSIBILITY_THREAT_ALERT_DURATION_SAMPLES;
+			g_AccessibilityThreatAlertSample = 0;
+			g_AccessibilityThreatAlertPhase = 0.0f;
+		} else {
+			g_AccessibilityThreatAlertSamplesRemaining = 0;
+		}
+	}
+
 	if (weaponfunctionsequence
 			!= g_AccessibilityWeaponFunctionObservedSequence) {
 		s32 pulses = SDL_AtomicGet(&g_AccessibilityWeaponFunctionPulses);
@@ -1312,6 +1378,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			&& !hazardenabled && g_AccessibilityHazardGain <= 0.0f
 			&& g_AccessibilityChirpSamplesRemaining <= 0
 			&& g_AccessibilityTargetPresenceSamplesRemaining <= 0
+			&& g_AccessibilityThreatAlertSamplesRemaining <= 0
 			&& g_AccessibilityToggleSamplesRemaining <= 0
 			&& g_AccessibilityWeaponFunctionSamplesRemaining <= 0
 			&& g_AccessibilityRadarSamplesRemaining <= 0
@@ -1356,6 +1423,8 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		s32 chirpright = 0;
 		s32 targetpresenceleft = 0;
 		s32 targetpresenceright = 0;
+		s32 threatalertleft = 0;
+		s32 threatalertright = 0;
 		s32 hazardleft = 0;
 		s32 hazardright = 0;
 		s32 toggletone = 0;
@@ -1506,6 +1575,45 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			}
 			g_AccessibilityTargetPresenceSample++;
 			g_AccessibilityTargetPresenceSamplesRemaining--;
+		}
+
+		if (g_AccessibilityThreatAlertSamplesRemaining > 0) {
+			f32 envelope = 1.0f;
+			f32 progress = (f32)g_AccessibilityThreatAlertSample
+					/ (f32)ACCESSIBILITY_THREAT_ALERT_DURATION_SAMPLES;
+			f32 frequencyhz = ACCESSIBILITY_THREAT_ALERT_START_FREQUENCY_HZ
+					+ (ACCESSIBILITY_THREAT_ALERT_END_FREQUENCY_HZ
+						- ACCESSIBILITY_THREAT_ALERT_START_FREQUENCY_HZ)
+						* progress;
+			f32 leftpan = g_AccessibilityThreatAlertPan > 0.0f
+					? 1.0f - g_AccessibilityThreatAlertPan : 1.0f;
+			f32 rightpan = g_AccessibilityThreatAlertPan < 0.0f
+					? 1.0f + g_AccessibilityThreatAlertPan : 1.0f;
+			f32 alert;
+
+			if (g_AccessibilityThreatAlertSample
+					< ACCESSIBILITY_THREAT_ALERT_ATTACK_SAMPLES) {
+				envelope = (f32)g_AccessibilityThreatAlertSample
+						/ (f32)ACCESSIBILITY_THREAT_ALERT_ATTACK_SAMPLES;
+			} else if (g_AccessibilityThreatAlertSamplesRemaining
+					< ACCESSIBILITY_THREAT_ALERT_RELEASE_SAMPLES) {
+				envelope = (f32)g_AccessibilityThreatAlertSamplesRemaining
+						/ (f32)ACCESSIBILITY_THREAT_ALERT_RELEASE_SAMPLES;
+			}
+
+			alert = accessibilityToneCombatWave(
+					g_AccessibilityThreatAlertPhase) * envelope
+					* g_AccessibilityThreatAlertVolume
+					* combatmastervolume * 32767.0f;
+			threatalertleft = (s32)(alert * leftpan);
+			threatalertright = (s32)(alert * rightpan);
+			g_AccessibilityThreatAlertPhase += TWO_PI * frequencyhz
+					/ ACCESSIBILITY_TONE_SAMPLE_RATE;
+			if (g_AccessibilityThreatAlertPhase >= TWO_PI) {
+				g_AccessibilityThreatAlertPhase -= TWO_PI;
+			}
+			g_AccessibilityThreatAlertSample++;
+			g_AccessibilityThreatAlertSamplesRemaining--;
 		}
 
 		if (g_AccessibilityToggleSamplesRemaining > 0) {
@@ -2259,13 +2367,15 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 		g_AccessibilityToneMixBuffer[index] = accessibilityToneClamp(
 				(s32)g_AccessibilityToneMixBuffer[index] + tone + chirpleft
-						+ targetpresenceleft + hazardleft + combatleft
+						+ targetpresenceleft + threatalertleft
+						+ hazardleft + combatleft
 						+ trackerleft + friendlyleft + radarleft
 						+ hillleft + caneleft
 						+ markerleft + toggletone + weaponfunctiontone);
 		g_AccessibilityToneMixBuffer[index + 1] = accessibilityToneClamp(
 				(s32)g_AccessibilityToneMixBuffer[index + 1] + tone + chirpright
-						+ targetpresenceright + hazardright + combatright
+						+ targetpresenceright + threatalertright
+						+ hazardright + combatright
 						+ trackerright + friendlyright + radarright
 						+ hillright + caneright
 						+ markerright + toggletone + weaponfunctiontone);
