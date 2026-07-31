@@ -289,7 +289,7 @@ Test a nearby hostile and confirm it receives no F7 drone. Where controllable, t
 
 Enable distinct combinations of F5, F6, F7, and F8, then complete, abort, restart, and advance between consecutive missions and Combat Simulator matches. Every stage teardown must stop the active chirp and all friendly drones, then discard all prop identities, result indices, schedules, drone slots, observer pointers, and timing state while retaining the exact four category selections. Eligible gameplay in the next stage must perform a fresh scan and resume those categories without a toggle earcon. Verify that a category deliberately left off remains off, including F7 when moving into or out of a mission where non-hostile cues are unwanted. Initialization and orderly shutdown must still clear all four selections, and no pointer or prop number from the prior stage may appear in the new schedule or drone assignments.
 
-In DataDyne Central: Defection, approach Cassandra De Vries before obtaining her necklace. Confirm her native blue-sight protected state produces the F7 continuous people drone even though her scripted team is hostile. Aim at her and confirm the alignment tone is available, but the hostile distance-cadence voices remain silent for her. Knock her out and confirm both cues stop. Correlate the log's `protected_character`, `protected_nonlethal_target`, `aimonly=1`, and life-state exclusions; do not special-case her stage character identifier.
+In DataDyne Central: Defection, approach Cassandra De Vries before obtaining her necklace. Confirm her native blue-sight protected state produces the F7 continuous people drone even though her scripted team is hostile. Aim at her and confirm the alignment tone uses the rapid 90 ms sound/10 ms gap pattern, while the hostile distance-cadence voices remain silent for her. Move the crosshair between her and an ordinary hostile and confirm the hostile lock remains solid at the same pitch. Knock her out and confirm both cues stop. Correlate the log's `protected_character`, `protected_nonlethal_target`, `aimonly=1`, `interrupted=1`, `pattern=90ms_on_10ms_off`, and life-state exclusions; do not special-case her stage character identifier.
 
 Correlate `beacon/candidate` reasons (`friendly_character`, `neutral_character`, `character_hostile`, life/visibility exclusions), `scan_result`, `friendly_drone_assign`, `friendly_drone_release`, `friendly_drone_stop`, and `category_state non_hostile_active` with perceived output. Run with all four categories and inspect periodic telemetry for at most nine serialized chirp targets plus three fixed friendly-drone slots, stable identities, bounded mixer work, and no progressive frame, channel, or memory growth. Advanced `performance/frame_window` records must expose `friendly_enabled_slots`.
 
@@ -457,10 +457,13 @@ healthy pane must play a 90 ms falling octave, beginning at twice the normal
 distance frequency and resolving to it; neighboring wall rays must retain
 their steady 35 ms chirps. Confirm `cane/sweep` reports `breakable:1`, the
 blocking prop, and matching start/end frequencies. Aim an ordinary firearm at
-the pane's actual geometry and confirm the centered alignment tone begins even
-though native sight filtering does not retain scenery. Move off its geometry,
-equip a non-attack device, destroy the pane, and repeat against decorative or
-invincible glass; each must remain silent. Confirm
+the pane's actual geometry and confirm the centered alignment tone uses the
+rapid 90 ms sound/10 ms gap pattern even though native sight filtering does
+not retain scenery. Move between the pane and an ordinary hostile and confirm
+only the hostile lock is solid. Move off the pane's geometry, equip a
+non-attack device, destroy the pane, and repeat against decorative or
+invincible glass; each must remain silent. Confirm the alignment log records
+`category=8`, `interrupted=1`, and `pattern=90ms_on_10ms_off`, and that
 `targeting/path_blocker_aim` distinguishes `eligible`,
 `current_attack_incompatible`, and non-breakable state. Repeat with another
 `OBJFLAG_PATHBLOCKER`, including an explosion-only obstruction if available,

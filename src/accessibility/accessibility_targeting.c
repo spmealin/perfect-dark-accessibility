@@ -104,6 +104,7 @@ struct accessibilitytargetingstate {
 	s32 hasaimedidentity;
 	s32 proceduralpresenceactive;
 	s32 alignmentactive;
+	s32 alignmentinterrupted;
 	s32 aimlossframes;
 	f32 alignmentfrequencyhz;
 	f32 alignmentquality;
@@ -187,6 +188,7 @@ static const struct accessibilitytargetingpolicy *g_AccessibilityTargetingCurren
 #define g_AccessibilityTargetingHasAimedIdentity (g_AccessibilityTargetingCurrentState->hasaimedidentity)
 #define g_AccessibilityTargetingProceduralPresenceActive (g_AccessibilityTargetingCurrentState->proceduralpresenceactive)
 #define g_AccessibilityTargetingAlignmentActive (g_AccessibilityTargetingCurrentState->alignmentactive)
+#define g_AccessibilityTargetingAlignmentInterrupted (g_AccessibilityTargetingCurrentState->alignmentinterrupted)
 #define g_AccessibilityTargetingAimLossFrames (g_AccessibilityTargetingCurrentState->aimlossframes)
 #define g_AccessibilityTargetingAlignmentFrequencyHz (g_AccessibilityTargetingCurrentState->alignmentfrequencyhz)
 #define g_AccessibilityTargetingAlignmentQuality (g_AccessibilityTargetingCurrentState->alignmentquality)
@@ -718,16 +720,18 @@ static void accessibilityTargetingStopCombatPresence(const char *reason)
 static void accessibilityTargetingStopAlignment(const char *reason)
 {
 	if (g_AccessibilityTargetingAlignmentActive) {
-		accessibilityToneSet(0, 0.0f);
+		accessibilityToneSetAlignment(0, 0.0f, false);
 		accessibilityLogEvent("targeting", "alignment_stop",
-				"reason=%s frequency_hz=%.2f quality=%.4f distance=%.3f updates=%llu",
+				"reason=%s frequency_hz=%.2f quality=%.4f distance=%.3f interrupted=%d updates=%llu",
 				reason, g_AccessibilityTargetingAlignmentFrequencyHz,
 				g_AccessibilityTargetingAlignmentQuality,
 				g_AccessibilityTargetingAlignmentDistance,
+				g_AccessibilityTargetingAlignmentInterrupted,
 				(unsigned long long)g_AccessibilityTargetingAlignmentUpdateCount);
 	}
 
 	g_AccessibilityTargetingAlignmentActive = false;
+	g_AccessibilityTargetingAlignmentInterrupted = false;
 	g_AccessibilityTargetingAlignmentFrequencyHz = 0.0f;
 	g_AccessibilityTargetingAlignmentQuality = 0.0f;
 	g_AccessibilityTargetingAlignmentDistance = 0.0f;
@@ -1328,6 +1332,10 @@ static void accessibilityTargetingUpdateAlignment(s32 frame60,
 {
 	f32 quality = candidate->hasaimquality ? candidate->aimquality : 0.0f;
 	f32 frequencyhz;
+	s32 interrupted = candidate->relationship
+				== ACCESSIBILITY_TARGETING_RELATIONSHIP_PROTECTED
+			|| candidate->category
+				== ACCESSIBILITY_TARGETING_CATEGORY_BREAKABLE_PATH_BLOCKER;
 	s32 starting = !g_AccessibilityTargetingAlignmentActive;
 
 	if (quality < 0.0f) {
@@ -1340,8 +1348,9 @@ static void accessibilityTargetingUpdateAlignment(s32 frame60,
 			* ACCESSIBILITY_TARGETING_TONE_MIN_PITCH
 			* powf(ACCESSIBILITY_TARGETING_TONE_MAX_PITCH
 					/ ACCESSIBILITY_TARGETING_TONE_MIN_PITCH, quality);
-	accessibilityToneSet(1, frequencyhz);
+	accessibilityToneSetAlignment(1, frequencyhz, interrupted);
 	g_AccessibilityTargetingAlignmentActive = true;
+	g_AccessibilityTargetingAlignmentInterrupted = interrupted;
 	g_AccessibilityTargetingAlignmentFrequencyHz = frequencyhz;
 	g_AccessibilityTargetingAlignmentQuality = quality;
 	g_AccessibilityTargetingAlignmentDistance = candidate->aimdistance;
@@ -1350,12 +1359,15 @@ static void accessibilityTargetingUpdateAlignment(s32 frame60,
 	if (starting || frame60 >= g_AccessibilityTargetingNextAlignmentLog60) {
 		accessibilityLogEvent("targeting",
 				starting ? "alignment_start" : "alignment_update",
-				"update=%llu frame=%d reason=%s source=%d slot=%d propnum=%d quality_available=%d quality=%.4f distance=%.3f frequency_hz=%.2f",
+				"update=%llu frame=%d reason=%s source=%d slot=%d propnum=%d category=%d relationship=%d interrupted=%d pattern=%s quality_available=%d quality=%.4f distance=%.3f frequency_hz=%.2f",
 				(unsigned long long)g_AccessibilityTargetingAlignmentUpdateCount,
 				frame60, reason,
 				g_AccessibilityTargetingAimedIdentity.source,
 				g_AccessibilityTargetingAimedIdentity.sourceslot,
 				g_AccessibilityTargetingAimedIdentity.propnum,
+				candidate->category, candidate->relationship,
+				interrupted,
+				interrupted ? "90ms_on_10ms_off" : "continuous",
 				candidate->hasaimquality, quality, candidate->aimdistance,
 				frequencyhz);
 		g_AccessibilityTargetingNextAlignmentLog60
