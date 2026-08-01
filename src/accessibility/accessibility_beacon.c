@@ -1,4 +1,5 @@
 #include <ultra64.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,6 +20,7 @@
 #include "game/sight.h"
 #include "lib/collision.h"
 #include "lib/vars.h"
+#include "lib/vi.h"
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_beacon.h"
 #include "accessibility/accessibility_log.h"
@@ -302,6 +304,30 @@ static f32 accessibilityBeaconCategoryScanDistance(s32 category)
 	return category == ACCESSIBILITY_BEACON_CATEGORY_DOOR
 			? ACCESSIBILITY_BEACON_DOOR_SCAN_DISTANCE
 			: ACCESSIBILITY_BEACON_SCAN_DISTANCE;
+}
+
+static s32 accessibilityBeaconObjectIsOnScreen(struct prop *prop)
+{
+	struct defaultobj *obj = prop ? prop->obj : NULL;
+	f32 x1;
+	f32 y1;
+	f32 x2;
+	f32 y2;
+	f32 viewleft = (f32)viGetViewLeft() / g_ScaleX;
+	f32 viewtop = viGetViewTop();
+	f32 viewright = viewleft + (f32)viGetViewWidth() / g_ScaleX;
+	f32 viewbottom = viewtop + viGetViewHeight();
+
+	if (!prop || (prop->flags & PROPFLAG_ONTHISSCREENTHISTICK) == 0
+			|| !obj || !obj->model
+			|| !modelGetScreenCoords(obj->model, &x2, &x1, &y2, &y1)
+			|| !isfinite(x1) || !isfinite(y1)
+			|| !isfinite(x2) || !isfinite(y2)) {
+		return false;
+	}
+
+	return x2 >= viewleft && x1 <= viewright
+			&& y2 >= viewtop && y1 <= viewbottom;
 }
 
 static s32 accessibilityBeaconCharacterCombatCapable(struct chrdata *chr)
@@ -1235,6 +1261,12 @@ static s32 accessibilityBeaconScan(s32 detailed)
 			result.category = ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE;
 		}
 
+		if (eligible && result.category == ACCESSIBILITY_BEACON_CATEGORY_OBJECT
+				&& !accessibilityBeaconObjectIsOnScreen(candidate)) {
+			eligible = false;
+			reason = "object_not_visible_on_screen";
+		}
+
 		if (eligible) {
 			f32 scandistance = accessibilityBeaconCategoryScanDistance(
 					result.category);
@@ -1372,6 +1404,10 @@ static struct prop *accessibilityBeaconValidateResult(struct accessibilitybeacon
 		}
 	} else if (result->category == ACCESSIBILITY_BEACON_CATEGORY_OBJECT) {
 		if (!accessibilityBeaconObjectEligible(prop, &citag, reason)) {
+			return NULL;
+		}
+		if (!accessibilityBeaconObjectIsOnScreen(prop)) {
+			*reason = "object_no_longer_visible_on_screen";
 			return NULL;
 		}
 	} else if (result->category == ACCESSIBILITY_BEACON_CATEGORY_DOOR) {
