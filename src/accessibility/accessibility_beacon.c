@@ -36,6 +36,10 @@
 #define ACCESSIBILITY_BEACON_FULL_DISTANCE 200.0f
 #define ACCESSIBILITY_BEACON_FADE_DISTANCE 1200.0f
 #define ACCESSIBILITY_BEACON_SILENT_DISTANCE 1400.0f
+#define ACCESSIBILITY_BEACON_DOOR_SCAN_DISTANCE 1800.0f
+#define ACCESSIBILITY_BEACON_DOOR_FULL_DISTANCE 250.0f
+#define ACCESSIBILITY_BEACON_DOOR_FADE_DISTANCE 1600.0f
+#define ACCESSIBILITY_BEACON_DOOR_SILENT_DISTANCE 1900.0f
 #define ACCESSIBILITY_BEACON_DOOR_FREQUENCY_HZ 440.0f
 #define ACCESSIBILITY_BEACON_OBJECT_FREQUENCY_HZ 880.0f
 #define ACCESSIBILITY_BEACON_NON_HOSTILE_GAIN 2.0f
@@ -100,10 +104,18 @@ struct accessibilitybeacondroneslot {
 	struct accessibilitybeaconresult result;
 };
 
+struct accessibilitybeacondoorslot {
+	s32 active;
+	s32 restart;
+	struct accessibilitybeaconresult result;
+};
+
 static struct accessibilitybeaconresult g_AccessibilityBeaconResults[ACCESSIBILITY_BEACON_CAPACITY];
 static struct accessibilitybeacondroneslot
 		g_AccessibilityBeaconFriendlySlots[
 				ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
+static struct accessibilitybeacondoorslot
+		g_AccessibilityBeaconDoorSlots[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
 static s32 g_AccessibilityBeaconResultCount;
 static s32 g_AccessibilityBeaconSelectedIndex[ACCESSIBILITY_BEACON_CATEGORY_COUNT]
 		= { -1, -1, -1, -1, -1 };
@@ -143,6 +155,26 @@ static void accessibilityBeaconStopFriendlyDrones(const char *reason)
 	}
 }
 
+static void accessibilityBeaconStopDoorChirps(const char *reason)
+{
+	s32 slot;
+	s32 active = 0;
+
+	for (slot = 0; slot < ACCESSIBILITY_TONE_DOOR_SLOT_COUNT; slot++) {
+		active += g_AccessibilityBeaconDoorSlots[slot].active != 0;
+	}
+
+	accessibilityToneStopDoors();
+	memset(g_AccessibilityBeaconDoorSlots, 0,
+			sizeof(g_AccessibilityBeaconDoorSlots));
+
+	if (active > 0) {
+		accessibilityLogEvent("beacon", "door_chirp_stop",
+				"reason=%s active_slots=%d frequency_hz=440 period_ms=750",
+				reason ? reason : "unknown", active);
+	}
+}
+
 static void accessibilityBeaconResetTelemetry(void)
 {
 	g_AccessibilityBeaconNextTelemetry60 = 0;
@@ -160,6 +192,7 @@ static void accessibilityBeaconLogTelemetry(const char *reason)
 	s32 inuse = 0;
 	s32 stopped = 0;
 	s32 friendlyslots = 0;
+	s32 doorslots = 0;
 	s32 i;
 
 	for (i = 0; g_PsChannels && i < channels; i++) {
@@ -177,6 +210,9 @@ static void accessibilityBeaconLogTelemetry(const char *reason)
 	for (i = 0; i < ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT; i++) {
 		friendlyslots += g_AccessibilityBeaconFriendlySlots[i].active != 0;
 	}
+	for (i = 0; i < ACCESSIBILITY_TONE_DOOR_SLOT_COUNT; i++) {
+		doorslots += g_AccessibilityBeaconDoorSlots[i].active != 0;
+	}
 
 	if (memoryavailable && !g_AccessibilityBeaconMemoryBaselineValid) {
 		g_AccessibilityBeaconMemoryBaselineValid = true;
@@ -185,7 +221,7 @@ static void accessibilityBeaconLogTelemetry(const char *reason)
 	}
 
 	accessibilityLogEvent("beacon", "telemetry",
-			"reason=%s tick=%d scans=%llu pulses=%llu memory_available=%d working_set_bytes=%llu working_set_delta=%lld private_bytes=%llu private_delta=%lld snd_states=%d prop_channels_in_use=%d prop_channels_total=%d prop_channels_stopped=%d procedural_chirp_lane=1 friendly_drone_slots=%d schedule_targets=%d schedule_cursor=%d next_schedule_tick=%d object_active=%d door_active=%d pickup_active=%d non_hostile_active=%d",
+			"reason=%s tick=%d scans=%llu pulses=%llu memory_available=%d working_set_bytes=%llu working_set_delta=%lld private_bytes=%llu private_delta=%lld snd_states=%d prop_channels_in_use=%d prop_channels_total=%d prop_channels_stopped=%d procedural_chirp_lane=1 door_chirp_slots=%d friendly_drone_slots=%d schedule_targets=%d schedule_cursor=%d next_schedule_tick=%d object_active=%d door_active=%d pickup_active=%d non_hostile_active=%d",
 			reason, g_Vars.lvframe60,
 			(unsigned long long)g_AccessibilityBeaconScanCount,
 			(unsigned long long)g_AccessibilityBeaconPulseCount,
@@ -193,7 +229,7 @@ static void accessibilityBeaconLogTelemetry(const char *reason)
 			(long long)workingset - (long long)g_AccessibilityBeaconWorkingSetBaseline,
 			(unsigned long long)privatebytes,
 			(long long)privatebytes - (long long)g_AccessibilityBeaconPrivateBaseline,
-			g_SndNumPlaying, inuse, channels, stopped, friendlyslots,
+			g_SndNumPlaying, inuse, channels, stopped, doorslots, friendlyslots,
 			g_AccessibilityBeaconScheduleCount,
 			g_AccessibilityBeaconScheduleCursor,
 			g_AccessibilityBeaconNextScheduledPulse60,
@@ -259,6 +295,13 @@ static f32 accessibilityBeaconCategoryFrequency(s32 category)
 			|| category == ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE
 		? ACCESSIBILITY_BEACON_DOOR_FREQUENCY_HZ
 		: ACCESSIBILITY_BEACON_OBJECT_FREQUENCY_HZ;
+}
+
+static f32 accessibilityBeaconCategoryScanDistance(s32 category)
+{
+	return category == ACCESSIBILITY_BEACON_CATEGORY_DOOR
+			? ACCESSIBILITY_BEACON_DOOR_SCAN_DISTANCE
+			: ACCESSIBILITY_BEACON_SCAN_DISTANCE;
 }
 
 static s32 accessibilityBeaconCharacterCombatCapable(struct chrdata *chr)
@@ -1102,7 +1145,7 @@ static s32 accessibilityBeaconScan(s32 detailed)
 	memset(g_AccessibilityBeaconResults, 0, sizeof(g_AccessibilityBeaconResults));
 
 	accessibilityLogEvent("beacon", "scan_start",
-			"scan=%llu mode=%s stage=%d player=%d observer_prop=%p observer_propnum=%d observer_remote=%d position=%.3f,%.3f,%.3f heading=%.3f rooms=%d,%d,%d,%d,%d,%d,%d,%d radius=%.1f capacity=%d",
+			"scan=%llu mode=%s stage=%d player=%d observer_prop=%p observer_propnum=%d observer_remote=%d position=%.3f,%.3f,%.3f heading=%.3f rooms=%d,%d,%d,%d,%d,%d,%d,%d radius=%.1f door_radius=%.1f capacity=%d",
 			(unsigned long long)g_AccessibilityBeaconScanCount,
 			detailed ? "toggle" : "automatic_refresh",
 			g_Vars.stagenum, g_Vars.currentplayernum, (void *)playerprop,
@@ -1111,7 +1154,9 @@ static s32 accessibilityBeaconScan(s32 detailed)
 			observer.origin.z, heading,
 			playerprop->rooms[0], playerprop->rooms[1], playerprop->rooms[2], playerprop->rooms[3],
 			playerprop->rooms[4], playerprop->rooms[5], playerprop->rooms[6], playerprop->rooms[7],
-			ACCESSIBILITY_BEACON_SCAN_DISTANCE, ACCESSIBILITY_BEACON_CAPACITY);
+			ACCESSIBILITY_BEACON_SCAN_DISTANCE,
+			ACCESSIBILITY_BEACON_DOOR_SCAN_DISTANCE,
+			ACCESSIBILITY_BEACON_CAPACITY);
 
 	while (prop && prop != g_Vars.pausedprops && traversed <= g_Vars.maxprops) {
 		struct prop *candidate = prop;
@@ -1191,10 +1236,13 @@ static s32 accessibilityBeaconScan(s32 detailed)
 		}
 
 		if (eligible) {
+			f32 scandistance = accessibilityBeaconCategoryScanDistance(
+					result.category);
+
 			distance = accessibilityBeaconCalculateSpatial(
 					candidate, &observer, &bearing, &vertical);
 
-			if (distance * distance > ACCESSIBILITY_BEACON_SCAN_DISTANCE_SQ) {
+			if (distance > scandistance) {
 				eligible = false;
 				reason = "outside_scan_radius";
 			} else if (!accessibilityBeaconRoomsRelated(playerprop->rooms, candidate->rooms)) {
@@ -1342,7 +1390,7 @@ static struct prop *accessibilityBeaconValidateResult(struct accessibilitybeacon
 	distance = accessibilityBeaconCalculateSpatial(
 			prop, &observer, &bearing, &vertical);
 
-	if (distance * distance > ACCESSIBILITY_BEACON_SCAN_DISTANCE_SQ) {
+	if (distance > accessibilityBeaconCategoryScanDistance(result->category)) {
 		*reason = "moved_outside_scan_radius";
 		return NULL;
 	}
@@ -1408,6 +1456,8 @@ static void accessibilityBeaconDeactivateCategory(s32 category, const char *reas
 
 	if (category == ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE) {
 		accessibilityBeaconStopFriendlyDrones(reason);
+	} else if (category == ACCESSIBILITY_BEACON_CATEGORY_DOOR) {
+		accessibilityBeaconStopDoorChirps(reason);
 	}
 	accessibilityBeaconClearSelection(category, reason);
 
@@ -1469,6 +1519,8 @@ static void accessibilityBeaconSuspend(const char *reason)
 	}
 
 	accessibilityToneStopChirp();
+	accessibilityBeaconStopDoorChirps(
+			reason ? reason : "scope_suspended");
 	accessibilityBeaconStopFriendlyDrones(
 			reason ? reason : "scope_suspended");
 	g_AccessibilityBeaconResultCount = 0;
@@ -1552,6 +1604,158 @@ static s32 accessibilityBeaconFindResultIdentity(
 	}
 
 	return -1;
+}
+
+static s32 accessibilityBeaconDoorResultAssigned(s32 resultindex)
+{
+	s32 slot;
+
+	for (slot = 0; slot < ACCESSIBILITY_TONE_DOOR_SLOT_COUNT; slot++) {
+		struct accessibilitybeacondoorslot *door
+				= &g_AccessibilityBeaconDoorSlots[slot];
+
+		if (door->active
+				&& accessibilityBeaconFindResultIdentity(&door->result)
+						== resultindex) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static void accessibilityBeaconRefreshDoorChirps(const char *reason)
+{
+	s32 slot;
+	s32 index;
+
+	if (!g_AccessibilityBeaconCategoryActive[
+			ACCESSIBILITY_BEACON_CATEGORY_DOOR]) {
+		accessibilityBeaconStopDoorChirps(reason);
+		return;
+	}
+
+	for (slot = 0; slot < ACCESSIBILITY_TONE_DOOR_SLOT_COUNT; slot++) {
+		struct accessibilitybeacondoorslot *door
+				= &g_AccessibilityBeaconDoorSlots[slot];
+
+		if (!door->active) {
+			continue;
+		}
+
+		index = accessibilityBeaconFindResultIdentity(&door->result);
+		if (index >= 0) {
+			door->result = g_AccessibilityBeaconResults[index];
+		} else {
+			accessibilityLogEvent("beacon", "door_chirp_release",
+					"slot=%d reason=target_removed propnum=%d entity=%p refresh_reason=%s",
+					slot, door->result.propnum, door->result.entity,
+					reason ? reason : "unknown");
+			accessibilityToneSetDoorSlot(slot, false, 0.0f, 0.0f, false);
+			memset(door, 0, sizeof(*door));
+		}
+	}
+
+	for (index = 0; index < g_AccessibilityBeaconResultCount; index++) {
+		struct accessibilitybeaconresult *result
+				= &g_AccessibilityBeaconResults[index];
+		s32 targetslot = -1;
+		s32 farthest = -1;
+
+		if (result->category != ACCESSIBILITY_BEACON_CATEGORY_DOOR
+				|| accessibilityBeaconDoorResultAssigned(index)) {
+			continue;
+		}
+
+		for (slot = 0; slot < ACCESSIBILITY_TONE_DOOR_SLOT_COUNT; slot++) {
+			struct accessibilitybeacondoorslot *door
+					= &g_AccessibilityBeaconDoorSlots[slot];
+
+			if (!door->active) {
+				targetslot = slot;
+				break;
+			}
+			if (farthest < 0 || door->result.distance
+					> g_AccessibilityBeaconDoorSlots[farthest].result.distance) {
+				farthest = slot;
+			}
+		}
+
+		if (targetslot < 0 && farthest >= 0
+				&& result->distance + ACCESSIBILITY_BEACON_SWITCH_MARGIN
+					< g_AccessibilityBeaconDoorSlots[farthest].result.distance) {
+			targetslot = farthest;
+			accessibilityLogEvent("beacon", "door_chirp_release",
+					"slot=%d reason=nearer_target propnum=%d entity=%p replacement_propnum=%d replacement_entity=%p",
+					targetslot,
+					g_AccessibilityBeaconDoorSlots[targetslot].result.propnum,
+					g_AccessibilityBeaconDoorSlots[targetslot].result.entity,
+					result->propnum, result->entity);
+		}
+
+		if (targetslot >= 0) {
+			struct accessibilitybeacondoorslot *door
+					= &g_AccessibilityBeaconDoorSlots[targetslot];
+
+			door->active = true;
+			door->restart = true;
+			door->result = *result;
+			accessibilityLogEvent("beacon", "door_chirp_assign",
+					"slot=%d propnum=%d canonical_propnum=%d entity=%p distance=%.3f reason=%s frequency_hz=440 period_ms=750",
+					targetslot, result->propnum, result->canonicalpropnum,
+					result->entity, result->distance,
+					reason ? reason : "unknown");
+		}
+	}
+}
+
+static void accessibilityBeaconUpdateDoorChirps(void)
+{
+	s32 slot;
+
+	for (slot = 0; slot < ACCESSIBILITY_TONE_DOOR_SLOT_COUNT; slot++) {
+		struct accessibilitybeacondoorslot *door
+				= &g_AccessibilityBeaconDoorSlots[slot];
+		struct prop *prop;
+		const char *validreason;
+		s32 volume;
+		s32 pan;
+		f32 normalizedvolume;
+		f32 normalizedpan;
+
+		if (!door->active) {
+			continue;
+		}
+
+		prop = accessibilityBeaconValidateResult(&door->result, &validreason);
+		if (!prop) {
+			accessibilityLogEvent("beacon", "door_chirp_release",
+					"slot=%d reason=%s propnum=%d entity=%p",
+					slot, validreason, door->result.propnum,
+					door->result.entity);
+			accessibilityToneSetDoorSlot(slot, false, 0.0f, 0.0f, false);
+			memset(door, 0, sizeof(*door));
+			g_AccessibilityBeaconNextRefresh60 = g_Vars.lvframe60;
+			continue;
+		}
+
+		volume = psCalculateVolumeFromDistance(door->result.distance,
+				ACCESSIBILITY_BEACON_DOOR_FULL_DISTANCE,
+				ACCESSIBILITY_BEACON_DOOR_FADE_DISTANCE,
+				ACCESSIBILITY_BEACON_DOOR_SILENT_DISTANCE, AL_VOL_FULL);
+		pan = psCalculatePan(&prop->pos,
+				ACCESSIBILITY_BEACON_DOOR_FULL_DISTANCE,
+				ACCESSIBILITY_BEACON_DOOR_FADE_DISTANCE,
+				ACCESSIBILITY_BEACON_DOOR_SILENT_DISTANCE,
+				door->result.distance, false, NULL);
+		normalizedvolume = (f32)volume / (f32)AL_VOL_FULL;
+		normalizedpan = ((f32)pan - (f32)AL_PAN_CENTER)
+				/ (f32)AL_PAN_CENTER;
+
+		accessibilityToneSetDoorSlot(slot, volume > 0,
+				normalizedvolume, normalizedpan, door->restart);
+		door->restart = false;
+	}
 }
 
 static s32 accessibilityBeaconFriendlyResultAssigned(s32 resultindex)
@@ -1765,6 +1969,7 @@ static void accessibilityBeaconBuildSchedule(
 	for (category = ACCESSIBILITY_BEACON_CATEGORY_OBJECT;
 			category < ACCESSIBILITY_BEACON_CATEGORY_COUNT; category++) {
 		if (!g_AccessibilityBeaconCategoryActive[category]
+				|| category == ACCESSIBILITY_BEACON_CATEGORY_DOOR
 				|| category == ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE) {
 			continue;
 		}
@@ -1954,6 +2159,7 @@ static void accessibilityBeaconRefreshActive(void)
 
 	accessibilityBeaconBuildSchedule(previous, previouscount,
 			nextvalid ? &nexttarget : NULL, nextvalid, "automatic_refresh");
+	accessibilityBeaconRefreshDoorChirps("automatic_refresh");
 	accessibilityBeaconRefreshFriendlyDrones("automatic_refresh");
 
 	if (g_AccessibilityBeaconScheduleCount > 0
@@ -1974,6 +2180,7 @@ static void accessibilityBeaconRescanActive(const char *reason)
 			ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE, "rescan");
 	accessibilityBeaconScan(true);
 	accessibilityBeaconBuildSchedule(NULL, 0, NULL, false, reason);
+	accessibilityBeaconRefreshDoorChirps(reason);
 	accessibilityBeaconRefreshFriendlyDrones(reason);
 	g_AccessibilityBeaconNextScheduledPulse60 = g_Vars.lvframe60;
 	g_AccessibilityBeaconNextRefresh60
@@ -2341,6 +2548,12 @@ void accessibilityBeaconTick(void)
 	}
 
 	if (g_AccessibilityBeaconCategoryActive[
+			ACCESSIBILITY_BEACON_CATEGORY_DOOR]
+			&& g_Vars.lvupdate60 > 0) {
+		accessibilityBeaconUpdateDoorChirps();
+	}
+
+	if (g_AccessibilityBeaconCategoryActive[
 			ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE]
 			&& g_Vars.lvupdate60 > 0) {
 		accessibilityBeaconUpdateFriendlyDrones();
@@ -2362,7 +2575,7 @@ void accessibilityBeaconReset(const char *reason, s32 preservecategories)
 	}
 
 	accessibilityLogEvent("beacon", "reset",
-			"reason=%s preserve_categories=%d object_active=%d door_active=%d pickup_active=%d non_hostile_active=%d scans=%llu pulses=%llu interactable_enabled=%d non_hostile_enabled=%d radius=%.1f base_cadence_ticks=%d refresh_ticks=%d min_slot_ticks=%d per_category_cap=%d object_frequency_hz=%.1f pickup_pulses=3 door_frequency_hz=%.1f non_hostile_voice=continuous_drone non_hostile_slots=%d non_hostile_base_frequency_hz=440 non_hostile_third_frequency_hz=550 non_hostile_base_gain=0.72 non_hostile_third_gain=0.28 lane=procedural_chirp_and_friendly_drone",
+			"reason=%s preserve_categories=%d object_active=%d door_active=%d pickup_active=%d non_hostile_active=%d scans=%llu pulses=%llu interactable_enabled=%d non_hostile_enabled=%d radius=%.1f door_radius=%.1f base_cadence_ticks=%d refresh_ticks=%d min_slot_ticks=%d per_category_cap=%d object_frequency_hz=%.1f pickup_pulses=3 door_frequency_hz=%.1f door_period_ms=750 door_slots=%d non_hostile_voice=continuous_drone non_hostile_slots=%d non_hostile_base_frequency_hz=440 non_hostile_third_frequency_hz=550 non_hostile_base_gain=0.72 non_hostile_third_gain=0.28 lane=procedural_object_pickup_chirp_door_chirps_and_friendly_drone",
 			reason ? reason : "reset",
 			preservecategories,
 			g_AccessibilityBeaconCategoryActive[
@@ -2377,11 +2590,14 @@ void accessibilityBeaconReset(const char *reason, s32 preservecategories)
 			(unsigned long long)g_AccessibilityBeaconPulseCount,
 			accessibilityIsInteractableBeaconsEnabled(),
 			accessibilityIsNonHostileBeaconsEnabled(),
-			ACCESSIBILITY_BEACON_SCAN_DISTANCE, ACCESSIBILITY_BEACON_PULSE_TICKS,
+			ACCESSIBILITY_BEACON_SCAN_DISTANCE,
+			ACCESSIBILITY_BEACON_DOOR_SCAN_DISTANCE,
+			ACCESSIBILITY_BEACON_PULSE_TICKS,
 			ACCESSIBILITY_BEACON_REFRESH_TICKS, ACCESSIBILITY_BEACON_MIN_SLOT_TICKS,
 			ACCESSIBILITY_BEACON_MAX_TARGETS_PER_CATEGORY,
 			ACCESSIBILITY_BEACON_OBJECT_FREQUENCY_HZ,
 			ACCESSIBILITY_BEACON_DOOR_FREQUENCY_HZ,
+			ACCESSIBILITY_TONE_DOOR_SLOT_COUNT,
 			ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT);
 
 	g_AccessibilityBeaconScanCount = 0;

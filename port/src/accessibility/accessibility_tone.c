@@ -61,6 +61,12 @@
 #define ACCESSIBILITY_FRIENDLY_VOLUME 0.10f
 #define ACCESSIBILITY_FRIENDLY_BASE_GAIN 0.72f
 #define ACCESSIBILITY_FRIENDLY_THIRD_GAIN 0.28f
+#define ACCESSIBILITY_DOOR_FREQUENCY_HZ 440.0f
+#define ACCESSIBILITY_DOOR_VOLUME 0.24f
+#define ACCESSIBILITY_DOOR_PERIOD_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.75f))
+#define ACCESSIBILITY_DOOR_BEEP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.10f))
+#define ACCESSIBILITY_DOOR_ATTACK_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.005f))
+#define ACCESSIBILITY_DOOR_RELEASE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.02f))
 #define ACCESSIBILITY_RADAR_LEVEL_BEEP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.045f))
 #define ACCESSIBILITY_RADAR_DOUBLE_BEEP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.035f))
 #define ACCESSIBILITY_RADAR_DOUBLE_GAP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.025f))
@@ -142,6 +148,10 @@ static SDL_atomic_t g_AccessibilityFriendlyEnabled[ACCESSIBILITY_TONE_FRIENDLY_S
 static SDL_atomic_t g_AccessibilityFriendlySequence[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityFriendlyVolumeMillionths[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityFriendlyPanMillionths[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
+static SDL_atomic_t g_AccessibilityDoorEnabled[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
+static SDL_atomic_t g_AccessibilityDoorSequence[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
+static SDL_atomic_t g_AccessibilityDoorVolumeMillionths[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
+static SDL_atomic_t g_AccessibilityDoorPanMillionths[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityRadarSequence;
 static SDL_atomic_t g_AccessibilityRadarEnabled;
 static SDL_atomic_t g_AccessibilityRadarFrequencyMilliHz;
@@ -236,6 +246,10 @@ static f32 g_AccessibilityFriendlyPhaseBase[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COU
 static f32 g_AccessibilityFriendlyPhaseThird[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
 static f32 g_AccessibilityFriendlyPan[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
 static f32 g_AccessibilityFriendlyGain[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
+static s32 g_AccessibilityDoorObservedSequence[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
+static s32 g_AccessibilityDoorCycleSample[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
+static f32 g_AccessibilityDoorPhase[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
+static f32 g_AccessibilityDoorPan[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
 static s32 g_AccessibilityRadarObservedSequence;
 static s32 g_AccessibilityRadarSamplesRemaining;
 static s32 g_AccessibilityRadarSample;
@@ -685,6 +699,46 @@ void accessibilityToneStopFriendly(void)
 	}
 }
 
+void accessibilityToneSetDoorSlot(s32 slot, s32 enabled,
+		f32 volume, f32 pan, s32 restart)
+{
+	if (slot < 0 || slot >= ACCESSIBILITY_TONE_DOOR_SLOT_COUNT) {
+		return;
+	}
+
+	if (volume < 0.0f) {
+		volume = 0.0f;
+	} else if (volume > 1.0f) {
+		volume = 1.0f;
+	}
+	if (pan < -1.0f) {
+		pan = -1.0f;
+	} else if (pan > 1.0f) {
+		pan = 1.0f;
+	}
+
+	SDL_AtomicSet(&g_AccessibilityDoorVolumeMillionths[slot],
+			(s32)(volume * 1000000.0f));
+	SDL_AtomicSet(&g_AccessibilityDoorPanMillionths[slot],
+			(s32)(pan * 1000000.0f));
+	SDL_AtomicSet(&g_AccessibilityDoorEnabled[slot],
+			enabled != 0 && volume > 0.0f);
+
+	if (restart) {
+		SDL_AtomicAdd(&g_AccessibilityDoorSequence[slot], 1);
+	}
+}
+
+void accessibilityToneStopDoors(void)
+{
+	s32 slot;
+
+	for (slot = 0; slot < ACCESSIBILITY_TONE_DOOR_SLOT_COUNT; slot++) {
+		SDL_AtomicSet(&g_AccessibilityDoorEnabled[slot], 0);
+		SDL_AtomicAdd(&g_AccessibilityDoorSequence[slot], 1);
+	}
+}
+
 void accessibilityTonePlayRadarPing(f32 frequencyhz, f32 volume, f32 pan,
 		s32 height, s32 rear, s32 kind)
 {
@@ -894,6 +948,7 @@ void accessibilityToneGetDiagnostics(struct accessibilitytonediagnostics *diagno
 	diagnostics->combatenabledslots = 0;
 	diagnostics->trackerenabledslots = 0;
 	diagnostics->friendlyenabledslots = 0;
+	diagnostics->doorenabledslots = 0;
 	diagnostics->markerenabledslots = 0;
 	diagnostics->canerequestedmask = 0;
 	for (slot = 0; slot < ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT; slot++) {
@@ -907,6 +962,10 @@ void accessibilityToneGetDiagnostics(struct accessibilitytonediagnostics *diagno
 	for (slot = 0; slot < ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT; slot++) {
 		diagnostics->friendlyenabledslots += SDL_AtomicGet(
 				&g_AccessibilityFriendlyEnabled[slot]) != 0;
+	}
+	for (slot = 0; slot < ACCESSIBILITY_TONE_DOOR_SLOT_COUNT; slot++) {
+		diagnostics->doorenabledslots += SDL_AtomicGet(
+				&g_AccessibilityDoorEnabled[slot]) != 0;
 	}
 	for (slot = 0; slot < ACCESSIBILITY_TONE_MARKER_SLOT_COUNT; slot++) {
 		diagnostics->markerenabledslots += SDL_AtomicGet(
@@ -977,12 +1036,16 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 	s32 friendlyenabled[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
 	f32 friendlyvolume[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
 	f32 friendlypan[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
+	s32 doorenabled[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
+	f32 doorvolume[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
+	f32 doorpan[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
 	s32 markerenabled[ACCESSIBILITY_TONE_MARKER_SLOT_COUNT];
 	f32 markervolume[ACCESSIBILITY_TONE_MARKER_SLOT_COUNT];
 	f32 markerpan[ACCESSIBILITY_TONE_MARKER_SLOT_COUNT];
 	s32 anycombatenabled = 0;
 	s32 anytrackerenabled = 0;
 	s32 anyfriendlyenabled = 0;
+	s32 anydoorenabled = 0;
 	s32 anycaneactive = 0;
 	s32 anymarkerenabled = 0;
 	s32 markerresetsequence = SDL_AtomicGet(
@@ -1147,6 +1210,26 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			g_AccessibilityFriendlyPhaseThird[slot] = 0.0f;
 			g_AccessibilityFriendlyPan[slot] = friendlypan[slot];
 			g_AccessibilityFriendlyGain[slot] = 0.0f;
+		}
+	}
+
+	for (slot = 0; slot < ACCESSIBILITY_TONE_DOOR_SLOT_COUNT; slot++) {
+		s32 sequence = SDL_AtomicGet(&g_AccessibilityDoorSequence[slot]);
+
+		doorenabled[slot] = SDL_AtomicGet(&g_AccessibilityDoorEnabled[slot]);
+		doorvolume[slot] = (f32)SDL_AtomicGet(
+				&g_AccessibilityDoorVolumeMillionths[slot]) / 1000000.0f;
+		doorpan[slot] = (f32)SDL_AtomicGet(
+				&g_AccessibilityDoorPanMillionths[slot]) / 1000000.0f;
+		anydoorenabled |= doorenabled[slot];
+
+		if (sequence != g_AccessibilityDoorObservedSequence[slot]) {
+			g_AccessibilityDoorObservedSequence[slot] = sequence;
+			g_AccessibilityDoorCycleSample[slot]
+					= slot * ACCESSIBILITY_DOOR_PERIOD_SAMPLES
+						/ ACCESSIBILITY_TONE_DOOR_SLOT_COUNT;
+			g_AccessibilityDoorPhase[slot] = 0.0f;
+			g_AccessibilityDoorPan[slot] = doorpan[slot];
 		}
 	}
 
@@ -1418,7 +1501,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			&& g_AccessibilityRadarSamplesRemaining <= 0
 			&& !hillenabled && g_AccessibilityHillGain <= 0.0f
 			&& !anycombatenabled && !anytrackerenabled
-			&& !anyfriendlyenabled && !anycaneactive
+			&& !anyfriendlyenabled && !anydoorenabled && !anycaneactive
 			&& !anymarkerenabled
 			&& g_AccessibilityMarkerIdentitySlot < 0
 			&& g_AccessibilityMarkerPendingRemovalMask == 0) {
@@ -1470,6 +1553,8 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		s32 trackerright = 0;
 		s32 friendlyleft = 0;
 		s32 friendlyright = 0;
+		s32 doorleft = 0;
+		s32 doorright = 0;
 		s32 radarleft = 0;
 		s32 radarright = 0;
 		s32 hillleft = 0;
@@ -1996,6 +2081,55 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			}
 		}
 
+		for (slot = 0; slot < ACCESSIBILITY_TONE_DOOR_SLOT_COUNT; slot++) {
+			s32 sample = g_AccessibilityDoorCycleSample[slot];
+			f32 envelope = 1.0f;
+			f32 leftpan;
+			f32 rightpan;
+			f32 door;
+
+			if (!doorenabled[slot]) {
+				continue;
+			}
+
+			g_AccessibilityDoorPan[slot] += (doorpan[slot]
+					- g_AccessibilityDoorPan[slot]) / (f32)(frames - i);
+
+			if (sample < ACCESSIBILITY_DOOR_BEEP_SAMPLES) {
+				if (sample < ACCESSIBILITY_DOOR_ATTACK_SAMPLES) {
+					envelope = (f32)sample
+							/ (f32)ACCESSIBILITY_DOOR_ATTACK_SAMPLES;
+				} else if (ACCESSIBILITY_DOOR_BEEP_SAMPLES - sample
+						< ACCESSIBILITY_DOOR_RELEASE_SAMPLES) {
+					envelope = (f32)(ACCESSIBILITY_DOOR_BEEP_SAMPLES - sample)
+							/ (f32)ACCESSIBILITY_DOOR_RELEASE_SAMPLES;
+				}
+
+				leftpan = g_AccessibilityDoorPan[slot] > 0.0f
+						? 1.0f - g_AccessibilityDoorPan[slot] : 1.0f;
+				rightpan = g_AccessibilityDoorPan[slot] < 0.0f
+						? 1.0f + g_AccessibilityDoorPan[slot] : 1.0f;
+				door = sinf(g_AccessibilityDoorPhase[slot]) * envelope
+						* doorvolume[slot] * ACCESSIBILITY_DOOR_VOLUME
+						* 32767.0f;
+				doorleft += (s32)(door * leftpan);
+				doorright += (s32)(door * rightpan);
+			}
+
+			g_AccessibilityDoorPhase[slot] += TWO_PI
+					* ACCESSIBILITY_DOOR_FREQUENCY_HZ
+					/ ACCESSIBILITY_TONE_SAMPLE_RATE;
+			if (g_AccessibilityDoorPhase[slot] >= TWO_PI) {
+				g_AccessibilityDoorPhase[slot] -= TWO_PI;
+			}
+			g_AccessibilityDoorCycleSample[slot]++;
+			if (g_AccessibilityDoorCycleSample[slot]
+					>= ACCESSIBILITY_DOOR_PERIOD_SAMPLES) {
+				g_AccessibilityDoorCycleSample[slot] = 0;
+				g_AccessibilityDoorPhase[slot] = 0.0f;
+			}
+		}
+
 		if (g_AccessibilityRadarSamplesRemaining > 0) {
 			s32 sample = g_AccessibilityRadarSample;
 			s32 beepsample = -1;
@@ -2429,14 +2563,14 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 				(s32)g_AccessibilityToneMixBuffer[index] + tone + chirpleft
 						+ targetpresenceleft + threatalertleft
 						+ hazardleft + combatleft
-						+ trackerleft + friendlyleft + radarleft
+						+ trackerleft + friendlyleft + doorleft + radarleft
 						+ hillleft + caneleft
 						+ markerleft + toggletone + weaponfunctiontone);
 		g_AccessibilityToneMixBuffer[index + 1] = accessibilityToneClamp(
 				(s32)g_AccessibilityToneMixBuffer[index + 1] + tone + chirpright
 						+ targetpresenceright + threatalertright
 						+ hazardright + combatright
-						+ trackerright + friendlyright + radarright
+						+ trackerright + friendlyright + doorright + radarright
 						+ hillright + caneright
 						+ markerright + toggletone + weaponfunctiontone);
 

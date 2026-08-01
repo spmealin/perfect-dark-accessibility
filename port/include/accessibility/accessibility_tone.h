@@ -8,6 +8,7 @@
 #define ACCESSIBILITY_TONE_TRACKER_SLOT_COUNT 10
 #define ACCESSIBILITY_TONE_MARKER_SLOT_COUNT 4
 #define ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT 3
+#define ACCESSIBILITY_TONE_DOOR_SLOT_COUNT 3
 
 enum accessibilitytonecombatcontour {
 	ACCESSIBILITY_TONE_COMBAT_CONTOUR_LINEAR,
@@ -35,6 +36,7 @@ struct accessibilitytonediagnostics {
 	s32 combatenabledslots;
 	s32 trackerenabledslots;
 	s32 friendlyenabledslots;
+	s32 doorenabledslots;
 	s32 radarenabled;
 	s32 radarsequence;
 	s32 hillenabled;
@@ -83,6 +85,9 @@ void accessibilityToneStopTracker(void);
 void accessibilityToneSetFriendlySlot(s32 slot, s32 enabled,
 		f32 volume, f32 pan, s32 restart);
 void accessibilityToneStopFriendly(void);
+void accessibilityToneSetDoorSlot(s32 slot, s32 enabled,
+		f32 volume, f32 pan, s32 restart);
+void accessibilityToneStopDoors(void);
 void accessibilityTonePlayRadarPing(f32 frequencyhz, f32 volume, f32 pan,
 		s32 height, s32 rear, s32 kind);
 void accessibilityToneStopRadar(void);
