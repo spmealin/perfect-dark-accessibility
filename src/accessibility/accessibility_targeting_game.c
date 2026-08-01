@@ -36,6 +36,7 @@
 #define ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_UPPER_LEFT 4
 #define ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_UPPER_RIGHT 5
 #define ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_COUNT 5
+#define ACCESSIBILITY_TARGETING_TURRET_AIM_TOLERANCE 3.0f
 
 struct accessibilitytargetinggameaudit {
 	uintptr_t prop;
@@ -989,6 +990,95 @@ static s32 accessibilityTargetingGameRelationship(struct prop *prop)
 	return ACCESSIBILITY_TARGETING_RELATIONSHIP_NEUTRAL;
 }
 
+static struct prop *accessibilityTargetingGameFindTolerantTurretAim(
+		struct prop *rawaimedprop, f32 viewleft, f32 viewtop,
+		f32 viewright, f32 viewbottom, f32 *distancefrombounds)
+{
+	struct prop *bestprop = NULL;
+	f32 bestdistance2 = ACCESSIBILITY_TARGETING_TURRET_AIM_TOLERANCE
+			* ACCESSIBILITY_TARGETING_TURRET_AIM_TOLERANCE;
+	f32 bestcenterdistance2 = 0.0f;
+	f32 aimx = g_Vars.currentplayer->crosspos[0];
+	f32 aimy = g_Vars.currentplayer->crosspos[1];
+	s32 bestpropnum = -1;
+	s32 i;
+
+	*distancefrombounds = -1.0f;
+
+	/*
+	 * Never substitute a tolerant target for an exact hit on another prop.
+	 * This preserves doors and other foreground geometry as authoritative.
+	 */
+	if (rawaimedprop) {
+		return NULL;
+	}
+
+	for (i = 0; i < g_AccessibilityTargetingCombatProjectionCount; i++) {
+		struct accessibilitytargetingcombatprojection *projection
+				= &g_AccessibilityTargetingCombatProjections[i];
+		struct prop *prop = (struct prop *)projection->prop;
+		struct defaultobj *obj = (struct defaultobj *)projection->obj;
+		f32 dx = 0.0f;
+		f32 dy = 0.0f;
+		f32 distance2;
+		f32 centerx;
+		f32 centery;
+		f32 centerdistance2;
+
+		if (projection->category != ACCESSIBILITY_TARGETING_CATEGORY_TURRET
+				|| projection->propnum < 0 || !prop || !obj
+				|| accessibilityTargetingGamePropNum(prop)
+						!= projection->propnum
+				|| prop->type != PROPTYPE_OBJ || prop->obj != obj
+				|| obj->type != OBJTYPE_AUTOGUN
+				|| !prop->active || (prop->flags & PROPFLAG_ENABLED) == 0
+				|| !accessibilityTargetingGameAutogunCombatCapable(
+					(struct autogunobj *)obj)
+				|| !projection->projected || !projection->finite
+				|| !projection->lineofsight
+				|| projection->x2 < viewleft || projection->x1 > viewright
+				|| projection->y2 < viewtop || projection->y1 > viewbottom) {
+			continue;
+		}
+
+		if (aimx < projection->x1) {
+			dx = projection->x1 - aimx;
+		} else if (aimx > projection->x2) {
+			dx = aimx - projection->x2;
+		}
+
+		if (aimy < projection->y1) {
+			dy = projection->y1 - aimy;
+		} else if (aimy > projection->y2) {
+			dy = aimy - projection->y2;
+		}
+
+		distance2 = dx * dx + dy * dy;
+		centerx = (projection->x1 + projection->x2) * 0.5f;
+		centery = (projection->y1 + projection->y2) * 0.5f;
+		centerdistance2 = (centerx - aimx) * (centerx - aimx)
+				+ (centery - aimy) * (centery - aimy);
+
+		if (distance2 <= bestdistance2
+				&& (!bestprop || distance2 < bestdistance2
+					|| (distance2 == bestdistance2
+						&& (centerdistance2 < bestcenterdistance2
+							|| (centerdistance2 == bestcenterdistance2
+								&& projection->propnum < bestpropnum))))) {
+			bestprop = prop;
+			bestpropnum = projection->propnum;
+			bestdistance2 = distance2;
+			bestcenterdistance2 = centerdistance2;
+		}
+	}
+
+	if (bestprop) {
+		*distancefrombounds = sqrtf(bestdistance2);
+	}
+
+	return bestprop;
+}
+
 static void accessibilityTargetingObserveCombat(
 		struct accessibilitytargetingobservation *observation,
 		s32 detailed, s32 scopechanged)
@@ -1001,8 +1091,14 @@ static void accessibilityTargetingObserveCombat(
 	f32 viewright = viewleft + (f32)viGetViewWidth() / g_ScaleX;
 	f32 viewbottom = viewtop + viGetViewHeight();
 	f32 viewcenterx = (viewleft + viewright) * 0.5f;
+	f32 tolerantturretdistance = -1.0f;
+	struct prop *tolerantaimedturret
+			= accessibilityTargetingGameFindTolerantTurretAim(rawaimedprop,
+				viewleft, viewtop, viewright, viewbottom,
+				&tolerantturretdistance);
 	s32 aimedshootability = ACCESSIBILITY_TARGETING_SHOOTABILITY_UNKNOWN;
 	s32 alignmentusesraw = false;
+	const char *alignmentsource = "none";
 	s32 i;
 
 	observation->inscope = true;
@@ -1022,7 +1118,9 @@ static void accessibilityTargetingObserveCombat(
 		struct accessibilitytargetingcandidate *threat
 				= &observation->threats[i];
 		struct accessibilitytargetingcandidate *candidate;
-		s32 aimed = threat->prop == rawaimedprop;
+		s32 aimedbyraw = threat->prop == rawaimedprop;
+		s32 aimedbytolerance = threat->prop == tolerantaimedturret;
+		s32 aimed = aimedbyraw || aimedbytolerance;
 		f32 dx;
 		f32 dy;
 		f32 dz;
@@ -1040,12 +1138,13 @@ static void accessibilityTargetingObserveCombat(
 			observation->aimedidentity = candidate->identity;
 			aimedshootability = candidate->shootability;
 			alignmentusesraw = true;
-			dx = g_AccessibilityTargetingGameRawAimHitPos.x
-					- g_Vars.currentplayer->cam_pos.x;
-			dy = g_AccessibilityTargetingGameRawAimHitPos.y
-					- g_Vars.currentplayer->cam_pos.y;
-			dz = g_AccessibilityTargetingGameRawAimHitPos.z
-					- g_Vars.currentplayer->cam_pos.z;
+			alignmentsource = aimedbyraw ? "raw_query" : "turret_tolerance";
+			dx = (aimedbyraw ? g_AccessibilityTargetingGameRawAimHitPos.x
+					: candidate->position.x) - g_Vars.currentplayer->cam_pos.x;
+			dy = (aimedbyraw ? g_AccessibilityTargetingGameRawAimHitPos.y
+					: candidate->position.y) - g_Vars.currentplayer->cam_pos.y;
+			dz = (aimedbyraw ? g_AccessibilityTargetingGameRawAimHitPos.z
+					: candidate->position.z) - g_Vars.currentplayer->cam_pos.z;
 			candidate->aimdistance = sqrtf(dx * dx + dy * dy + dz * dz);
 		}
 	}
@@ -1065,8 +1164,16 @@ static void accessibilityTargetingObserveCombat(
 				== ACCESSIBILITY_TARGETING_CATEGORY_SECURITY_CAMERA;
 		s32 objecttarget = turret || camera;
 		s32 eligible = true;
+		s32 aimedbyraw = prop && objecttarget && prop == rawaimedprop;
+		s32 aimedbytolerance = prop && turret
+				&& prop == tolerantaimedturret;
 		s32 aimed = prop && (objecttarget
-				? prop == rawaimedprop : prop == aimedprop);
+				? aimedbyraw || aimedbytolerance : prop == aimedprop);
+		const char *aimsource = aimed
+				? objecttarget
+					? aimedbyraw ? "raw_query" : "turret_tolerance"
+					: "native_filtered"
+				: "none";
 		f32 dx;
 		f32 dy;
 		f32 dz;
@@ -1176,9 +1283,7 @@ static void accessibilityTargetingObserveCombat(
 			accessibilityLogEvent("targeting", "combat_candidate",
 					"frame=%d slot=%d accepted=%d reason=%s aimed=%d aim_source=%s category=%d relationship=%d aimonly=%d prop=%p propnum=%d chr=%p obj=%p obj_type=%d model=%d prop_type=%d prop_flags=0x%02x obj_flags=0x%08x obj_flags2=0x%08x chr_flags=0x%08x chr_hidden=0x%08x action=%d capture_valid=%d projected=%d finite=%d line_of_sight=%d visibility_sample=%s visibility_queries=%d screen=%.3f,%.3f,%.3f,%.3f target_screen=%.3f,%.3f aim_screen=%.3f,%.3f vertical_aim_error_available=%d raw_elevation_degrees=%.3f",
 					g_Vars.lvframe60, i, eligible, reason, aimed,
-					aimed
-						? (objecttarget ? "raw_query" : "native_filtered")
-						: "none",
+					aimsource,
 					projection->category,
 					relationship,
 					relationship
@@ -1265,14 +1370,15 @@ static void accessibilityTargetingObserveCombat(
 			observation->aimedidentity = candidate->identity;
 			aimedshootability = candidate->shootability;
 			alignmentusesraw = objecttarget;
+			alignmentsource = aimsource;
 
 			if (objecttarget) {
-				dx = g_AccessibilityTargetingGameRawAimHitPos.x
-						- g_Vars.currentplayer->cam_pos.x;
-				dy = g_AccessibilityTargetingGameRawAimHitPos.y
-						- g_Vars.currentplayer->cam_pos.y;
-				dz = g_AccessibilityTargetingGameRawAimHitPos.z
-						- g_Vars.currentplayer->cam_pos.z;
+				dx = (aimedbyraw ? g_AccessibilityTargetingGameRawAimHitPos.x
+						: candidate->position.x) - g_Vars.currentplayer->cam_pos.x;
+				dy = (aimedbyraw ? g_AccessibilityTargetingGameRawAimHitPos.y
+						: candidate->position.y) - g_Vars.currentplayer->cam_pos.y;
+				dz = (aimedbyraw ? g_AccessibilityTargetingGameRawAimHitPos.z
+						: candidate->position.z) - g_Vars.currentplayer->cam_pos.z;
 				candidate->aimdistance = sqrtf(dx * dx + dy * dy + dz * dz);
 			}
 		}
@@ -1373,7 +1479,7 @@ static void accessibilityTargetingObserveCombat(
 
 	if (detailed || scopechanged) {
 		accessibilityLogEvent("targeting", "scope_gate",
-				"frame=%d stage=%d player=%d accepted=1 reason=in_scope mode=combat weapon=%d function=%d threat_detector=%d autoaim_x_enabled=%d autoaim_y_enabled=%d autoaim_x_prop=%p autoaim_y_prop=%p candidates=%d captured=%d aimed=%d aimed_prop=%p raw_aim_prop=%p raw_aim_valid=%d alignment_source=%s aimed_shootability=%d native_alignment_expected=%d viewport=%.3f,%.3f,%.3f,%.3f",
+				"frame=%d stage=%d player=%d accepted=1 reason=in_scope mode=combat weapon=%d function=%d threat_detector=%d autoaim_x_enabled=%d autoaim_y_enabled=%d autoaim_x_prop=%p autoaim_y_prop=%p candidates=%d captured=%d aimed=%d aimed_prop=%p raw_aim_prop=%p raw_aim_valid=%d tolerant_turret_prop=%p tolerant_distance_px=%.3f tolerance_px=%.3f alignment_source=%s aimed_shootability=%d native_alignment_expected=%d viewport=%.3f,%.3f,%.3f,%.3f",
 				g_Vars.lvframe60, g_Vars.stagenum, g_Vars.currentplayernum,
 				bgunGetWeaponNum(HAND_RIGHT),
 				g_Vars.currentplayer->hands[HAND_RIGHT].gset.weaponfunc,
@@ -1387,9 +1493,9 @@ static void accessibilityTargetingObserveCombat(
 				observation->hasaimedtarget, (void *)aimedprop,
 				(void *)rawaimedprop,
 				g_AccessibilityTargetingGameRawAimHitValid,
-				observation->hasaimedtarget
-					? (alignmentusesraw ? "raw_query" : "native_filtered")
-					: "none",
+				(void *)tolerantaimedturret, tolerantturretdistance,
+				ACCESSIBILITY_TARGETING_TURRET_AIM_TOLERANCE,
+				alignmentsource,
 				aimedshootability, observation->nativealignmentexpected,
 				viewleft, viewtop, viewright, viewbottom);
 	}
