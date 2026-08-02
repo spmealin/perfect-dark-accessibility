@@ -149,6 +149,7 @@ static s32 g_AccessibilityTargetingCamSpyTargetCount;
 static s32 g_AccessibilityTargetingGameLastSource;
 
 static s32 accessibilityTargetingGameRelationship(struct prop *prop);
+static s32 accessibilityTargetingGamePropNum(const struct prop *prop);
 
 static f32 accessibilityTargetingGamePunchRange(void)
 {
@@ -227,13 +228,14 @@ static s32 accessibilityTargetingGameCctvCombatCapable(
 			&& objIsHealthy(obj);
 }
 
-static s32 accessibilityTargetingGameCurrentAttackCanBreak(
+static s32 accessibilityTargetingGameCurrentAttackCanDamageObject(
 		const struct prop *prop)
 {
 	struct weaponfunc *func = currentPlayerGetWeaponFunction(HAND_RIGHT);
 	s32 type;
 
-	if (!func || !accessibilityPathBlockerIsBreakable(prop)) {
+	if (!func || !prop || prop->type != PROPTYPE_OBJ || !prop->obj
+			|| !objIsHealthy(prop->obj) || !objIsMortal(prop->obj)) {
 		return false;
 	}
 
@@ -243,13 +245,62 @@ static s32 accessibilityTargetingGameCurrentAttackCanBreak(
 			|| func->type == INVENTORYFUNCTYPE_SHOOT_PROJECTILE
 			|| (func->flags & (FUNCFLAG_EXPLOSIVESHELLS
 				| FUNCFLAG_20000000))) {
-		return accessibilityPathBlockerCanTakeGunfire(prop)
-				|| accessibilityPathBlockerCanTakeExplosion(prop);
+		return (prop->obj->flags2 & OBJFLAG2_IMMUNETOGUNFIRE) == 0
+				|| (prop->obj->flags2 & OBJFLAG2_IMMUNETOEXPLOSIONS) == 0;
 	}
 
 	return (type == INVENTORYFUNCTYPE_SHOOT
 				|| type == INVENTORYFUNCTYPE_MELEE)
-			&& accessibilityPathBlockerCanTakeGunfire(prop);
+			&& (prop->obj->flags2 & OBJFLAG2_IMMUNETOGUNFIRE) == 0;
+}
+
+static s32 accessibilityTargetingGameLootContainerChildType(
+		const struct prop *prop, s32 *childpropnum)
+{
+	struct prop *child;
+	s32 guard = 0;
+
+	if (childpropnum) {
+		*childpropnum = -1;
+	}
+
+	if (!prop || prop->type != PROPTYPE_OBJ || !prop->obj
+			|| !prop->active || (prop->flags & PROPFLAG_ENABLED) == 0
+			|| (prop->obj->flags2 & OBJFLAG2_INVISIBLE)
+			|| (prop->obj->hidden & (OBJHFLAG_DELETING | OBJHFLAG_GONE))
+			|| !objIsHealthy(prop->obj) || !objIsMortal(prop->obj)) {
+		return -1;
+	}
+
+	for (child = prop->child; child && guard < 32;
+			child = child->next, guard++) {
+		struct defaultobj *childobj;
+
+		if (child->parent != prop
+				|| (child->type != PROPTYPE_OBJ
+					&& child->type != PROPTYPE_WEAPON)
+				|| !child->obj || child->obj->prop != child) {
+			continue;
+		}
+
+		childobj = child->obj;
+
+		if ((childobj->flags & OBJFLAG_INSIDEANOTHEROBJ)
+				&& (childobj->flags & OBJFLAG_UNCOLLECTABLE) == 0
+				&& (childobj->flags2 & OBJFLAG2_INVISIBLE) == 0
+				&& (childobj->hidden
+					& (OBJHFLAG_DELETING | OBJHFLAG_GONE)) == 0
+				&& func0f085194(childobj)
+				&& childobj->type != OBJTYPE_HAT
+				&& childobj->type != OBJTYPE_ESCASTEP) {
+			if (childpropnum) {
+				*childpropnum = accessibilityTargetingGamePropNum(child);
+			}
+			return childobj->type;
+		}
+	}
+
+	return -1;
 }
 
 static s32 accessibilityTargetingGameAuditEqual(
@@ -1389,10 +1440,15 @@ static void accessibilityTargetingObserveCombat(
 		struct weaponfunc *func = currentPlayerGetWeaponFunction(HAND_RIGHT);
 		s32 propnum = accessibilityTargetingGamePropNum(rawaimedprop);
 		s32 breakable = accessibilityPathBlockerIsBreakable(rawaimedprop);
+		s32 lootchildpropnum = -1;
+		s32 lootchildtype = accessibilityTargetingGameLootContainerChildType(
+				rawaimedprop, &lootchildpropnum);
+		s32 lootcontainer = lootchildtype >= 0;
 		s32 attackcompatible
-				= accessibilityTargetingGameCurrentAttackCanBreak(rawaimedprop);
+				= accessibilityTargetingGameCurrentAttackCanDamageObject(
+					rawaimedprop);
 
-		if (propnum >= 0 && breakable && attackcompatible
+		if (propnum >= 0 && (breakable || lootcontainer) && attackcompatible
 				&& !accessibilityTargetingGameObservationHasProp(
 					observation, rawaimedprop)) {
 			struct accessibilitytargetingcandidate *candidate;
@@ -1414,7 +1470,9 @@ static void accessibilityTargetingObserveCombat(
 			candidate->identity.objectidentity = (uintptr_t)obj;
 			candidate->prop = rawaimedprop;
 			candidate->category
-					= ACCESSIBILITY_TARGETING_CATEGORY_BREAKABLE_PATH_BLOCKER;
+					= lootcontainer
+						? ACCESSIBILITY_TARGETING_CATEGORY_LOOT_CONTAINER
+						: ACCESSIBILITY_TARGETING_CATEGORY_BREAKABLE_PATH_BLOCKER;
 			candidate->relationship
 					= ACCESSIBILITY_TARGETING_RELATIONSHIP_NEUTRAL;
 			candidate->shootability
@@ -1433,6 +1491,9 @@ static void accessibilityTargetingObserveCombat(
 			observation->aimedidentity = candidate->identity;
 			aimedshootability = candidate->shootability;
 			alignmentusesraw = true;
+			alignmentsource = lootcontainer
+					? "loot_container_raw_query"
+					: "path_blocker_raw_query";
 		}
 
 		if (detailed || (breakable
@@ -1453,6 +1514,29 @@ static void accessibilityTargetingObserveCombat(
 					obj ? obj->hidden : 0,
 					obj ? objIsHealthy(obj) : false,
 					obj ? objIsMortal(obj) : false,
+					func ? func->type : INVENTORYFUNCTYPE_NONE,
+					g_AccessibilityTargetingGameRawAimHitPos.x,
+					g_AccessibilityTargetingGameRawAimHitPos.y,
+					g_AccessibilityTargetingGameRawAimHitPos.z);
+		}
+
+		if (detailed) {
+			accessibilityLogEvent("targeting", "loot_container_aim",
+					"frame=%d stage=%d player=%d accepted=%d reason=%s prop=%p propnum=%d obj=%p obj_type=%d model=%d obj_flags=0x%08x obj_flags2=0x%08x obj_hidden=0x%08x healthy=%d mortal=%d child_propnum=%d child_obj_type=%d attack_type=%d hit=%.3f,%.3f,%.3f",
+					g_Vars.lvframe60, g_Vars.stagenum,
+					g_Vars.currentplayernum,
+					propnum >= 0 && lootcontainer && attackcompatible,
+					propnum < 0 ? "invalid_prop"
+						: !lootcontainer ? "no_collectable_child"
+						: !attackcompatible ? "current_attack_incompatible"
+						: "eligible",
+					(void *)rawaimedprop, propnum, (void *)obj,
+					obj ? obj->type : -1, obj ? obj->modelnum : -1,
+					obj ? obj->flags : 0, obj ? obj->flags2 : 0,
+					obj ? obj->hidden : 0,
+					obj ? objIsHealthy(obj) : false,
+					obj ? objIsMortal(obj) : false,
+					lootchildpropnum, lootchildtype,
 					func ? func->type : INVENTORYFUNCTYPE_NONE,
 					g_AccessibilityTargetingGameRawAimHitPos.x,
 					g_AccessibilityTargetingGameRawAimHitPos.y,

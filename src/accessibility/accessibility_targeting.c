@@ -1335,7 +1335,9 @@ static void accessibilityTargetingUpdateAlignment(s32 frame60,
 	s32 interrupted = candidate->relationship
 				== ACCESSIBILITY_TARGETING_RELATIONSHIP_PROTECTED
 			|| candidate->category
-				== ACCESSIBILITY_TARGETING_CATEGORY_BREAKABLE_PATH_BLOCKER;
+				== ACCESSIBILITY_TARGETING_CATEGORY_BREAKABLE_PATH_BLOCKER
+			|| candidate->category
+				== ACCESSIBILITY_TARGETING_CATEGORY_LOOT_CONTAINER;
 	s32 starting = !g_AccessibilityTargetingAlignmentActive;
 
 	if (quality < 0.0f) {
