@@ -55,9 +55,9 @@ static f32 g_AccessibilityVirtualCaneVolumeConfig = 0.184f;
 static f32 g_AccessibilityEnemyFullVolumeDistanceConfig = 4000.0f;
 static f32 g_AccessibilityEnemyFadeDistanceConfig = 5500.0f;
 static f32 g_AccessibilityEnemyMaximumDistanceConfig = 6000.0f;
-static f32 g_AccessibilityEnemyScopedFullVolumeDistanceConfig = 5000.0f;
-static f32 g_AccessibilityEnemyScopedFadeDistanceConfig = 5800.0f;
-static f32 g_AccessibilityEnemyScopedMaximumDistanceConfig = 6000.0f;
+static f32 g_AccessibilityEnemyScopedFullVolumeDistanceConfig = 6000.0f;
+static f32 g_AccessibilityEnemyScopedFadeDistanceConfig = 9000.0f;
+static f32 g_AccessibilityEnemyScopedMaximumDistanceConfig = 12000.0f;
 static f32 g_AccessibilityEnemyVolumeConfig = 0.25f;
 static f32 g_AccessibilityEnemyFrequencyConfig = 900.0f;
 static f32 g_AccessibilityMarkerRangeConfig = 1200.0f;
@@ -219,13 +219,13 @@ void accessibilityGetEnemyScopedTuning(f32 *fulldistance, f32 *fadedistance,
 {
 	f32 effectiveFull = accessibilityValidatedFloat(
 			g_AccessibilityEnemyScopedFullVolumeDistanceConfig,
-			5000.0f, 0.0f, 6000.0f);
+			6000.0f, 0.0f, 20000.0f);
 	f32 effectiveFade = accessibilityValidatedFloat(
 			g_AccessibilityEnemyScopedFadeDistanceConfig,
-			5800.0f, 0.0f, 6000.0f);
+			9000.0f, 0.0f, 20000.0f);
 	f32 effectiveSilent = accessibilityValidatedFloat(
 			g_AccessibilityEnemyScopedMaximumDistanceConfig,
-			6000.0f, 1.0f, 6000.0f);
+			12000.0f, 1.0f, 20000.0f);
 
 	if (effectiveFade < effectiveFull) {
 		effectiveFade = effectiveFull;
@@ -663,12 +663,12 @@ PD_CONSTRUCTOR static void accessibilityConfigInit(void)
 			&g_AccessibilityEnemyMaximumDistanceConfig, 1.0f, 6000.0f);
 	configRegisterFloat("Accessibility.EnemyScopedFullVolumeDistance",
 			&g_AccessibilityEnemyScopedFullVolumeDistanceConfig,
-			0.0f, 6000.0f);
+			0.0f, 20000.0f);
 	configRegisterFloat("Accessibility.EnemyScopedFadeDistance",
-			&g_AccessibilityEnemyScopedFadeDistanceConfig, 0.0f, 6000.0f);
+			&g_AccessibilityEnemyScopedFadeDistanceConfig, 0.0f, 20000.0f);
 	configRegisterFloat("Accessibility.EnemyScopedMaximumDistance",
 			&g_AccessibilityEnemyScopedMaximumDistanceConfig,
-			1.0f, 6000.0f);
+			1.0f, 20000.0f);
 	configRegisterFloat("Accessibility.EnemyVolume",
 			&g_AccessibilityEnemyVolumeConfig, 0.0f, 0.4f);
 	configRegisterFloat("Accessibility.EnemyFrequency",

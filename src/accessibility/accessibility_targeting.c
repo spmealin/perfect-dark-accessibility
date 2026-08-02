@@ -1127,6 +1127,38 @@ static void accessibilityTargetingCombatCadence(f32 distance, f32 reference,
 	*proximity = value;
 }
 
+static s32 accessibilityTargetingCalculateVolumeFromDistance(f32 distance,
+		f32 fulldistance, f32 fadedistance, f32 silentdistance,
+		s32 fullvolume)
+{
+	f32 result;
+
+	if (distance >= silentdistance || silentdistance <= 0.0f) {
+		return 0;
+	}
+	if (distance <= fulldistance || fadedistance <= fulldistance) {
+		return fullvolume;
+	}
+	if (distance < fadedistance) {
+		f32 fraction = (distance - fulldistance)
+				/ (fadedistance - fulldistance);
+		result = fullvolume - sqrtf(fraction) * (fullvolume - 1000.0f);
+	} else if (silentdistance > fadedistance) {
+		result = (silentdistance - distance) * 1000.0f
+				/ (silentdistance - fadedistance);
+	} else {
+		result = 0.0f;
+	}
+
+	if (result > fullvolume) {
+		result = fullvolume;
+	}
+	if (result < 40.0f) {
+		return 0;
+	}
+	return (s32)result;
+}
+
 static f32 accessibilityTargetingCombatElevationFrequency(
 		const struct accessibilitytargetingcandidate *candidate,
 		f32 basefrequency, f32 *rawelevationdegrees,
@@ -1350,7 +1382,8 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 						: ACCESSIBILITY_TARGETING_COMBAT_ELEVATION_SMOOTHING);
 		}
 
-		volume = psCalculateVolumeFromDistance(record->candidate.distance,
+		volume = accessibilityTargetingCalculateVolumeFromDistance(
+				record->candidate.distance,
 				g_AccessibilityTargetingCurrentPolicy->fulldistance,
 				g_AccessibilityTargetingCurrentPolicy->fadedistance,
 				g_AccessibilityTargetingCurrentPolicy->silentdistance,
