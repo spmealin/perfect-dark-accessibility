@@ -96,6 +96,7 @@
 #include "lib/vars.h"
 #include "lib/vi.h"
 #include "types.h"
+#include "accessibility/accessibility_beacon.h"
 #include "accessibility/accessibility_targeting.h"
 #ifndef PLATFORM_N64
 #include "video.h"
@@ -1311,6 +1312,7 @@ Gfx *lvRender(Gfx *gdl)
 				}
 
 				/* Capture projections before prop rendering converts model matrices in place. */
+				accessibilityBeaconCaptureGame();
 				accessibilityTargetingCaptureGame(accessibilityaimhitprop,
 						&accessibilityaimhitpos);
 

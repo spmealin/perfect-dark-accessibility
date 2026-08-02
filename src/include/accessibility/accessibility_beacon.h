@@ -4,6 +4,7 @@
 #include <PR/ultratypes.h>
 
 void accessibilityBeaconTick(void);
+void accessibilityBeaconCaptureGame(void);
 void accessibilityBeaconReset(const char *reason, s32 preservecategories);
 void accessibilityBeaconDumpDiagnostics(u64 captureid);
 
