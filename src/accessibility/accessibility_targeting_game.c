@@ -138,6 +138,8 @@ static s32 g_AccessibilityTargetingGameAimHitValid;
 static uintptr_t g_AccessibilityTargetingGameRawAimProp;
 static struct coord g_AccessibilityTargetingGameRawAimHitPos;
 static s32 g_AccessibilityTargetingGameRawAimHitValid;
+static s32 g_AccessibilityTargetingGameRawAimHitPart;
+static s32 g_AccessibilityTargetingGameRawAimHitPartValid;
 static struct accessibilitytargetingcombatprojection
 		g_AccessibilityTargetingCombatProjections[
 			ACCESSIBILITY_TARGETING_COMBAT_PROJECTION_CAPACITY];
@@ -150,6 +152,27 @@ static s32 g_AccessibilityTargetingGameLastSource;
 
 static s32 accessibilityTargetingGameRelationship(struct prop *prop);
 static s32 accessibilityTargetingGamePropNum(const struct prop *prop);
+
+static s32 accessibilityTargetingGameAimRegion(s32 hitpart)
+{
+	if (hitpart == HITPART_HEAD) {
+		return ACCESSIBILITY_TARGETING_AIM_REGION_HEAD;
+	}
+
+	switch (hitpart) {
+	case HITPART_LHAND:
+	case HITPART_LFOREARM:
+	case HITPART_LBICEP:
+	case HITPART_RHAND:
+	case HITPART_RFOREARM:
+	case HITPART_RBICEP:
+		return ACCESSIBILITY_TARGETING_AIM_REGION_ARM;
+	}
+
+	return hitpart > 0
+			? ACCESSIBILITY_TARGETING_AIM_REGION_STANDARD
+			: ACCESSIBILITY_TARGETING_AIM_REGION_NONE;
+}
 
 static f32 accessibilityTargetingGamePunchRange(void)
 {
@@ -672,6 +695,8 @@ static void accessibilityTargetingGameClearProjections(void)
 	memset(&g_AccessibilityTargetingGameRawAimHitPos, 0,
 			sizeof(g_AccessibilityTargetingGameRawAimHitPos));
 	g_AccessibilityTargetingGameRawAimHitValid = false;
+	g_AccessibilityTargetingGameRawAimHitPart = 0;
+	g_AccessibilityTargetingGameRawAimHitPartValid = false;
 	memset(g_AccessibilityTargetingCombatProjections, 0,
 			sizeof(g_AccessibilityTargetingCombatProjections));
 	g_AccessibilityTargetingCombatProjectionCount = 0;
@@ -951,7 +976,7 @@ static void accessibilityTargetingCaptureCamSpy(void)
 }
 
 void accessibilityTargetingCaptureGame(struct prop *queryaimedprop,
-		const struct coord *queryhitpos)
+		const struct coord *queryhitpos, s32 queryhitpart)
 {
 	struct frdata *frdata;
 	s32 i;
@@ -971,6 +996,12 @@ void accessibilityTargetingCaptureGame(struct prop *queryaimedprop,
 		g_AccessibilityTargetingGameRawAimProp = (uintptr_t)queryaimedprop;
 		g_AccessibilityTargetingGameRawAimHitPos = *queryhitpos;
 		g_AccessibilityTargetingGameRawAimHitValid = true;
+		if ((queryaimedprop->type == PROPTYPE_CHR
+				|| queryaimedprop->type == PROPTYPE_PLAYER)
+				&& queryhitpart > 0) {
+			g_AccessibilityTargetingGameRawAimHitPart = queryhitpart;
+			g_AccessibilityTargetingGameRawAimHitPartValid = true;
+		}
 	}
 
 	if (queryaimedprop && queryhitpos
@@ -1460,6 +1491,11 @@ static void accessibilityTargetingObserveCombat(
 		if (candidate->distancecue < 0.0f) {
 			candidate->distancecue = 0.0f;
 		}
+		if (chr && prop == rawaimedprop
+				&& g_AccessibilityTargetingGameRawAimHitPartValid) {
+			candidate->aimregion = accessibilityTargetingGameAimRegion(
+					g_AccessibilityTargetingGameRawAimHitPart);
+		}
 
 		if (aimed) {
 			observation->hasaimedtarget = true;
@@ -1608,7 +1644,7 @@ static void accessibilityTargetingObserveCombat(
 
 	if (detailed || scopechanged) {
 		accessibilityLogEvent("targeting", "scope_gate",
-				"frame=%d stage=%d player=%d accepted=1 reason=in_scope mode=combat weapon=%d function=%d threat_detector=%d autoaim_x_enabled=%d autoaim_y_enabled=%d autoaim_x_prop=%p autoaim_y_prop=%p candidates=%d captured=%d aimed=%d aimed_prop=%p raw_aim_prop=%p raw_aim_valid=%d tolerant_turret_prop=%p tolerant_distance_px=%.3f tolerance_px=%.3f alignment_source=%s aimed_shootability=%d native_alignment_expected=%d viewport=%.3f,%.3f,%.3f,%.3f",
+				"frame=%d stage=%d player=%d accepted=1 reason=in_scope mode=combat weapon=%d function=%d threat_detector=%d autoaim_x_enabled=%d autoaim_y_enabled=%d autoaim_x_prop=%p autoaim_y_prop=%p candidates=%d captured=%d aimed=%d aimed_prop=%p raw_aim_prop=%p raw_aim_valid=%d raw_aim_hitpart=%d raw_aim_region=%d tolerant_turret_prop=%p tolerant_distance_px=%.3f tolerance_px=%.3f alignment_source=%s aimed_shootability=%d native_alignment_expected=%d viewport=%.3f,%.3f,%.3f,%.3f",
 				g_Vars.lvframe60, g_Vars.stagenum, g_Vars.currentplayernum,
 				bgunGetWeaponNum(HAND_RIGHT),
 				g_Vars.currentplayer->hands[HAND_RIGHT].gset.weaponfunc,
@@ -1622,6 +1658,12 @@ static void accessibilityTargetingObserveCombat(
 				observation->hasaimedtarget, (void *)aimedprop,
 				(void *)rawaimedprop,
 				g_AccessibilityTargetingGameRawAimHitValid,
+				g_AccessibilityTargetingGameRawAimHitPartValid
+						? g_AccessibilityTargetingGameRawAimHitPart : 0,
+				g_AccessibilityTargetingGameRawAimHitPartValid
+						? accessibilityTargetingGameAimRegion(
+								g_AccessibilityTargetingGameRawAimHitPart)
+						: ACCESSIBILITY_TARGETING_AIM_REGION_NONE,
 				(void *)tolerantaimedturret, tolerantturretdistance,
 				ACCESSIBILITY_TARGETING_TURRET_AIM_TOLERANCE,
 				alignmentsource,

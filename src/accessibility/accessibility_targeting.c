@@ -31,6 +31,8 @@
 #define ACCESSIBILITY_TARGETING_TONE_BASE_FREQUENCY_HZ 440.0f
 #define ACCESSIBILITY_TARGETING_TONE_MIN_PITCH 1.5f
 #define ACCESSIBILITY_TARGETING_TONE_MAX_PITCH 3.0f
+#define ACCESSIBILITY_TARGETING_HEAD_LOCK_MULTIPLIER 1.25f
+#define ACCESSIBILITY_TARGETING_ARM_LOCK_MULTIPLIER 0.8f
 #define ACCESSIBILITY_TARGETING_COMBAT_FAR_PERIOD_MS 500
 #define ACCESSIBILITY_TARGETING_COMBAT_CLOSE_PERIOD_MS 200
 #define ACCESSIBILITY_TARGETING_COMBAT_FAR_DURATION_MS 180
@@ -1591,6 +1593,14 @@ static void accessibilityTargetingUpdateAlignment(s32 frame60,
 			* ACCESSIBILITY_TARGETING_TONE_MIN_PITCH
 			* powf(ACCESSIBILITY_TARGETING_TONE_MAX_PITCH
 					/ ACCESSIBILITY_TARGETING_TONE_MIN_PITCH, quality);
+	if (!candidate->hasaimquality) {
+		if (candidate->aimregion == ACCESSIBILITY_TARGETING_AIM_REGION_HEAD) {
+			frequencyhz *= ACCESSIBILITY_TARGETING_HEAD_LOCK_MULTIPLIER;
+		} else if (candidate->aimregion
+				== ACCESSIBILITY_TARGETING_AIM_REGION_ARM) {
+			frequencyhz *= ACCESSIBILITY_TARGETING_ARM_LOCK_MULTIPLIER;
+		}
+	}
 	accessibilityToneSetAlignment(1, frequencyhz, interrupted);
 	g_AccessibilityTargetingAlignmentActive = true;
 	g_AccessibilityTargetingAlignmentInterrupted = interrupted;
@@ -1602,7 +1612,7 @@ static void accessibilityTargetingUpdateAlignment(s32 frame60,
 	if (starting || frame60 >= g_AccessibilityTargetingNextAlignmentLog60) {
 		accessibilityLogEvent("targeting",
 				starting ? "alignment_start" : "alignment_update",
-				"update=%llu frame=%d reason=%s source=%d slot=%d propnum=%d category=%d relationship=%d interrupted=%d pattern=%s quality_available=%d quality=%.4f distance=%.3f frequency_hz=%.2f",
+				"update=%llu frame=%d reason=%s source=%d slot=%d propnum=%d category=%d relationship=%d interrupted=%d pattern=%s aim_region=%d quality_available=%d quality=%.4f distance=%.3f frequency_hz=%.2f",
 				(unsigned long long)g_AccessibilityTargetingAlignmentUpdateCount,
 				frame60, reason,
 				g_AccessibilityTargetingAimedIdentity.source,
@@ -1611,6 +1621,7 @@ static void accessibilityTargetingUpdateAlignment(s32 frame60,
 				candidate->category, candidate->relationship,
 				interrupted,
 				interrupted ? "90ms_on_10ms_off" : "continuous",
+				candidate->aimregion,
 				candidate->hasaimquality, quality, candidate->aimdistance,
 				frequencyhz);
 		g_AccessibilityTargetingNextAlignmentLog60

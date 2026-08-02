@@ -567,7 +567,8 @@ void func0f060bac(s32 weaponnum, struct prop *prop)
 static struct prop *shotCalculateHitsInternal(s32 handnum, bool isshooting,
 		struct coord *gunpos2d, struct coord *gundir2d,
 		struct coord *gunpos3d, struct coord *gundir3d, u32 arg6,
-		f32 distance, bool cheap, struct coord *queryhitpos)
+		f32 distance, bool cheap, struct coord *queryhitpos,
+		s32 *queryhitpart)
 {
 	u32 index;
 	struct prop **propptr;
@@ -612,6 +613,10 @@ static struct prop *shotCalculateHitsInternal(s32 handnum, bool isshooting,
 	RoomNum exprooms[8];
 	RoomNum rooms2[8];
 	struct prop *hitprop;
+
+	if (queryhitpart) {
+		*queryhitpart = 0;
+	}
 
 	bgun0f0a9494(arg6);
 
@@ -964,6 +969,9 @@ static struct prop *shotCalculateHitsInternal(s32 handnum, bool isshooting,
 					if (result == hitprop && queryhitpos) {
 						*queryhitpos = shotdata.hits[i].pos;
 					}
+					if (result == hitprop && queryhitpart) {
+						*queryhitpart = shotdata.hits[i].hitpart;
+					}
 
 					if (shotdata.hits[i].slowsbullet) {
 						s1++;
@@ -986,7 +994,7 @@ struct prop *shotCalculateHits(s32 handnum, bool isshooting,
 		f32 distance, bool cheap)
 {
 	return shotCalculateHitsInternal(handnum, isshooting, gunpos2d, gundir2d,
-			gunpos3d, gundir3d, arg6, distance, cheap, NULL);
+			gunpos3d, gundir3d, arg6, distance, cheap, NULL, NULL);
 }
 
 #ifndef PLATFORM_N64
@@ -1108,7 +1116,7 @@ bool shotTestLos(struct coord *gunpos2d, struct coord *gundir2d, struct coord *g
 #endif
 
 static struct prop *propFindAimingAtInternal(s32 handnum, bool isshooting,
-		u32 context, struct coord *queryhitpos)
+		u32 context, struct coord *queryhitpos, s32 *queryhitpart)
 {
 	struct coord gundir2d;
 	struct coord gunpos2d;
@@ -1126,18 +1134,19 @@ static struct prop *propFindAimingAtInternal(s32 handnum, bool isshooting,
 
 	return shotCalculateHitsInternal(handnum, isshooting, &gunpos2d, &gundir2d,
 			&gunpos3d, &gundir3d, 0, 4294836224, PLAYERCOUNT() >= 2,
-			queryhitpos);
+			queryhitpos, queryhitpart);
 }
 
 struct prop *propFindAimingAt(s32 handnum, bool isshooting, u32 context)
 {
-	return propFindAimingAtInternal(handnum, isshooting, context, NULL);
+	return propFindAimingAtInternal(handnum, isshooting, context, NULL, NULL);
 }
 
 struct prop *propFindAimingAtWithHit(s32 handnum, bool isshooting, u32 context,
-		struct coord *queryhitpos)
+		struct coord *queryhitpos, s32 *queryhitpart)
 {
-	return propFindAimingAtInternal(handnum, isshooting, context, queryhitpos);
+	return propFindAimingAtInternal(handnum, isshooting, context, queryhitpos,
+			queryhitpart);
 }
 
 void shotCreate(s32 handnum, bool isshooting, bool dorandom, s32 numshots, bool cheap)

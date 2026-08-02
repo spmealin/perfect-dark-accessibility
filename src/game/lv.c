@@ -1251,6 +1251,7 @@ Gfx *lvRender(Gfx *gdl)
 #endif
 				struct coord accessibilityaimhitpos;
 				struct prop *accessibilityaimhitprop = NULL;
+				s32 accessibilityaimhitpart = 0;
 
 				// Calculate lookingatprop
 				if (PLAYERCOUNT() == 1
@@ -1258,7 +1259,8 @@ Gfx *lvRender(Gfx *gdl)
 						|| g_Vars.antiplayernum >= 0
 						|| (weaponHasFlag(bgunGetWeaponNum(HAND_RIGHT), WEAPONFLAG_AIMTRACK) && bmoveIsInSightAimMode())) {
 					accessibilityaimhitprop = propFindAimingAtWithHit(HAND_RIGHT,
-							false, FINDPROPCONTEXT_QUERY, &accessibilityaimhitpos);
+							false, FINDPROPCONTEXT_QUERY, &accessibilityaimhitpos,
+							&accessibilityaimhitpart);
 					g_Vars.currentplayer->lookingatprop.prop = accessibilityaimhitprop;
 
 					if (g_Vars.currentplayer->lookingatprop.prop) {
@@ -1314,7 +1316,7 @@ Gfx *lvRender(Gfx *gdl)
 				/* Capture projections before prop rendering converts model matrices in place. */
 				accessibilityBeaconCaptureGame();
 				accessibilityTargetingCaptureGame(accessibilityaimhitprop,
-						&accessibilityaimhitpos);
+						&accessibilityaimhitpos, accessibilityaimhitpart);
 
 				// Handle eyespy Z presses
 				if (g_Vars.currentplayer->eyespy

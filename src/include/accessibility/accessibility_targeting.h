@@ -49,6 +49,13 @@ enum accessibilitytargetingshootability {
 	ACCESSIBILITY_TARGETING_SHOOTABILITY_FACING_AWAY = 2,
 };
 
+enum accessibilitytargetingaimregion {
+	ACCESSIBILITY_TARGETING_AIM_REGION_NONE = 0,
+	ACCESSIBILITY_TARGETING_AIM_REGION_STANDARD = 1,
+	ACCESSIBILITY_TARGETING_AIM_REGION_HEAD = 2,
+	ACCESSIBILITY_TARGETING_AIM_REGION_ARM = 3,
+};
+
 struct accessibilitytargetingidentity {
 	s32 playernum;
 	s32 source;
@@ -83,6 +90,7 @@ struct accessibilitytargetingcandidate {
 	s32 hasaimquality;
 	f32 aimquality;
 	f32 aimdistance;
+	s32 aimregion;
 	s32 aimonly;
 	u32 knowledgeflags;
 	const char *localizedname;
@@ -115,7 +123,7 @@ struct accessibilitytargetingobservation {
 
 void accessibilityTargetingObserve(const struct accessibilitytargetingobservation *observation);
 void accessibilityTargetingCaptureGame(struct prop *queryaimedprop,
-		const struct coord *queryhitpos);
+		const struct coord *queryhitpos, s32 queryhitpart);
 void accessibilityTargetingObserveGame(void);
 void accessibilityTargetingReset(const char *reason);
 

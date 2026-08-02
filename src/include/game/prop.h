@@ -27,7 +27,7 @@ void func0f060bac(s32 weaponnum, struct prop *prop);
 struct prop *shotCalculateHits(s32 handnum, bool isshooting, struct coord *gunpos2d, struct coord *gundir2d, struct coord *gunpos3d, struct coord *gundir3d, u32 arg6, f32 distance, bool arg8);
 struct prop *propFindAimingAt(s32 handnum, bool isshooting, u32 context);
 struct prop *propFindAimingAtWithHit(s32 handnum, bool isshooting, u32 context,
-		struct coord *queryhitpos);
+		struct coord *queryhitpos, s32 *queryhitpart);
 void shotCreate(s32 handnum, bool arg1, bool dorandom, s32 numshots, bool arg4);
 void hitCreate(struct shotdata *shotdata, struct prop *prop, f32 hitdistance, s32 hitpart, struct modelnode *bboxnode, struct hitthing *hitthing, s32 arg6, struct modelnode *dlnode, struct model *model, bool slowsbullet, bool bulletproof, struct coord *arg11, struct coord *arg12);
 void handInflictMeleeDamage(s32 handnum, struct gset *gset, bool arg2);
