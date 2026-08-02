@@ -548,7 +548,9 @@ static void accessibilityTargetingGameObserveNativeThreats(
 		struct accessibilitytargetingobservation *observation, s32 detailed)
 {
 	f32 viewleft = (f32)viGetViewLeft() / g_ScaleX;
+	f32 viewtop = viGetViewTop();
 	f32 viewright = viewleft + (f32)viGetViewWidth() / g_ScaleX;
+	f32 viewbottom = viewtop + viGetViewHeight();
 	f32 viewcenterx = (viewleft + viewright) * 0.5f;
 	s32 i;
 
@@ -624,6 +626,17 @@ static void accessibilityTargetingGameObserveNativeThreats(
 		threat->screeny2 = tracked->y2;
 		threat->aimscreenx = g_Vars.currentplayer->crosspos[0];
 		threat->aimscreeny = g_Vars.currentplayer->crosspos[1];
+		if (viewright > viewleft && viewbottom > viewtop) {
+			threat->hasscreenaimerror = true;
+			threat->horizontalaimerrornormalized
+					= (((threat->screenx1 + threat->screenx2) * 0.5f)
+							- threat->aimscreenx)
+						/ ((viewright - viewleft) * 0.5f);
+			threat->verticalaimerrornormalized
+					= (threat->aimscreeny
+							- ((threat->screeny1 + threat->screeny2) * 0.5f))
+						/ ((viewbottom - viewtop) * 0.5f);
+		}
 		threat->hasverticalaimerror
 				= accessibilityTargetingGameVerticalAimError(
 					threat->screenx1, threat->screeny1,
@@ -1156,6 +1169,19 @@ static void accessibilityTargetingObserveCombat(
 	observation->distancecuereference = accessibilityTargetingGamePunchRange();
 	observation->sighton = g_Vars.currentplayer->lastsighton;
 	observation->targetindicatorvisible = !g_Vars.currentplayer->gunsightoff;
+	observation->viewfovy = g_Vars.currentplayer->zoominfovy;
+	observation->defaultfovy = PLAYER_DEFAULT_FOV;
+	if (observation->defaultfovy > 0.0f && observation->viewfovy > 0.0f
+			&& observation->viewfovy < observation->defaultfovy) {
+		observation->zoomblend = (observation->defaultfovy
+				- observation->viewfovy) / (observation->defaultfovy * 0.25f);
+		if (observation->zoomblend > 1.0f) {
+			observation->zoomblend = 1.0f;
+		}
+	}
+	observation->precisionguidanceactive
+			= bgunGetWeaponNum(HAND_RIGHT) == WEAPON_SNIPERRIFLE
+			&& observation->zoomblend > 0.0f;
 
 	/*
 	 * Native threats are admitted before the generic combat scan so a
@@ -1332,7 +1358,7 @@ static void accessibilityTargetingObserveCombat(
 
 		if (detailed) {
 			accessibilityLogEvent("targeting", "combat_candidate",
-					"frame=%d slot=%d accepted=%d reason=%s aimed=%d aim_source=%s category=%d relationship=%d aimonly=%d prop=%p propnum=%d chr=%p obj=%p obj_type=%d model=%d prop_type=%d prop_flags=0x%02x obj_flags=0x%08x obj_flags2=0x%08x chr_flags=0x%08x chr_hidden=0x%08x action=%d capture_valid=%d projected=%d finite=%d line_of_sight=%d visibility_sample=%s visibility_queries=%d screen=%.3f,%.3f,%.3f,%.3f target_screen=%.3f,%.3f aim_screen=%.3f,%.3f vertical_aim_error_available=%d raw_elevation_degrees=%.3f",
+					"frame=%d slot=%d accepted=%d reason=%s aimed=%d aim_source=%s category=%d relationship=%d aimonly=%d prop=%p propnum=%d chr=%p obj=%p obj_type=%d model=%d prop_type=%d prop_flags=0x%02x obj_flags=0x%08x obj_flags2=0x%08x chr_flags=0x%08x chr_hidden=0x%08x action=%d capture_valid=%d projected=%d finite=%d line_of_sight=%d visibility_sample=%s visibility_queries=%d screen=%.3f,%.3f,%.3f,%.3f target_screen=%.3f,%.3f aim_screen=%.3f,%.3f vertical_aim_error_available=%d raw_elevation_degrees=%.3f normalized_screen_error=%.4f,%.4f",
 					g_Vars.lvframe60, i, eligible, reason, aimed,
 					aimsource,
 					projection->category,
@@ -1362,7 +1388,15 @@ static void accessibilityTargetingObserveCombat(
 					(projection->y1 + projection->y2) * 0.5f,
 					projection->aimscreenx, projection->aimscreeny,
 					projection->hasverticalaimerror,
-					projection->verticalaimerrordegrees);
+					projection->verticalaimerrordegrees,
+					viewright > viewleft
+							? (((projection->x1 + projection->x2) * 0.5f)
+									- projection->aimscreenx)
+								/ ((viewright - viewleft) * 0.5f) : 0.0f,
+					viewbottom > viewtop
+							? (projection->aimscreeny
+									- ((projection->y1 + projection->y2) * 0.5f))
+								/ ((viewbottom - viewtop) * 0.5f) : 0.0f);
 		}
 
 		if (!eligible || observation->candidatecount
@@ -1398,6 +1432,17 @@ static void accessibilityTargetingObserveCombat(
 				= projection->verticalaimerrordegrees;
 		candidate->aimscreenx = projection->aimscreenx;
 		candidate->aimscreeny = projection->aimscreeny;
+		if (viewright > viewleft && viewbottom > viewtop) {
+			candidate->hasscreenaimerror = true;
+			candidate->horizontalaimerrornormalized
+					= (((projection->x1 + projection->x2) * 0.5f)
+							- projection->aimscreenx)
+						/ ((viewright - viewleft) * 0.5f);
+			candidate->verticalaimerrornormalized
+					= (projection->aimscreeny
+							- ((projection->y1 + projection->y2) * 0.5f))
+						/ ((viewbottom - viewtop) * 0.5f);
+		}
 		candidate->horizontalscreenoffset = fabsf(
 				((projection->x1 + projection->x2) * 0.5f) - viewcenterx);
 		dx = candidate->position.x - g_Vars.currentplayer->prop->pos.x;

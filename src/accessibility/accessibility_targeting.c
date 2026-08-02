@@ -42,6 +42,13 @@
 #define ACCESSIBILITY_TARGETING_COMBAT_ELEVATION_BELOW_MULTIPLIER (2.0f / 3.0f)
 #define ACCESSIBILITY_TARGETING_COMBAT_ELEVATION_ABOVE_MULTIPLIER (5.0f / 3.0f)
 #define ACCESSIBILITY_TARGETING_COMBAT_ELEVATION_SMOOTHING 0.35f
+#define ACCESSIBILITY_TARGETING_PRECISION_PERIOD_MS 160
+#define ACCESSIBILITY_TARGETING_PRECISION_DURATION_MS 100
+#define ACCESSIBILITY_TARGETING_PRECISION_PAN_SCALE 1.75f
+#define ACCESSIBILITY_TARGETING_PRECISION_VERTICAL_DEADZONE 0.025f
+#define ACCESSIBILITY_TARGETING_PRECISION_VERTICAL_LIMIT 0.5f
+#define ACCESSIBILITY_TARGETING_PRECISION_FREQUENCY_SMOOTHING 0.65f
+#define ACCESSIBILITY_TARGETING_PRECISION_SWITCH_MARGIN 0.08f
 #define ACCESSIBILITY_TARGETING_CAMERA_START_FREQUENCY_HZ 1600.0f
 #define ACCESSIBILITY_TARGETING_CAMERA_END_FREQUENCY_HZ 1000.0f
 #define ACCESSIBILITY_TARGETING_CAMERA_PERIOD_MS 500
@@ -82,6 +89,7 @@ struct accessibilitytargetingcombatslot {
 	s32 triggerperiodms;
 	s32 distancezone;
 	s32 elevationzone;
+	s32 precisionguidance;
 	f32 frequencyhz;
 	s32 nextcadencelog60;
 };
@@ -142,6 +150,8 @@ struct accessibilitytargetingstate {
 	struct accessibilitytargetingidentity aimedthreatidentity;
 	u64 threatalertscount;
 	u64 threataimpulsecount;
+	s32 precisionguidanceactive;
+	struct accessibilitytargetingidentity precisionguidanceidentity;
 	struct accessibilitytargetingcombatslot
 			combatslots[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 };
@@ -278,18 +288,37 @@ static void accessibilityTargetingLogTelemetry(s32 frame60)
 			= frame60 + ACCESSIBILITY_TARGETING_TELEMETRY_TICKS;
 }
 
-static const struct accessibilitytargetingpolicy *accessibilityTargetingGetPolicy(s32 profile)
+static const struct accessibilitytargetingpolicy *accessibilityTargetingGetPolicy(
+		s32 profile, const struct accessibilitytargetingobservation *observation)
 {
 	if (profile == ACCESSIBILITY_TARGETING_PROFILE_FIRING_RANGE) {
 		return &g_AccessibilityTargetingRangePolicy;
 	}
 
 	if (profile == ACCESSIBILITY_TARGETING_PROFILE_COMBAT) {
+		f32 basefull;
+		f32 basefade;
+		f32 basemaximum;
+		f32 scopedfull;
+		f32 scopedfade;
+		f32 scopedmaximum;
+		f32 zoomblend = observation ? observation->zoomblend : 0.0f;
+
+		if (zoomblend < 0.0f) {
+			zoomblend = 0.0f;
+		} else if (zoomblend > 1.0f) {
+			zoomblend = 1.0f;
+		}
 		accessibilityGetEnemyTuning(
-				&g_AccessibilityTargetingCombatPolicy.fulldistance,
-				&g_AccessibilityTargetingCombatPolicy.fadedistance,
-				&g_AccessibilityTargetingCombatPolicy.silentdistance,
-				NULL);
+				&basefull, &basefade, &basemaximum, NULL);
+		accessibilityGetEnemyScopedTuning(
+				&scopedfull, &scopedfade, &scopedmaximum);
+		g_AccessibilityTargetingCombatPolicy.fulldistance
+				= basefull + (scopedfull - basefull) * zoomblend;
+		g_AccessibilityTargetingCombatPolicy.fadedistance
+				= basefade + (scopedfade - basefade) * zoomblend;
+		g_AccessibilityTargetingCombatPolicy.silentdistance
+				= basemaximum + (scopedmaximum - basemaximum) * zoomblend;
 		return &g_AccessibilityTargetingCombatPolicy;
 	}
 
@@ -940,6 +969,111 @@ static s32 accessibilityTargetingRecordPresenceEligible(
 			&& !record->candidate.aimonly;
 }
 
+static s32 accessibilityTargetingPrecisionCandidateEligible(
+		const struct accessibilitytargetingrecord *record)
+{
+	return accessibilityTargetingRecordPresenceEligible(record)
+			&& record->candidate.hasscreenaimerror
+			&& record->candidate.relationship
+					== ACCESSIBILITY_TARGETING_RELATIONSHIP_HOSTILE
+			&& record->candidate.category
+					!= ACCESSIBILITY_TARGETING_CATEGORY_SECURITY_CAMERA;
+}
+
+static f32 accessibilityTargetingPrecisionScore(
+		const struct accessibilitytargetingcandidate *candidate)
+{
+	f32 x = candidate->horizontalaimerrornormalized;
+	f32 y = candidate->verticalaimerrornormalized;
+
+	return sqrtf(x * x + y * y);
+}
+
+static void accessibilityTargetingUpdatePrecisionGuidance(
+		const struct accessibilitytargetingobservation *observation)
+{
+	struct accessibilitytargetingrecord *best = NULL;
+	struct accessibilitytargetingrecord *current = NULL;
+	f32 bestscore = 0.0f;
+	f32 currentscore = 0.0f;
+	s32 i;
+
+	if (!observation->precisionguidanceactive) {
+		if (g_AccessibilityTargetingCurrentState->precisionguidanceactive) {
+			accessibilityLogEvent("targeting", "precision_guidance_stop",
+					"frame=%d reason=scope_inactive propnum=%d",
+					observation->frame60,
+					g_AccessibilityTargetingCurrentState
+							->precisionguidanceidentity.propnum);
+		}
+		g_AccessibilityTargetingCurrentState->precisionguidanceactive = false;
+		memset(&g_AccessibilityTargetingCurrentState->precisionguidanceidentity,
+				0, sizeof(g_AccessibilityTargetingCurrentState
+						->precisionguidanceidentity));
+		return;
+	}
+
+	for (i = 0; i < g_AccessibilityTargetingRecordCount; i++) {
+		struct accessibilitytargetingrecord *record
+				= &g_AccessibilityTargetingRecords[i];
+		f32 score;
+
+		if (!accessibilityTargetingPrecisionCandidateEligible(record)) {
+			continue;
+		}
+
+		score = accessibilityTargetingPrecisionScore(&record->candidate);
+		if (!best || score < bestscore) {
+			best = record;
+			bestscore = score;
+		}
+		if (g_AccessibilityTargetingCurrentState->precisionguidanceactive
+				&& accessibilityTargetingIdentityEqual(&record->candidate.identity,
+					&g_AccessibilityTargetingCurrentState
+							->precisionguidanceidentity)) {
+			current = record;
+			currentscore = score;
+		}
+	}
+
+	if (current && best != current
+			&& bestscore + ACCESSIBILITY_TARGETING_PRECISION_SWITCH_MARGIN
+					>= currentscore) {
+		best = current;
+		bestscore = currentscore;
+	}
+
+	if (!best) {
+		if (g_AccessibilityTargetingCurrentState->precisionguidanceactive) {
+			accessibilityLogEvent("targeting", "precision_guidance_stop",
+					"frame=%d reason=no_visible_hostile propnum=%d",
+					observation->frame60,
+					g_AccessibilityTargetingCurrentState
+							->precisionguidanceidentity.propnum);
+		}
+		g_AccessibilityTargetingCurrentState->precisionguidanceactive = false;
+		memset(&g_AccessibilityTargetingCurrentState->precisionguidanceidentity,
+				0, sizeof(g_AccessibilityTargetingCurrentState
+						->precisionguidanceidentity));
+		return;
+	}
+
+	if (!g_AccessibilityTargetingCurrentState->precisionguidanceactive
+			|| !accessibilityTargetingIdentityEqual(&best->candidate.identity,
+				&g_AccessibilityTargetingCurrentState
+						->precisionguidanceidentity)) {
+		accessibilityLogEvent("targeting", "precision_guidance_select",
+				"frame=%d propnum=%d horizontal_error=%.4f vertical_error=%.4f score=%.4f retained=%d",
+				observation->frame60, best->candidate.identity.propnum,
+				best->candidate.horizontalaimerrornormalized,
+				best->candidate.verticalaimerrornormalized, bestscore,
+				current == best);
+	}
+	g_AccessibilityTargetingCurrentState->precisionguidanceactive = true;
+	g_AccessibilityTargetingCurrentState->precisionguidanceidentity
+			= best->candidate.identity;
+}
+
 static s32 accessibilityTargetingFindCombatSlot(
 		const struct accessibilitytargetingidentity *identity)
 {
@@ -1044,6 +1178,43 @@ static f32 accessibilityTargetingCombatElevationFrequency(
 	return basefrequency * multiplier;
 }
 
+static f32 accessibilityTargetingPrecisionFrequency(
+		const struct accessibilitytargetingcandidate *candidate,
+		f32 basefrequency, s32 *elevationzone)
+{
+	f32 offset = candidate->verticalaimerrornormalized;
+	f32 magnitude = fabsf(offset);
+	f32 normalized;
+	f32 multiplier;
+
+	if (magnitude <= ACCESSIBILITY_TARGETING_PRECISION_VERTICAL_DEADZONE) {
+		*elevationzone = 0;
+		return basefrequency;
+	}
+
+	if (magnitude > ACCESSIBILITY_TARGETING_PRECISION_VERTICAL_LIMIT) {
+		magnitude = ACCESSIBILITY_TARGETING_PRECISION_VERTICAL_LIMIT;
+	}
+	normalized = (magnitude
+			- ACCESSIBILITY_TARGETING_PRECISION_VERTICAL_DEADZONE)
+			/ (ACCESSIBILITY_TARGETING_PRECISION_VERTICAL_LIMIT
+				- ACCESSIBILITY_TARGETING_PRECISION_VERTICAL_DEADZONE);
+
+	if (offset > 0.0f) {
+		*elevationzone = 1;
+		multiplier = powf(
+				ACCESSIBILITY_TARGETING_COMBAT_ELEVATION_ABOVE_MULTIPLIER,
+				normalized);
+	} else {
+		*elevationzone = -1;
+		multiplier = powf(
+				ACCESSIBILITY_TARGETING_COMBAT_ELEVATION_BELOW_MULTIPLIER,
+				normalized);
+	}
+
+	return basefrequency * multiplier;
+}
+
 static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 		f32 distancecuereference)
 {
@@ -1100,6 +1271,7 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 		f32 elevationfrequency;
 		s32 elevationzone = 0;
 		s32 camera;
+		s32 precisionguidance;
 		s32 frequencycontour = ACCESSIBILITY_TONE_COMBAT_CONTOUR_LINEAR;
 
 		if (!accessibilityTargetingRecordPresenceEligible(record)) {
@@ -1108,11 +1280,21 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 
 		camera = record->candidate.category
 				== ACCESSIBILITY_TARGETING_CATEGORY_SECURITY_CAMERA;
+		precisionguidance = !camera
+				&& g_AccessibilityTargetingCurrentState->precisionguidanceactive
+				&& accessibilityTargetingIdentityEqual(
+					&record->candidate.identity,
+					&g_AccessibilityTargetingCurrentState
+							->precisionguidanceidentity);
 		elevationfrequency = camera ? combatfrequency
 				: accessibilityTargetingCombatElevationFrequency(
 					&record->candidate, combatfrequency,
 					&rawelevationdegrees,
 					&elevationdegrees, &elevationzone);
+		if (precisionguidance) {
+			elevationfrequency = accessibilityTargetingPrecisionFrequency(
+					&record->candidate, combatfrequency, &elevationzone);
+		}
 		startfrequency = camera
 				? ACCESSIBILITY_TARGETING_CAMERA_START_FREQUENCY_HZ
 				: elevationfrequency;
@@ -1143,7 +1325,9 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 					voice->identity.sourceslot, voice->identity.propnum,
 					(void *)record->candidate.prop,
 					record->candidate.category,
-					camera ? "security_camera_sweep" : "enemy_proximity",
+					camera ? "security_camera_sweep"
+						: precisionguidance ? "sniper_precision"
+						: "enemy_proximity",
 					rawelevationdegrees,
 					elevationdegrees,
 					elevationzone > 0 ? "above"
@@ -1161,7 +1345,9 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 		voice = &g_AccessibilityTargetingCombatSlots[slot];
 		if (!camera) {
 			voice->frequencyhz += (elevationfrequency - voice->frequencyhz)
-					* ACCESSIBILITY_TARGETING_COMBAT_ELEVATION_SMOOTHING;
+					* (precisionguidance
+						? ACCESSIBILITY_TARGETING_PRECISION_FREQUENCY_SMOOTHING
+						: ACCESSIBILITY_TARGETING_COMBAT_ELEVATION_SMOOTHING);
 		}
 
 		volume = psCalculateVolumeFromDistance(record->candidate.distance,
@@ -1177,12 +1363,26 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 		normalizedvolume = (f32)volume / (f32)AL_VOL_FULL;
 		normalizedpan = ((f32)pan - (f32)AL_PAN_CENTER)
 				/ (f32)AL_PAN_CENTER;
+		if (precisionguidance) {
+			normalizedpan = record->candidate.horizontalaimerrornormalized
+					* ACCESSIBILITY_TARGETING_PRECISION_PAN_SCALE;
+			if (normalizedpan < -1.0f) {
+				normalizedpan = -1.0f;
+			} else if (normalizedpan > 1.0f) {
+				normalizedpan = 1.0f;
+			}
+		}
 		restart |= normalizedvolume > 0.0f && !voice->audible;
 		cuedistance = record->candidate.hasdistancecue
 				? record->candidate.distancecue : record->candidate.distance;
 		if (camera) {
 			periodms = ACCESSIBILITY_TARGETING_CAMERA_PERIOD_MS;
 			durationms = ACCESSIBILITY_TARGETING_CAMERA_DURATION_MS;
+			distancezone = 0;
+			proximity = 0.0f;
+		} else if (precisionguidance) {
+			periodms = ACCESSIBILITY_TARGETING_PRECISION_PERIOD_MS;
+			durationms = ACCESSIBILITY_TARGETING_PRECISION_DURATION_MS;
 			distancezone = 0;
 			proximity = 0.0f;
 		} else {
@@ -1194,7 +1394,7 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 		if (camera) {
 			startfrequency = ACCESSIBILITY_TARGETING_CAMERA_START_FREQUENCY_HZ;
 			endfrequency = ACCESSIBILITY_TARGETING_CAMERA_END_FREQUENCY_HZ;
-		} else if (distancezone == 2) {
+		} else if (distancezone == 2 && !precisionguidance) {
 			startfrequency = voice->frequencyhz;
 			endfrequency = voice->frequencyhz;
 		} else {
@@ -1202,6 +1402,9 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 			endfrequency = voice->frequencyhz;
 			frequencycontour
 					= ACCESSIBILITY_TONE_COMBAT_CONTOUR_BASE_THEN_END;
+		}
+		if (precisionguidance && !voice->precisionguidance) {
+			triggernow = true;
 		}
 		if (voice->triggerperiodms <= 0) {
 			voice->triggerperiodms = periodms;
@@ -1226,7 +1429,9 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 					"frame=%d oscillator_slot=%d propnum=%d category=%d cue=%s center_distance=%.3f cue_distance=%.3f cue_distance_available=%d punch_range=%.3f punch_range_exit=%.3f far_threshold=%.3f zone=%s proximity=%.4f period_ms=%d duration_ms=%d contour=%s continuous=%d trigger_now=%d raw_elevation_degrees=%.2f elevation_degrees=%.2f elevation_zone=%s target_screen=%.2f,%.2f aim_screen=%.2f,%.2f base_frequency_hz=%.1f target_frequency_hz=%.1f start_frequency_hz=%.1f end_frequency_hz=%.1f volume=%.4f pan=%.4f",
 					frame60, slot, voice->identity.propnum,
 					record->candidate.category,
-					camera ? "security_camera_sweep" : "enemy_proximity",
+					camera ? "security_camera_sweep"
+						: precisionguidance ? "sniper_precision"
+						: "enemy_proximity",
 					record->candidate.distance, cuedistance,
 					record->candidate.hasdistancecue, distancecuereference,
 					distancecuereference
@@ -1240,7 +1445,8 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 								== ACCESSIBILITY_TONE_COMBAT_CONTOUR_BASE_THEN_END
 							? "base_then_elevation"
 						: "continuous_elevation",
-					!camera && distancezone == 2, triggernow,
+					!camera && !precisionguidance && distancezone == 2,
+					triggernow,
 					rawelevationdegrees,
 					elevationdegrees,
 					elevationzone > 0 ? "above"
@@ -1259,13 +1465,15 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 		accessibilityToneSetCombatSlot(slot, true,
 				startfrequency, endfrequency,
 				normalizedvolume, normalizedpan, periodms, durationms,
-				frequencycontour, !camera && distancezone == 2,
+				frequencycontour,
+				!camera && !precisionguidance && distancezone == 2,
 				restart, triggernow);
 		voice->audible = normalizedvolume > 0.0f;
 		voice->periodms = periodms;
 		voice->durationms = durationms;
 		voice->distancezone = distancezone;
 		voice->elevationzone = elevationzone;
+		voice->precisionguidance = precisionguidance;
 	}
 }
 
@@ -1401,7 +1609,7 @@ void accessibilityTargetingObserve(
 	}
 
 	g_AccessibilityTargetingCurrentPolicy
-			= accessibilityTargetingGetPolicy(observation->profile);
+			= accessibilityTargetingGetPolicy(observation->profile, observation);
 	if (!g_AccessibilityTargetingCurrentPolicy) {
 		accessibilityTargetingReset("invalid_profile");
 		return;
@@ -1543,6 +1751,7 @@ void accessibilityTargetingObserve(
 	}
 
 	accessibilityTargetingMerge(observation);
+	accessibilityTargetingUpdatePrecisionGuidance(observation);
 
 	if (observation->profile == ACCESSIBILITY_TARGETING_PROFILE_COMBAT) {
 		accessibilityTargetingStopPresence("combat_profile");
@@ -1587,11 +1796,22 @@ void accessibilityTargetingObserve(
 			|| observation->frame60
 					>= g_AccessibilityTargetingCurrentState->nextobservationlog60) {
 		accessibilityLogEvent("targeting", "observation",
-				"count=%llu frame=%d stage=%d player=%d source=%d profile=%d sight_on=%d indicator_visible=%d candidates=%d tracked=%d aimed_candidate=%d aimed_shootable=%d shootability=%d shootability_reason=%s acquisition=%d next_presence=%d alignment_active=%d quality_available=%d quality=%.4f distance=%.3f frequency_hz=%.2f",
+				"count=%llu frame=%d stage=%d player=%d source=%d profile=%d sight_on=%d indicator_visible=%d view_fovy=%.3f default_fovy=%.3f zoom_blend=%.4f precision_guidance=%d precision_propnum=%d range_profile=%s full_distance=%.3f fade_distance=%.3f maximum_distance=%.3f candidates=%d tracked=%d aimed_candidate=%d aimed_shootable=%d shootability=%d shootability_reason=%s acquisition=%d next_presence=%d alignment_active=%d quality_available=%d quality=%.4f distance=%.3f frequency_hz=%.2f",
 				(unsigned long long)g_AccessibilityTargetingObservationCount,
 				observation->frame60, observation->stagenum, observation->playernum,
 				observation->source, observation->profile, observation->sighton,
-				observation->targetindicatorvisible, observation->candidatecount,
+				observation->targetindicatorvisible,
+				observation->viewfovy, observation->defaultfovy,
+				observation->zoomblend,
+				g_AccessibilityTargetingCurrentState->precisionguidanceactive,
+				g_AccessibilityTargetingCurrentState->precisionguidanceactive
+						? g_AccessibilityTargetingCurrentState
+								->precisionguidanceidentity.propnum : -1,
+				observation->zoomblend > 0.0f ? "zoom_blend" : "standard",
+				g_AccessibilityTargetingCurrentPolicy->fulldistance,
+				g_AccessibilityTargetingCurrentPolicy->fadedistance,
+				g_AccessibilityTargetingCurrentPolicy->silentdistance,
+				observation->candidatecount,
 				g_AccessibilityTargetingRecordCount, aimedcandidate, aimedvalid,
 				aimedshootability,
 				accessibilityTargetingShootabilityName(aimedshootability), acquisition,

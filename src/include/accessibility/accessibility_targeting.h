@@ -75,6 +75,9 @@ struct accessibilitytargetingcandidate {
 	f32 verticalaimerrordegrees;
 	f32 aimscreenx;
 	f32 aimscreeny;
+	s32 hasscreenaimerror;
+	f32 horizontalaimerrornormalized;
+	f32 verticalaimerrornormalized;
 	s32 hasdistancecue;
 	f32 distancecue;
 	s32 hasaimquality;
@@ -96,6 +99,10 @@ struct accessibilitytargetingobservation {
 	s32 targetindicatorvisible;
 	s32 nativealignmentexpected;
 	s32 threatdetectoractive;
+	f32 viewfovy;
+	f32 defaultfovy;
+	f32 zoomblend;
+	s32 precisionguidanceactive;
 	s32 threatcount;
 	struct accessibilitytargetingcandidate
 			threats[ACCESSIBILITY_TARGETING_MAX_NATIVE_THREATS];
