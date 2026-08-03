@@ -92,6 +92,10 @@ struct accessibilitytargetingcandidate {
 	s32 precisionaimnodesexamined;
 	f32 precisionaimscreenx;
 	f32 precisionaimscreeny;
+	s32 precisionfineattempted;
+	s32 precisionfinequeries;
+	s32 precisionfinebudgetexhausted;
+	u64 precisionfineelapsedus;
 	s32 hasdistancecue;
 	f32 distancecue;
 	s32 hasaimquality;
@@ -102,6 +106,18 @@ struct accessibilitytargetingcandidate {
 	u32 knowledgeflags;
 	const char *localizedname;
 };
+
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+struct accessibilitytargetingdiagnostics {
+	u64 precisionrefinements;
+	u64 precisionqueries;
+	u64 precisionhits;
+	u64 precisionmisses;
+	u64 precisionbudgetexhaustions;
+	u64 precisionquerytotalus;
+	u64 precisionquerymaxus;
+};
+#endif
 
 struct accessibilitytargetingobservation {
 	s32 playernum;
@@ -133,5 +149,10 @@ void accessibilityTargetingCaptureGame(struct prop *queryaimedprop,
 		const struct coord *queryhitpos, s32 queryhitpart);
 void accessibilityTargetingObserveGame(void);
 void accessibilityTargetingReset(const char *reason);
+s32 accessibilityTargetingGetPrecisionGuidancePropnum(void);
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+void accessibilityTargetingGetDiagnostics(
+		struct accessibilitytargetingdiagnostics *diagnostics);
+#endif
 
 #endif

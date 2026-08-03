@@ -1983,6 +1983,21 @@ static void accessibilityTargetingResetCurrent(const char *reason)
 			sizeof(g_AccessibilityTargetingCurrentState->threatalerts));
 }
 
+s32 accessibilityTargetingGetPrecisionGuidancePropnum(void)
+{
+	struct accessibilitytargetingstate *state;
+
+	if (g_Vars.currentplayernum < 0
+			|| g_Vars.currentplayernum >= MAX_PLAYERS) {
+		return -1;
+	}
+
+	state = &g_AccessibilityTargetingStates[g_Vars.currentplayernum];
+
+	return state->precisionguidanceactive
+			? state->precisionguidanceidentity.propnum : -1;
+}
+
 void accessibilityTargetingReset(const char *reason)
 {
 	s32 playernum;

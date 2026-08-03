@@ -12,6 +12,7 @@
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_cane.h"
 #include "accessibility/accessibility_log.h"
+#include "accessibility/accessibility_targeting.h"
 #include "accessibility/accessibility_tone.h"
 
 #define ACCESSIBILITY_PERFORMANCE_LOG_INTERVAL_US 1000000ULL
@@ -65,6 +66,8 @@ static u64 g_AccessibilityPerformanceWorkingSetBaseline;
 static u64 g_AccessibilityPerformancePrivateBaseline;
 static struct accessibilitytonediagnostics g_AccessibilityPerformancePreviousTone;
 static struct accessibilitycanediagnostics g_AccessibilityPerformancePreviousCane;
+static struct accessibilitytargetingdiagnostics
+		g_AccessibilityPerformancePreviousTargeting;
 static struct accessibilitygraphicsrecord
 		g_AccessibilityGraphicsHistory[ACCESSIBILITY_GRAPHICS_HISTORY_CAPACITY];
 static struct accessibilitygraphicsrecord
@@ -461,6 +464,7 @@ void accessibilityPerformanceTick(void)
 {
 	struct accessibilitytonediagnostics tone;
 	struct accessibilitycanediagnostics cane;
+	struct accessibilitytargetingdiagnostics targeting;
 	u64 now;
 	u64 elapsed;
 	u64 gap;
@@ -485,6 +489,8 @@ void accessibilityPerformanceTick(void)
 		g_AccessibilityPerformanceStartLvFrame60 = g_Vars.lvframe60;
 		accessibilityToneGetDiagnostics(&g_AccessibilityPerformancePreviousTone);
 		accessibilityCaneGetDiagnostics(&g_AccessibilityPerformancePreviousCane);
+		accessibilityTargetingGetDiagnostics(
+				&g_AccessibilityPerformancePreviousTargeting);
 		return;
 	}
 
@@ -515,8 +521,10 @@ void accessibilityPerformanceTick(void)
 
 	memset(&tone, 0, sizeof(tone));
 	memset(&cane, 0, sizeof(cane));
+	memset(&targeting, 0, sizeof(targeting));
 	accessibilityToneGetDiagnostics(&tone);
 	accessibilityCaneGetDiagnostics(&cane);
+	accessibilityTargetingGetDiagnostics(&targeting);
 	accessibilityLogEvent("performance", "frame_window",
 			"window_us=%" PRIu64 " render_frames=%d render_fps=%.3f max_frame_gap_us=%" PRIu64 " game_ticks=%d game_tick_rate=%.3f stage=%d lvframe60=%d diffframe60=%d lvupdate60=%d tickmode=%d menu_count=%d memory_available=%d working_set_bytes=%" PRIu64 " working_set_delta=%lld private_bytes=%" PRIu64 " private_delta=%lld tone_enabled=%d chirp_enabled=%d chirp_sequence=%d weapon_function_sequence=%d weapon_function_pulses=%d hazard_enabled=%d combat_enabled_slots=%d tracker_enabled_slots=%d friendly_enabled_slots=%d door_enabled_slots=%d radar_enabled=%d radar_sequence=%d hill_enabled=%d marker_enabled_slots=%d cane_mode=%d cane_requested_mask=0x%x cane_active_mask=0x%x cane_commands_delta=%d cane_tones_started_delta=%d cane_stops_delta=%d cane_queries_delta=%" PRIu64 " cane_hits_delta=%" PRIu64 " cane_misses_delta=%" PRIu64 " cane_skipped_delta=%" PRIu64 " cane_sweeps_delta=%" PRIu64 " cane_missed_cycles_delta=%" PRIu64 " cane_query_us_delta=%" PRIu64 " cane_query_max_us=%" PRIu64 " hazard_frequency_millihz=%d hazard_volume_millionths=%d hazard_pan_millionths=%d mixer_calls_delta=%d mixer_passthrough_delta=%d mixer_active_delta=%d mixer_frames_delta=%d mixer_calls_total=%d mixer_active_total=%d",
 			(uint64_t)elapsed, g_AccessibilityPerformanceFrames, renderfps,
@@ -564,6 +572,29 @@ void accessibilityPerformanceTick(void)
 			tone.activecalls - g_AccessibilityPerformancePreviousTone.activecalls,
 			tone.mixedframes - g_AccessibilityPerformancePreviousTone.mixedframes,
 			tone.mixcalls, tone.activecalls);
+
+	accessibilityLogEvent("performance", "targeting_window",
+			"window_us=%" PRIu64 " render_frames=%d render_fps=%.3f game_ticks=%d game_tick_rate=%.3f max_frame_gap_us=%" PRIu64 " precision_refinements_delta=%" PRIu64 " precision_queries_delta=%" PRIu64 " precision_hits_delta=%" PRIu64 " precision_misses_delta=%" PRIu64 " precision_budget_exhaustions_delta=%" PRIu64 " precision_query_total_us_delta=%" PRIu64 " precision_query_max_us=%" PRIu64,
+			(uint64_t)elapsed, g_AccessibilityPerformanceFrames, renderfps,
+			gameticks, gametickrate,
+			(uint64_t)g_AccessibilityPerformanceMaxFrameGapUs,
+			(uint64_t)(targeting.precisionrefinements
+					- g_AccessibilityPerformancePreviousTargeting
+							.precisionrefinements),
+			(uint64_t)(targeting.precisionqueries
+					- g_AccessibilityPerformancePreviousTargeting
+							.precisionqueries),
+			(uint64_t)(targeting.precisionhits
+					- g_AccessibilityPerformancePreviousTargeting.precisionhits),
+			(uint64_t)(targeting.precisionmisses
+					- g_AccessibilityPerformancePreviousTargeting.precisionmisses),
+			(uint64_t)(targeting.precisionbudgetexhaustions
+					- g_AccessibilityPerformancePreviousTargeting
+							.precisionbudgetexhaustions),
+			(uint64_t)(targeting.precisionquerytotalus
+					- g_AccessibilityPerformancePreviousTargeting
+							.precisionquerytotalus),
+			(uint64_t)targeting.precisionquerymaxus);
 
 	accessibilityLogEvent("graphics", "frame_window",
 			"window_us=%" PRIu64 " render_frames=%d render_fps=%.3f phase_frames=%" PRIu64 " interval_total_us=%" PRIu64 " interval_max_us=%" PRIu64 " video_start_total_us=%" PRIu64 " video_start_max_us=%" PRIu64 " event_total_us=%" PRIu64 " event_max_us=%" PRIu64 " dimensions_total_us=%" PRIu64 " dimensions_max_us=%" PRIu64 " framebuffer_maintenance_total_us=%" PRIu64 " framebuffer_maintenance_max_us=%" PRIu64 " video_submit_total_us=%" PRIu64 " video_submit_max_us=%" PRIu64 " backend_start_total_us=%" PRIu64 " backend_start_max_us=%" PRIu64 " framebuffer_setup_total_us=%" PRIu64 " framebuffer_setup_max_us=%" PRIu64 " display_list_total_us=%" PRIu64 " display_list_max_us=%" PRIu64 " composite_total_us=%" PRIu64 " composite_max_us=%" PRIu64 " renderer_end_total_us=%" PRIu64 " renderer_end_max_us=%" PRIu64 " frame_limit_total_us=%" PRIu64 " frame_limit_max_us=%" PRIu64 " swap_total_us=%" PRIu64 " swap_max_us=%" PRIu64 " swap_wrapper_total_us=%" PRIu64 " swap_wrapper_max_us=%" PRIu64 " video_end_total_us=%" PRIu64 " video_end_max_us=%" PRIu64 " finish_total_us=%" PRIu64 " finish_max_us=%" PRIu64 " episode_active=%d episode=%d history_frames=%d",
@@ -626,6 +657,7 @@ void accessibilityPerformanceTick(void)
 
 	g_AccessibilityPerformancePreviousTone = tone;
 	g_AccessibilityPerformancePreviousCane = cane;
+	g_AccessibilityPerformancePreviousTargeting = targeting;
 	memset(&g_AccessibilityGraphicsWindow, 0,
 			sizeof(g_AccessibilityGraphicsWindow));
 	g_AccessibilityPerformanceWindowStartUs = now;
