@@ -17,6 +17,8 @@
 #include "game/sight.h"
 #include "game/training.h"
 #include "lib/collision.h"
+#include "lib/model.h"
+#include "lib/mtx.h"
 #include "lib/vars.h"
 #include "lib/vi.h"
 #include "accessibility/accessibility.h"
@@ -37,6 +39,30 @@
 #define ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_UPPER_RIGHT 5
 #define ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_COUNT 5
 #define ACCESSIBILITY_TARGETING_TURRET_AIM_TOLERANCE 3.0f
+#define ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_COUNT 5
+
+enum accessibilitytargetingprecisionanchorsource {
+	ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_NONE = 0,
+	ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_MODEL_HITBOX = 1,
+	ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_NATIVE_AUTOAIM = 2,
+};
+
+enum accessibilitytargetingprecisionanchorslot {
+	ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_HEAD = 0,
+	ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_TORSO = 1,
+	ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_ARM = 2,
+	ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_LOWER = 3,
+	ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_OTHER = 4,
+};
+
+struct accessibilitytargetingprecisionanchor {
+	uintptr_t node;
+	s32 valid;
+	s32 hitpart;
+	f32 screenx;
+	f32 screeny;
+	f32 score;
+};
 
 struct accessibilitytargetinggameaudit {
 	uintptr_t prop;
@@ -85,6 +111,12 @@ struct accessibilitytargetingcombatprojection {
 	f32 verticalaimerrordegrees;
 	f32 aimscreenx;
 	f32 aimscreeny;
+	struct accessibilitytargetingprecisionanchor
+			precisionanchors[ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_COUNT];
+	s32 precisionanchornodesexamined;
+	s32 precisionfallbackvalid;
+	f32 precisionfallbackscreenx;
+	f32 precisionfallbackscreeny;
 };
 
 struct accessibilitytargetingdevicetarget {
@@ -172,6 +204,222 @@ static s32 accessibilityTargetingGameAimRegion(s32 hitpart)
 	return hitpart > 0
 			? ACCESSIBILITY_TARGETING_AIM_REGION_STANDARD
 			: ACCESSIBILITY_TARGETING_AIM_REGION_NONE;
+}
+
+static s32 accessibilityTargetingGamePrecisionAnchorSlot(s32 hitpart)
+{
+	if (hitpart == HITPART_HEAD) {
+		return ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_HEAD;
+	}
+
+	switch (hitpart) {
+	case HITPART_LHAND:
+	case HITPART_LFOREARM:
+	case HITPART_LBICEP:
+	case HITPART_RHAND:
+	case HITPART_RFOREARM:
+	case HITPART_RBICEP:
+		return ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_ARM;
+	case HITPART_LFOOT:
+	case HITPART_LSHIN:
+	case HITPART_LTHIGH:
+	case HITPART_RFOOT:
+	case HITPART_RSHIN:
+	case HITPART_RTHIGH:
+	case HITPART_PELVIS:
+		return ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_LOWER;
+	case HITPART_TORSO:
+		return ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_TORSO;
+	case HITPART_TAIL:
+	case HITPART_GENERAL:
+	case HITPART_GENERALHALF:
+		return ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_OTHER;
+	}
+
+	return -1;
+}
+
+static f32 accessibilityTargetingGamePrecisionAnchorScore(f32 screenx,
+		f32 screeny)
+{
+	f32 halfwidth = camGetScreenWidth() * 0.5f;
+	f32 halfheight = camGetScreenHeight() * 0.5f;
+	f32 dx;
+	f32 dy;
+
+	if (halfwidth <= 0.0f || halfheight <= 0.0f) {
+		return MAXFLOAT;
+	}
+
+	dx = (screenx - g_Vars.currentplayer->crosspos[0]) / halfwidth;
+	dy = (g_Vars.currentplayer->crosspos[1] - screeny) / halfheight;
+	return sqrtf(dx * dx + dy * dy);
+}
+
+static void accessibilityTargetingGameCapturePrecisionAnchors(
+		struct prop *prop, struct chrdata *chr,
+		struct accessibilitytargetingcombatprojection *projection)
+{
+	struct model *model = chr ? chr->model : NULL;
+	struct modelnode *node;
+	s32 validanchors = 0;
+	s32 i;
+
+	if (!prop || !model || !model->definition || !model->matrices
+			|| bgunGetWeaponNum(HAND_RIGHT) != WEAPON_SNIPERRIFLE
+			|| g_Vars.currentplayer->zoominfovy <= 0.0f
+			|| g_Vars.currentplayer->zoominfovy >= PLAYER_DEFAULT_FOV) {
+		return;
+	}
+
+	node = model->definition->rootnode;
+
+	while (node) {
+		if ((node->type & 0xff) == MODELNODETYPE_BBOX) {
+			struct modelrodata_bbox *bbox = &node->rodata->bbox;
+			s32 slot = accessibilityTargetingGamePrecisionAnchorSlot(
+					bbox->hitpart);
+
+			projection->precisionanchornodesexamined++;
+
+			if (slot >= 0) {
+				Mtxf *mtx = modelFindNodeMtx(model, node, 0);
+				struct coord local;
+				struct coord cameracoord;
+				f32 screen[2];
+				f32 score;
+
+				local.x = (bbox->xmin + bbox->xmax) * 0.5f;
+				local.y = (bbox->ymin + bbox->ymax) * 0.5f;
+				local.z = (bbox->zmin + bbox->zmax) * 0.5f;
+
+				if (mtx) {
+					mtx4TransformVec(mtx, &local, &cameracoord);
+				}
+
+				if (mtx && cameracoord.z < 0.0f) {
+					cam0f0b4eb8(&cameracoord, screen, viGetFovY(),
+							viGetAspect());
+					score = accessibilityTargetingGamePrecisionAnchorScore(
+							screen[0], screen[1]);
+
+					if (isfinite(screen[0]) && isfinite(screen[1])
+							&& isfinite(score)
+							&& (!projection->precisionanchors[slot].valid
+								|| score < projection->precisionanchors[slot].score)) {
+						projection->precisionanchors[slot].node
+								= (uintptr_t)node;
+						projection->precisionanchors[slot].valid = true;
+						projection->precisionanchors[slot].hitpart
+								= bbox->hitpart;
+						projection->precisionanchors[slot].screenx = screen[0];
+						projection->precisionanchors[slot].screeny = screen[1];
+						projection->precisionanchors[slot].score = score;
+					}
+				}
+			}
+		}
+
+		if (node->child) {
+			node = node->child;
+		} else {
+			while (node) {
+				if (node->next) {
+					node = node->next;
+					break;
+				}
+
+				node = node->parent;
+			}
+		}
+	}
+
+	for (i = 0; i < ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_COUNT; i++) {
+		validanchors += projection->precisionanchors[i].valid;
+	}
+
+	if (!validanchors) {
+		struct coord nativepos;
+		f32 xbounds[2];
+		f32 ybounds[2];
+		f32 screen[2];
+
+		if (chrCalculateAutoAim(prop, &nativepos, xbounds, ybounds)) {
+			cam0f0b4eb8(&nativepos, screen, viGetFovY(), viGetAspect());
+
+			if (isfinite(screen[0]) && isfinite(screen[1])) {
+				projection->precisionfallbackvalid = true;
+				projection->precisionfallbackscreenx = screen[0];
+				projection->precisionfallbackscreeny = screen[1];
+			}
+		}
+	}
+}
+
+static const struct accessibilitytargetingprecisionanchor *
+accessibilityTargetingGameSelectPrecisionAnchor(
+		const struct accessibilitytargetingcombatprojection *projection,
+		f32 *selectedscore)
+{
+	static const f32 centerpenalties[ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_COUNT]
+			= { 0.04f, 0.00f, 0.05f, 0.03f, 0.05f };
+	static const f32 upperpenalties[ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_COUNT]
+			= { 0.00f, 0.015f, 0.02f, 0.06f, 0.04f };
+	static const f32 lowerpenalties[ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_COUNT]
+			= { 0.08f, 0.02f, 0.06f, 0.00f, 0.04f };
+	static const f32 sidepenalties[ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_COUNT]
+			= { 0.01f, 0.02f, 0.00f, 0.06f, 0.04f };
+	const f32 *penalties = centerpenalties;
+	const struct accessibilitytargetingprecisionanchor *best = NULL;
+	f32 bestscore = 0.0f;
+	s32 i;
+
+	if (projection->visibilitysample == ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_UPPER) {
+		penalties = upperpenalties;
+	} else if (projection->visibilitysample
+			== ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_LOWER) {
+		penalties = lowerpenalties;
+	} else if (projection->visibilitysample
+			== ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_UPPER_LEFT
+			|| projection->visibilitysample
+				== ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_UPPER_RIGHT) {
+		penalties = sidepenalties;
+	}
+
+	for (i = 0; i < ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_COUNT; i++) {
+		const struct accessibilitytargetingprecisionanchor *anchor
+				= &projection->precisionanchors[i];
+		f32 score;
+
+		if (!anchor->valid) {
+			continue;
+		}
+
+		score = anchor->score + penalties[i];
+		if (!best || score < bestscore) {
+			best = anchor;
+			bestscore = score;
+		}
+	}
+
+	if (selectedscore) {
+		*selectedscore = best ? bestscore : -1.0f;
+	}
+
+	return best;
+}
+
+static const char *accessibilityTargetingGamePrecisionAnchorSourceName(
+		s32 source)
+{
+	switch (source) {
+	case ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_MODEL_HITBOX:
+		return "model_hitbox";
+	case ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_NATIVE_AUTOAIM:
+		return "native_autoaim_fallback";
+	}
+
+	return "none";
 }
 
 static f32 accessibilityTargetingGamePunchRange(void)
@@ -843,6 +1091,10 @@ static void accessibilityTargetingCaptureCombat(void)
 		projection->finite = projection->projected
 				&& isfinite(projection->x2) && isfinite(projection->x1)
 				&& isfinite(projection->y2) && isfinite(projection->y1);
+		if (chr) {
+			accessibilityTargetingGameCapturePrecisionAnchors(prop, chr,
+					projection);
+		}
 
 		if (projection->finite
 				&& accessibilityTargetingGameVerticalAimError(
@@ -1285,6 +1537,15 @@ static void accessibilityTargetingObserveCombat(
 		f32 dx;
 		f32 dy;
 		f32 dz;
+		const struct accessibilitytargetingprecisionanchor *precisionanchor = NULL;
+		s32 precisionaimsource = ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_NONE;
+		s32 precisionaimhitpart = 0;
+		uintptr_t precisionaimnode = 0;
+		f32 precisionaimscore = -1.0f;
+		f32 targetscreenx = (projection->x1 + projection->x2) * 0.5f;
+		f32 targetscreeny = (projection->y1 + projection->y2) * 0.5f;
+		f32 precisionverticalaimerror = projection->verticalaimerrordegrees;
+		s32 hasprecisionverticalaimerror = projection->hasverticalaimerror;
 
 		if (accessibilityTargetingGameObservationHasProp(observation, prop)) {
 			if (detailed) {
@@ -1387,9 +1648,39 @@ static void accessibilityTargetingObserveCombat(
 			}
 		}
 
+		if (eligible && chr && observation->precisionguidanceactive) {
+			precisionanchor = accessibilityTargetingGameSelectPrecisionAnchor(
+					projection, &precisionaimscore);
+
+			if (precisionanchor) {
+				precisionaimsource
+						= ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_MODEL_HITBOX;
+				precisionaimhitpart = precisionanchor->hitpart;
+				precisionaimnode = precisionanchor->node;
+				targetscreenx = precisionanchor->screenx;
+				targetscreeny = precisionanchor->screeny;
+			} else if (projection->precisionfallbackvalid) {
+				precisionaimsource
+						= ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_NATIVE_AUTOAIM;
+				targetscreenx = projection->precisionfallbackscreenx;
+				targetscreeny = projection->precisionfallbackscreeny;
+				precisionaimscore
+						= accessibilityTargetingGamePrecisionAnchorScore(
+							targetscreenx, targetscreeny);
+			}
+
+			if (precisionaimsource != ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_NONE) {
+				hasprecisionverticalaimerror
+						= accessibilityTargetingGameVerticalAimError(
+							targetscreenx, targetscreeny,
+							targetscreenx, targetscreeny,
+							&precisionverticalaimerror);
+			}
+		}
+
 		if (detailed) {
 			accessibilityLogEvent("targeting", "combat_candidate",
-					"frame=%d slot=%d accepted=%d reason=%s aimed=%d aim_source=%s category=%d relationship=%d aimonly=%d prop=%p propnum=%d chr=%p obj=%p obj_type=%d model=%d prop_type=%d prop_flags=0x%02x obj_flags=0x%08x obj_flags2=0x%08x chr_flags=0x%08x chr_hidden=0x%08x action=%d capture_valid=%d projected=%d finite=%d line_of_sight=%d visibility_sample=%s visibility_queries=%d screen=%.3f,%.3f,%.3f,%.3f target_screen=%.3f,%.3f aim_screen=%.3f,%.3f vertical_aim_error_available=%d raw_elevation_degrees=%.3f normalized_screen_error=%.4f,%.4f",
+					"frame=%d slot=%d accepted=%d reason=%s aimed=%d aim_source=%s category=%d relationship=%d aimonly=%d prop=%p propnum=%d chr=%p obj=%p obj_type=%d model=%d prop_type=%d prop_flags=0x%02x obj_flags=0x%08x obj_flags2=0x%08x chr_flags=0x%08x chr_hidden=0x%08x action=%d capture_valid=%d projected=%d finite=%d line_of_sight=%d visibility_sample=%s visibility_queries=%d screen=%.3f,%.3f,%.3f,%.3f precision_anchor_source=%s precision_anchor_hitpart=%d precision_anchor_node=%p precision_anchor_nodes_examined=%d precision_anchor_score=%.4f target_screen=%.3f,%.3f aim_screen=%.3f,%.3f vertical_aim_error_available=%d raw_elevation_degrees=%.3f normalized_screen_error=%.4f,%.4f",
 					g_Vars.lvframe60, i, eligible, reason, aimed,
 					aimsource,
 					projection->category,
@@ -1415,18 +1706,22 @@ static void accessibilityTargetingObserveCombat(
 					projection->visibilityqueries,
 					projection->x1, projection->y1,
 					projection->x2, projection->y2,
-					(projection->x1 + projection->x2) * 0.5f,
-					(projection->y1 + projection->y2) * 0.5f,
+					accessibilityTargetingGamePrecisionAnchorSourceName(
+						precisionaimsource),
+					precisionaimhitpart, (void *)precisionaimnode,
+					projection->precisionanchornodesexamined,
+					precisionaimscore,
+					targetscreenx, targetscreeny,
 					projection->aimscreenx, projection->aimscreeny,
-					projection->hasverticalaimerror,
-					projection->verticalaimerrordegrees,
+					hasprecisionverticalaimerror,
+					precisionverticalaimerror,
 					viewright > viewleft
-							? (((projection->x1 + projection->x2) * 0.5f)
+							? (targetscreenx
 									- projection->aimscreenx)
 								/ ((viewright - viewleft) * 0.5f) : 0.0f,
 					viewbottom > viewtop
 							? (projection->aimscreeny
-									- ((projection->y1 + projection->y2) * 0.5f))
+									- targetscreeny)
 								/ ((viewbottom - viewtop) * 0.5f) : 0.0f);
 		}
 
@@ -1458,24 +1753,33 @@ static void accessibilityTargetingObserveCombat(
 		candidate->screeny1 = projection->y1;
 		candidate->screenx2 = projection->x2;
 		candidate->screeny2 = projection->y2;
-		candidate->hasverticalaimerror = projection->hasverticalaimerror;
+		candidate->hasverticalaimerror = hasprecisionverticalaimerror;
 		candidate->verticalaimerrordegrees
-				= projection->verticalaimerrordegrees;
+				= precisionverticalaimerror;
 		candidate->aimscreenx = projection->aimscreenx;
 		candidate->aimscreeny = projection->aimscreeny;
 		if (viewright > viewleft && viewbottom > viewtop) {
 			candidate->hasscreenaimerror = true;
 			candidate->horizontalaimerrornormalized
-					= (((projection->x1 + projection->x2) * 0.5f)
+					= (targetscreenx
 							- projection->aimscreenx)
 						/ ((viewright - viewleft) * 0.5f);
 			candidate->verticalaimerrornormalized
 					= (projection->aimscreeny
-							- ((projection->y1 + projection->y2) * 0.5f))
+							- targetscreeny)
 						/ ((viewbottom - viewtop) * 0.5f);
 		}
 		candidate->horizontalscreenoffset = fabsf(
-				((projection->x1 + projection->x2) * 0.5f) - viewcenterx);
+				targetscreenx - viewcenterx);
+		candidate->precisionaimavailable
+				= precisionaimsource != ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_NONE;
+		candidate->precisionaimsource = precisionaimsource;
+		candidate->precisionaimhitpart = precisionaimhitpart;
+		candidate->precisionaimnode = precisionaimnode;
+		candidate->precisionaimnodesexamined
+				= projection->precisionanchornodesexamined;
+		candidate->precisionaimscreenx = targetscreenx;
+		candidate->precisionaimscreeny = targetscreeny;
 		dx = candidate->position.x - g_Vars.currentplayer->prop->pos.x;
 		dy = candidate->position.y - g_Vars.currentplayer->prop->pos.y;
 		dz = candidate->position.z - g_Vars.currentplayer->prop->pos.z;

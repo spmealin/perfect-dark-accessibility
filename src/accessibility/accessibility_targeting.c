@@ -975,6 +975,7 @@ static s32 accessibilityTargetingPrecisionCandidateEligible(
 		const struct accessibilitytargetingrecord *record)
 {
 	return accessibilityTargetingRecordPresenceEligible(record)
+			&& record->candidate.precisionaimavailable
 			&& record->candidate.hasscreenaimerror
 			&& record->candidate.relationship
 					== ACCESSIBILITY_TARGETING_RELATIONSHIP_HOSTILE
@@ -1065,11 +1066,16 @@ static void accessibilityTargetingUpdatePrecisionGuidance(
 				&g_AccessibilityTargetingCurrentState
 						->precisionguidanceidentity)) {
 		accessibilityLogEvent("targeting", "precision_guidance_select",
-				"frame=%d propnum=%d horizontal_error=%.4f vertical_error=%.4f score=%.4f retained=%d",
+				"frame=%d propnum=%d horizontal_error=%.4f vertical_error=%.4f score=%.4f retained=%d anchor_source=%d anchor_hitpart=%d anchor_node=%p anchors_examined=%d target_screen=%.2f,%.2f",
 				observation->frame60, best->candidate.identity.propnum,
 				best->candidate.horizontalaimerrornormalized,
 				best->candidate.verticalaimerrornormalized, bestscore,
-				current == best);
+				current == best, best->candidate.precisionaimsource,
+				best->candidate.precisionaimhitpart,
+				(void *)best->candidate.precisionaimnode,
+				best->candidate.precisionaimnodesexamined,
+				best->candidate.precisionaimscreenx,
+				best->candidate.precisionaimscreeny);
 	}
 	g_AccessibilityTargetingCurrentState->precisionguidanceactive = true;
 	g_AccessibilityTargetingCurrentState->precisionguidanceidentity
@@ -1354,7 +1360,7 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 			voice->elevationzone = elevationzone;
 			restart = true;
 			accessibilityLogEvent("targeting", "combat_slot_assign",
-					"frame=%d oscillator_slot=%d source=%d slot=%d propnum=%d prop=%p category=%d cue=%s raw_elevation_degrees=%.2f elevation_degrees=%.2f elevation_zone=%s target_screen=%.2f,%.2f aim_screen=%.2f,%.2f base_frequency_hz=%.1f target_frequency_hz=%.1f punch_range=%.3f",
+					"frame=%d oscillator_slot=%d source=%d slot=%d propnum=%d prop=%p category=%d cue=%s raw_elevation_degrees=%.2f elevation_degrees=%.2f elevation_zone=%s target_screen=%.2f,%.2f aim_screen=%.2f,%.2f precision_anchor_source=%d precision_anchor_hitpart=%d precision_anchor_node=%p precision_anchor_nodes_examined=%d base_frequency_hz=%.1f target_frequency_hz=%.1f punch_range=%.3f",
 					frame60, slot, voice->identity.source,
 					voice->identity.sourceslot, voice->identity.propnum,
 					(void *)record->candidate.prop,
@@ -1366,12 +1372,20 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 					elevationdegrees,
 					elevationzone > 0 ? "above"
 						: elevationzone < 0 ? "below" : "level",
-					(record->candidate.screenx1
+					precisionguidance
+						? record->candidate.precisionaimscreenx
+						: (record->candidate.screenx1
 							+ record->candidate.screenx2) * 0.5f,
-					(record->candidate.screeny1
+					precisionguidance
+						? record->candidate.precisionaimscreeny
+						: (record->candidate.screeny1
 							+ record->candidate.screeny2) * 0.5f,
 					record->candidate.aimscreenx,
 					record->candidate.aimscreeny,
+					record->candidate.precisionaimsource,
+					record->candidate.precisionaimhitpart,
+					(void *)record->candidate.precisionaimnode,
+					record->candidate.precisionaimnodesexamined,
 					combatfrequency, elevationfrequency,
 					distancecuereference);
 		}
@@ -1461,7 +1475,7 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 #endif
 		) {
 			accessibilityLogEvent("targeting", "combat_slot_cadence",
-					"frame=%d oscillator_slot=%d propnum=%d category=%d cue=%s center_distance=%.3f cue_distance=%.3f cue_distance_available=%d punch_range=%.3f punch_range_exit=%.3f far_threshold=%.3f zone=%s proximity=%.4f period_ms=%d duration_ms=%d contour=%s continuous=%d trigger_now=%d raw_elevation_degrees=%.2f elevation_degrees=%.2f elevation_zone=%s target_screen=%.2f,%.2f aim_screen=%.2f,%.2f base_frequency_hz=%.1f target_frequency_hz=%.1f start_frequency_hz=%.1f end_frequency_hz=%.1f volume=%.4f pan=%.4f",
+					"frame=%d oscillator_slot=%d propnum=%d category=%d cue=%s center_distance=%.3f cue_distance=%.3f cue_distance_available=%d punch_range=%.3f punch_range_exit=%.3f far_threshold=%.3f zone=%s proximity=%.4f period_ms=%d duration_ms=%d contour=%s continuous=%d trigger_now=%d raw_elevation_degrees=%.2f elevation_degrees=%.2f elevation_zone=%s target_screen=%.2f,%.2f aim_screen=%.2f,%.2f precision_anchor_source=%d precision_anchor_hitpart=%d precision_anchor_node=%p precision_anchor_nodes_examined=%d base_frequency_hz=%.1f target_frequency_hz=%.1f start_frequency_hz=%.1f end_frequency_hz=%.1f volume=%.4f pan=%.4f",
 					frame60, slot, voice->identity.propnum,
 					record->candidate.category,
 					camera ? "security_camera_sweep"
@@ -1486,12 +1500,20 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 					elevationdegrees,
 					elevationzone > 0 ? "above"
 						: elevationzone < 0 ? "below" : "level",
-					(record->candidate.screenx1
+					precisionguidance
+						? record->candidate.precisionaimscreenx
+						: (record->candidate.screenx1
 							+ record->candidate.screenx2) * 0.5f,
-					(record->candidate.screeny1
+					precisionguidance
+						? record->candidate.precisionaimscreeny
+						: (record->candidate.screeny1
 							+ record->candidate.screeny2) * 0.5f,
 					record->candidate.aimscreenx,
 					record->candidate.aimscreeny,
+					record->candidate.precisionaimsource,
+					record->candidate.precisionaimhitpart,
+					(void *)record->candidate.precisionaimnode,
+					record->candidate.precisionaimnodesexamined,
 					combatfrequency, elevationfrequency,
 					startfrequency, endfrequency,
 					normalizedvolume, normalizedpan);

@@ -85,6 +85,13 @@ struct accessibilitytargetingcandidate {
 	s32 hasscreenaimerror;
 	f32 horizontalaimerrornormalized;
 	f32 verticalaimerrornormalized;
+	s32 precisionaimavailable;
+	s32 precisionaimsource;
+	s32 precisionaimhitpart;
+	uintptr_t precisionaimnode;
+	s32 precisionaimnodesexamined;
+	f32 precisionaimscreenx;
+	f32 precisionaimscreeny;
 	s32 hasdistancecue;
 	f32 distancecue;
 	s32 hasaimquality;
