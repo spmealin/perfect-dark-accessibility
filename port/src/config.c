@@ -10,7 +10,8 @@
 
 #define CONFIG_MAX_SECNAME 128
 #define CONFIG_MAX_KEYNAME 256
-#define CONFIG_MAX_SETTINGS 300
+/* Keep headroom for optional modules such as the accessibility layer. */
+#define CONFIG_MAX_SETTINGS 512
 
 typedef enum {
 	CFG_NONE,
