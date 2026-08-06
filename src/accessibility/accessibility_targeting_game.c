@@ -165,6 +165,7 @@ static const struct accessibilitytargetingdevicetarget
 	{ STAGE_CITRAINING, WEAPON_DOORDECODER, 0x35, true },
 	{ STAGE_INVESTIGATION, WEAPON_DATAUPLINK, 0x0a, false },
 	{ STAGE_CHICAGO, WEAPON_DATAUPLINK, 0x0a, false },
+	{ STAGE_G5BUILDING, WEAPON_DOORDECODER, 0x11, false },
 	{ STAGE_DEFECTION, WEAPON_ECMMINE, 0x03, false },
 	{ STAGE_DEFECTION, WEAPON_ECMMINE, 0x04, false },
 };
