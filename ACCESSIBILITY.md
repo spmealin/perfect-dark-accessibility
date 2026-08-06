@@ -211,7 +211,11 @@ glass or explodable scenery that the game marks as a possible route
 obstruction. Ordinary glass and invincible, hidden, destroyed, or inactive
 objects retain the normal barrier sound or disappear with their collision.
 
-The same ray also samples the engine's walkable-floor height at four evenly spaced points, by default through 450 world units or until an intervening barrier. Room traversal stays at the observer's body height while the separate vertical floor query starts 200 units above the current ground; this prevents a long upward-sloping portal trace from delaying recognition of stairs in an adjacent lower room. The first elevation change of at least 12 units, bounded to 200 units above or below the observer's current floor, replaces a farther wall cue for that angle. An upward stair or ramp sweeps from below to above the distance pitch during a 140 ms chirp; a downward stair, ramp, or bounded drop sweeps from above to below it. The longer terrain contour is four times the duration of the steady 35 ms wall chirp so its direction remains perceptible. The geometric midpoint remains the ordinary distance pitch, preserving the learned near/far scale. Flat ground and missing or out-of-range floor samples are silent. Seven preallocated mixer slots, one per angle, keep these cues independent of game sound channels and the other accessibility oscillator lanes.
+The same ray also samples the engine's walkable-floor height at four front-loaded points, by default through 450 world units or until an intervening barrier. Room traversal stays at the observer's body height while the separate vertical floor query starts 200 units above the current ground; this prevents a long upward-sloping portal trace from delaying recognition of stairs in an adjacent lower room. The first elevation change of at least 12 units replaces a farther wall cue for that angle. An upward stair or ramp sweeps from below to above the distance pitch during a 140 ms chirp; a downward stair, ramp, or bounded drop sweeps from above to below it. The longer terrain contour is four times the duration of the steady 35 ms wall chirp so its direction remains perceptible.
+
+A missing floor or a downward change greater than `Accessibility.VirtualCaneDropHeightThreshold`, default 80 units, is a large-drop candidate. Five bounded floor probes refine the last-supported/first-unsupported interval, and at least two unsupported results are required to reject an isolated room-resolution miss. The resulting 260 ms steep falling contour is spatialized at the estimated floor-to-drop transition. It takes priority over a wall beyond the edge, while a nearer wall or railing still masks an unreachable drop. The drop threshold is configurable from 30 through 500 units.
+
+For Joanna's walking perspective, a standing-height collision also receives one conditional sweep using her full-squat height and the same movement radius. If the standing envelope is blocked but the squat envelope can move just beyond the obstacle, the ordinary wall chirp becomes a 110 ms downward crouch cue. No player or collision state is modified. The check is suppressed once the current collision envelope is already at full-squat height and for CamSpy, which cannot crouch. The geometric midpoint remains the ordinary distance pitch, preserving the learned near/far scale. Seven preallocated mixer slots, one per angle, keep every cane cue independent of game sound channels and the other accessibility oscillator lanes.
 
 The following `pd.ini` values may be tuned without rebuilding; restart the game after editing them:
 
@@ -225,6 +229,7 @@ VirtualCaneNearFrequency=600.000000
 VirtualCaneFarFrequency=300.000000
 VirtualCaneTerrainReach=450.000000
 VirtualCaneTerrainHeightThreshold=12.000000
+VirtualCaneDropHeightThreshold=80.000000
 VirtualCaneVolume=0.184000
 EnemyFullVolumeDistance=4000.000000
 EnemyFadeDistance=5500.000000
