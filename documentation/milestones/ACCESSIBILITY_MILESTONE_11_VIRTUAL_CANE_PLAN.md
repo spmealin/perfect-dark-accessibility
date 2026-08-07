@@ -10,7 +10,10 @@ earcons for Off, Slow, and Fast. A 2026-08-06 extension also superseded the
 original drop-off non-goal: the implementation now refines large floor drops
 to a spatial edge cue and compares standing with full-squat collision to
 identify crouch-passable openings. Those extensions await project-owner
-runtime acceptance. See the root `ACCESSIBILITY.md`, `ACCESSIBILITY_ROADMAP.md`,
+runtime acceptance. Follow-up diagnostics showed rising stairs could mask a
+co-located under-stair opening; the current implementation tests squat
+clearance within one player radius of that terrain and uses a distinct
+descending double chirp. See the root `ACCESSIBILITY.md`, `ACCESSIBILITY_ROADMAP.md`,
 and `ACCESSIBILITY_TESTING.md` for current behavior and status.
 
 Planning baseline: `accessibility` branch at `2ca16241f`

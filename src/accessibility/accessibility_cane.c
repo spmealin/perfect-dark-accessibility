@@ -36,7 +36,7 @@
 #define ACCESSIBILITY_CANE_WALL_DURATION_MS 35
 #define ACCESSIBILITY_CANE_TERRAIN_DURATION_MS 140
 #define ACCESSIBILITY_CANE_DROP_DURATION_MS 260
-#define ACCESSIBILITY_CANE_CROUCH_DURATION_MS 110
+#define ACCESSIBILITY_CANE_CROUCH_DURATION_MS 135
 #define ACCESSIBILITY_CANE_BREAKABLE_DURATION_MS 90
 #define ACCESSIBILITY_CANE_BREAKABLE_START_RATIO 2.0f
 #define ACCESSIBILITY_CANE_SLOW_CYCLE_TICKS TICKS(120)
@@ -104,9 +104,11 @@ struct accessibilitycanesample {
 	f32 frequency;
 	f32 endfrequency;
 	s32 durationms;
+	s32 tonepattern;
 	s32 terrain;
 	s32 drop;
 	s32 crouchpassage;
+	s32 crouchterrainmerge;
 	s32 breakable;
 	f32 terrainground;
 	f32 terrainheight;
@@ -332,7 +334,7 @@ static void accessibilityCaneLogSweep(const char *reason)
 		struct accessibilitycanesample *sample = &g_AccessibilityCaneSamples[i];
 
 		accessibilityCaneAppendLog(
-				"%ss%d={angle:%d state:%s scheduled:%d actual:%d late:%d result:%d pass:%d observer:%p remote:%d origin:%.2f,%.2f,%.2f forward:%.5f,%.5f direction:%.5f,%.5f end:%.2f,%.2f,%.2f bbox:%.2f,%.2f,%.2f raw:%.2f,%.2f,%.2f audio:%.2f,%.2f,%.2f distance:%.2f frequency_hz:%.2f end_frequency_hz:%.2f duration_ms:%d terrain:%d drop:%d crouch:%d breakable:%d terrain_ground:%.2f terrain_height:%.2f terrain_distance:%.2f terrain_room:%d terrain_flags:0x%04x terrain_queries:%d drop_refinements:%d drop_threshold:%.2f crouch_result:%d crouch_pass:%d crouch_ymax:%.2f obstacle:%p type:%d geoflags:0x%08x normal:%.5f,%.5f,%.5f edge:%.2f,%.2f,%.2f,%.2f volume:%d pan:%d normalized:%.5f,%.5f master_volume:%.5f effective_volume:%.5f query_us:%" PRIu64 " probes=[",
+				"%ss%d={angle:%d state:%s scheduled:%d actual:%d late:%d result:%d pass:%d observer:%p remote:%d origin:%.2f,%.2f,%.2f forward:%.5f,%.5f direction:%.5f,%.5f end:%.2f,%.2f,%.2f bbox:%.2f,%.2f,%.2f raw:%.2f,%.2f,%.2f audio:%.2f,%.2f,%.2f distance:%.2f frequency_hz:%.2f end_frequency_hz:%.2f duration_ms:%d tone_pattern:%d terrain:%d drop:%d crouch:%d crouch_terrain_merge:%d breakable:%d terrain_ground:%.2f terrain_height:%.2f terrain_distance:%.2f terrain_room:%d terrain_flags:0x%04x terrain_queries:%d drop_refinements:%d drop_threshold:%.2f crouch_result:%d crouch_pass:%d crouch_ymax:%.2f obstacle:%p type:%d geoflags:0x%08x normal:%.5f,%.5f,%.5f edge:%.2f,%.2f,%.2f,%.2f volume:%d pan:%d normalized:%.5f,%.5f master_volume:%.5f effective_volume:%.5f query_us:%" PRIu64 " probes=[",
 				i ? " " : "", i, sample->angledegrees,
 				accessibilityCaneSampleStateName(sample->state),
 				sample->scheduledtick, sample->actualtick, sample->lateness,
@@ -347,8 +349,9 @@ static void accessibilityCaneLogSweep(const char *reason)
 				sample->rawhit.z, sample->audiosource.x,
 				sample->audiosource.y, sample->audiosource.z,
 				sample->distance, sample->frequency, sample->endfrequency,
-				sample->durationms,
+				sample->durationms, sample->tonepattern,
 				sample->terrain, sample->drop, sample->crouchpassage,
+				sample->crouchterrainmerge,
 				sample->breakable,
 				sample->terrainground,
 				sample->terrainheight, sample->terraindistance,
@@ -919,11 +922,14 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 				sample, &observer, barrierdistance);
 	}
 
-	if (result == CDRESULT_COLLISION
+	if (result == CDRESULT_COLLISION && !sample->drop
 			&& (!terrainfound
-				|| sample->terraindistance >= barrierdistance)) {
+				|| sample->terraindistance + sample->radius
+						>= barrierdistance)) {
 		crouchfound = accessibilityCaneFindCrouchPassage(sample,
 				&observer, &start, barrierdistance, maxdistance, types);
+		sample->crouchterrainmerge = crouchfound && terrainfound
+				&& sample->terraindistance < barrierdistance;
 	}
 
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
@@ -936,7 +942,8 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 
 	if (terrainfound
 			&& (barrierdistance < 0.0f
-				|| sample->terraindistance < barrierdistance)) {
+				|| sample->terraindistance < barrierdistance)
+			&& !sample->crouchterrainmerge) {
 		horizontal = sample->terraindistance;
 		sample->state = sample->drop
 				? ACCESSIBILITY_CANE_SAMPLE_DROP
@@ -966,6 +973,7 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 	sample->frequency = accessibilityCaneFrequencyForDistance(horizontal,
 			maxdistance, nearfrequency, farfrequency);
 	sample->endfrequency = sample->frequency;
+	sample->tonepattern = ACCESSIBILITY_TONE_CANE_PATTERN_CONTOUR;
 
 	if (sample->state == ACCESSIBILITY_CANE_SAMPLE_DROP) {
 		sample->durationms = ACCESSIBILITY_CANE_DROP_DURATION_MS;
@@ -974,6 +982,7 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 	} else if (sample->state == ACCESSIBILITY_CANE_SAMPLE_CROUCH) {
 		sample->durationms = ACCESSIBILITY_CANE_CROUCH_DURATION_MS;
 		sample->endfrequency /= ACCESSIBILITY_CANE_CROUCH_CONTOUR_RATIO;
+		sample->tonepattern = ACCESSIBILITY_TONE_CANE_PATTERN_CROUCH_DOUBLE;
 	} else if (sample->state == ACCESSIBILITY_CANE_SAMPLE_TERRAIN) {
 		sample->durationms = ACCESSIBILITY_CANE_TERRAIN_DURATION_MS;
 		if (sample->terrain > 0) {
@@ -1005,7 +1014,8 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 	accessibilityTonePlayCaneSlot(sample - g_AccessibilityCaneSamples,
 			sample->frequency, sample->endfrequency,
 			sample->effectivevolume,
-			sample->normalizedpan, sample->durationms);
+			sample->normalizedpan, sample->durationms,
+			sample->tonepattern);
 
 	return result;
 }

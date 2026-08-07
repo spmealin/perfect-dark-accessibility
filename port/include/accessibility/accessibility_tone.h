@@ -15,6 +15,11 @@ enum accessibilitytonecombatcontour {
 	ACCESSIBILITY_TONE_COMBAT_CONTOUR_BASE_THEN_END,
 };
 
+enum accessibilitytonecanepattern {
+	ACCESSIBILITY_TONE_CANE_PATTERN_CONTOUR,
+	ACCESSIBILITY_TONE_CANE_PATTERN_CROUCH_DOUBLE,
+};
+
 enum accessibilitytoneradarkind {
 	ACCESSIBILITY_TONE_RADAR_ENEMY,
 	ACCESSIBILITY_TONE_RADAR_ALLY,
@@ -95,7 +100,8 @@ void accessibilityToneSetHillBeacon(s32 enabled, f32 volume, f32 pan,
 		s32 rear, s32 identitychirp, s32 restart);
 void accessibilityToneStopHillBeacon(void);
 void accessibilityTonePlayCaneSlot(s32 slot, f32 startfrequencyhz,
-		f32 endfrequencyhz, f32 volume, f32 pan, s32 durationms);
+		f32 endfrequencyhz, f32 volume, f32 pan, s32 durationms,
+		s32 pattern);
 void accessibilityToneStopCane(void);
 void accessibilityToneSetMarkerSlot(s32 slot, s32 enabled,
 		f32 volume, f32 pan, s32 restart);

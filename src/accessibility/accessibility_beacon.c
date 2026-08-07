@@ -61,7 +61,7 @@
 #define ACCESSIBILITY_BEACON_RENDERPOSTBG_SURFACE_TOLERANCE 24.0f
 #define ACCESSIBILITY_BEACON_DIAGNOSTIC_FOCUS_CAPACITY 16
 #define ACCESSIBILITY_BEACON_DIAGNOSTIC_FOCUS_DOT 0.75f
-#define ACCESSIBILITY_BEACON_PROJECTION_CAPACITY 128
+#define ACCESSIBILITY_BEACON_PROJECTION_CAPACITY 256
 #define ACCESSIBILITY_BEACON_PROJECTION_MAX_AGE_TICKS TICKS(2)
 
 enum accessibilitybeaconcategory {
@@ -404,6 +404,43 @@ static s32 accessibilityBeaconObjectIsOnScreen(struct prop *prop,
 	return true;
 }
 
+static s32 accessibilityBeaconDoorIsOnScreen(struct prop *prop,
+		const char **reason)
+{
+	const struct accessibilitybeaconprojection *projection;
+
+	if (!accessibilityBeaconProjectionCacheIsCurrent()) {
+		*reason = "door_projection_cache_unavailable";
+		return false;
+	}
+
+	projection = accessibilityBeaconFindProjection(prop);
+
+	if (!projection) {
+		*reason = "door_projection_not_captured";
+		return false;
+	}
+	if (!projection->onscreen) {
+		*reason = "door_not_rendered_at_capture";
+		return false;
+	}
+	if (!projection->projected) {
+		*reason = "door_projection_failed";
+		return false;
+	}
+	if (!projection->finite) {
+		*reason = "door_projection_non_finite";
+		return false;
+	}
+	if (!projection->intersectsviewport) {
+		*reason = "door_outside_viewport";
+		return false;
+	}
+
+	*reason = "door_visible_on_screen";
+	return true;
+}
+
 static s32 accessibilityBeaconCharacterCombatCapable(struct chrdata *chr)
 {
 	return chr && !chrIsDead(chr)
@@ -614,9 +651,12 @@ void accessibilityBeaconCaptureGame(void)
 
 		traversed++;
 
-		if ((prop->type == PROPTYPE_OBJ || prop->type == PROPTYPE_WEAPON)
+		if ((prop->type == PROPTYPE_DOOR
+				|| prop->type == PROPTYPE_OBJ
+				|| prop->type == PROPTYPE_WEAPON)
 				&& obj && obj->prop == prop && obj->model
-				&& objIsPotentiallyInteractable(prop)) {
+				&& (prop->type == PROPTYPE_DOOR
+					|| objIsPotentiallyInteractable(prop))) {
 			struct accessibilitybeaconprojection *projection;
 
 			if (g_AccessibilityBeaconProjectionCount
@@ -1116,15 +1156,18 @@ static struct prop *accessibilityBeaconCanonicalDoor(struct prop *prop, s32 *sib
 	return bestprop;
 }
 
-static struct prop *accessibilityBeaconVisibleDoor(struct prop *prop)
+static struct prop *accessibilityBeaconVisibleDoor(struct prop *prop,
+		const char **reason)
 {
 	struct doorobj *door = prop ? prop->door : NULL;
 	struct doorobj *sibling;
 	struct prop *bestprop = NULL;
 	s32 bestnum = -1;
 	s32 guard = 0;
+	const char *siblingreason = "door_projection_not_captured";
 
 	if (!door) {
+		*reason = "invalid_door_backlink";
 		return NULL;
 	}
 
@@ -1135,16 +1178,22 @@ static struct prop *accessibilityBeaconVisibleDoor(struct prop *prop)
 		s32 siblingnum = accessibilityBeaconPropNum(siblingprop);
 
 		if (siblingprop
-				&& (siblingprop->flags & PROPFLAG_ONTHISSCREENTHISTICK)
+				&& accessibilityBeaconDoorIsOnScreen(
+					siblingprop, &siblingreason)
 				&& siblingnum >= 0
 				&& (bestnum < 0 || siblingnum < bestnum)) {
 			bestprop = siblingprop;
 			bestnum = siblingnum;
+			*reason = siblingreason;
 		}
 
 		sibling = sibling->sibling;
 	} while (sibling && sibling != door
 			&& guard++ < ACCESSIBILITY_BEACON_MAX_DOOR_SIBLINGS);
+
+	if (!bestprop) {
+		*reason = siblingreason;
+	}
 
 	return bestprop;
 }
@@ -1352,11 +1401,10 @@ static s32 accessibilityBeaconScan(s32 detailed)
 						prop, &siblingcount);
 
 				canonicalpropnum = accessibilityBeaconPropNum(canonical);
-				candidate = accessibilityBeaconVisibleDoor(prop);
+				candidate = accessibilityBeaconVisibleDoor(prop, &reason);
 
 				if (!candidate) {
 					eligible = false;
-					reason = "door_not_rendered_this_tick";
 				} else if (!accessibilityBeaconDoorEligible(candidate, &reason)) {
 					eligible = false;
 				}
@@ -1550,13 +1598,30 @@ static struct prop *accessibilityBeaconValidateResult(struct accessibilitybeacon
 			return NULL;
 		}
 	} else if (result->category == ACCESSIBILITY_BEACON_CATEGORY_DOOR) {
+		struct prop *visible;
+		struct prop *canonical;
+		s32 siblingcount;
+
 		if (!accessibilityBeaconDoorEligible(prop, reason)) {
 			return NULL;
 		}
-		if ((prop->flags & PROPFLAG_ONTHISSCREENTHISTICK) == 0) {
-			*reason = "door_no_longer_rendered";
+
+		canonical = accessibilityBeaconCanonicalDoor(prop, &siblingcount);
+
+		if (accessibilityBeaconPropNum(canonical) != result->canonicalpropnum) {
+			*reason = "door_canonical_identity_changed";
 			return NULL;
 		}
+
+		visible = accessibilityBeaconVisibleDoor(prop, reason);
+
+		if (!visible || !accessibilityBeaconDoorEligible(visible, reason)) {
+			return NULL;
+		}
+
+		prop = visible;
+		result->propnum = accessibilityBeaconPropNum(prop);
+		result->entity = prop->obj;
 	} else {
 		*reason = "category_invalid";
 		return NULL;
@@ -2867,11 +2932,10 @@ static void accessibilityBeaconDumpDiagnosticCandidate(u64 captureid,
 					prop, &siblingcount);
 
 			canonicalpropnum = accessibilityBeaconPropNum(canonical);
-			candidate = accessibilityBeaconVisibleDoor(prop);
+			candidate = accessibilityBeaconVisibleDoor(prop, &finalreason);
 
 			if (!candidate) {
 				semanticeligible = false;
-				finalreason = "door_not_rendered_this_tick";
 			} else if (!accessibilityBeaconDoorEligible(
 					candidate, &semanticreason)) {
 				semanticeligible = false;
