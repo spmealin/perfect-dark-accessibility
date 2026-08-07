@@ -3,6 +3,14 @@
 
 #include <PR/ultratypes.h>
 
+enum accessibilityscanner {
+	ACCESSIBILITY_SCANNER_INTERACTABLE = 0,
+	ACCESSIBILITY_SCANNER_DOOR = 1,
+	ACCESSIBILITY_SCANNER_PICKUP = 2,
+	ACCESSIBILITY_SCANNER_NON_HOSTILE = 3,
+	ACCESSIBILITY_SCANNER_COUNT = 4,
+};
+
 void accessibilityInit(void);
 void accessibilityShutdown(void);
 void accessibilityPerformanceTick(void);
@@ -29,6 +37,8 @@ void accessibilityGetCombatRadarTuning(f32 *mediumdistance,
 		f32 *closedistance, f32 *volume);
 s32 accessibilityGetVirtualCaneMode(void);
 void accessibilitySetVirtualCaneMode(s32 mode);
+s32 accessibilityGetScannerActive(s32 scanner);
+void accessibilitySetScannerActive(s32 scanner, s32 active);
 void accessibilityGetVirtualCaneTuning(f32 *reach, f32 *fulldistance,
 		f32 *fadedistance, f32 *silentdistance);
 void accessibilityGetVirtualCanePitch(f32 *nearfrequency,

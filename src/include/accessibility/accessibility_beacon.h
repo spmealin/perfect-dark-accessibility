@@ -6,6 +6,7 @@
 void accessibilityBeaconTick(void);
 void accessibilityBeaconCaptureGame(void);
 void accessibilityBeaconReset(const char *reason, s32 preservecategories);
+void accessibilityBeaconRestoreConfiguredState(void);
 void accessibilityBeaconDumpDiagnostics(u64 captureid);
 
 #endif

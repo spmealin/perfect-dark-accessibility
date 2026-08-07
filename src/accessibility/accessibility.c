@@ -30,6 +30,10 @@ static s32 g_AccessibilityMenuNarrationEnabledConfig = 1;
 static s32 g_AccessibilityHudMessagesEnabledConfig = 1;
 static s32 g_AccessibilityEnvironmentalHazardsEnabledConfig = 1;
 static s32 g_AccessibilityInteractableBeaconsEnabledConfig = 1;
+static s32 g_AccessibilityInteractableScannerActiveConfig = 1;
+static s32 g_AccessibilityDoorScannerActiveConfig = 1;
+static s32 g_AccessibilityPickupScannerActiveConfig = 1;
+static s32 g_AccessibilityNonHostileScannerActiveConfig = 1;
 static s32 g_AccessibilityIrScannerAudioEnabledConfig = 1;
 static s32 g_AccessibilityNonHostileBeaconsEnabledConfig = 1;
 static s32 g_AccessibilityRTrackerAudioEnabledConfig = 1;
@@ -336,6 +340,7 @@ void accessibilityInit(void)
 			= g_AccessibilityCombatRadarContactAlertsConfig;
 	g_AccessibilityStartTimeUs = sysGetMicroseconds();
 	accessibilityBeaconReset("init", false);
+	accessibilityBeaconRestoreConfiguredState();
 	accessibilityCaneReset("init");
 	accessibilityCombatRadarReset("init");
 	accessibilityHazardReset("init");
@@ -437,6 +442,24 @@ void accessibilityInit(void)
 				ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS ? 1000000 : 0,
 				sysArgCheck("--accessibility-speech-test"),
 				fsFullPath(ACCESSIBILITY_LOG_PATH));
+		accessibilityLogEvent("lifecycle", "scanner_start_state",
+				"interactable_saved=%d door_saved=%d pickup_saved=%d non_hostile_saved=%d interactable_effective=%d door_effective=%d pickup_effective=%d non_hostile_effective=%d persistence=pd.ini",
+				accessibilityGetScannerActive(
+					ACCESSIBILITY_SCANNER_INTERACTABLE),
+				accessibilityGetScannerActive(ACCESSIBILITY_SCANNER_DOOR),
+				accessibilityGetScannerActive(ACCESSIBILITY_SCANNER_PICKUP),
+				accessibilityGetScannerActive(
+					ACCESSIBILITY_SCANNER_NON_HOSTILE),
+				g_AccessibilityInteractableBeaconsEnabledConfig
+					&& accessibilityGetScannerActive(
+						ACCESSIBILITY_SCANNER_INTERACTABLE),
+				g_AccessibilityInteractableBeaconsEnabledConfig
+					&& accessibilityGetScannerActive(ACCESSIBILITY_SCANNER_DOOR),
+				g_AccessibilityInteractableBeaconsEnabledConfig
+					&& accessibilityGetScannerActive(ACCESSIBILITY_SCANNER_PICKUP),
+				g_AccessibilityNonHostileBeaconsEnabledConfig
+					&& accessibilityGetScannerActive(
+						ACCESSIBILITY_SCANNER_NON_HOSTILE));
 	}
 
 	if (g_AccessibilitySpeechEnabledConfig) {
@@ -617,6 +640,42 @@ void accessibilitySetVirtualCaneMode(s32 mode)
 	g_AccessibilityVirtualCaneModeConfig = mode;
 }
 
+s32 accessibilityGetScannerActive(s32 scanner)
+{
+	switch (scanner) {
+	case ACCESSIBILITY_SCANNER_INTERACTABLE:
+		return g_AccessibilityInteractableScannerActiveConfig;
+	case ACCESSIBILITY_SCANNER_DOOR:
+		return g_AccessibilityDoorScannerActiveConfig;
+	case ACCESSIBILITY_SCANNER_PICKUP:
+		return g_AccessibilityPickupScannerActiveConfig;
+	case ACCESSIBILITY_SCANNER_NON_HOSTILE:
+		return g_AccessibilityNonHostileScannerActiveConfig;
+	default:
+		return false;
+	}
+}
+
+void accessibilitySetScannerActive(s32 scanner, s32 active)
+{
+	s32 value = active != 0;
+
+	switch (scanner) {
+	case ACCESSIBILITY_SCANNER_INTERACTABLE:
+		g_AccessibilityInteractableScannerActiveConfig = value;
+		break;
+	case ACCESSIBILITY_SCANNER_DOOR:
+		g_AccessibilityDoorScannerActiveConfig = value;
+		break;
+	case ACCESSIBILITY_SCANNER_PICKUP:
+		g_AccessibilityPickupScannerActiveConfig = value;
+		break;
+	case ACCESSIBILITY_SCANNER_NON_HOSTILE:
+		g_AccessibilityNonHostileScannerActiveConfig = value;
+		break;
+	}
+}
+
 PD_CONSTRUCTOR static void accessibilityConfigInit(void)
 {
 	configRegisterInt("Accessibility.Enabled", &g_AccessibilityEnabledConfig, 0, 1);
@@ -626,6 +685,14 @@ PD_CONSTRUCTOR static void accessibilityConfigInit(void)
 	configRegisterInt("Accessibility.HudMessages", &g_AccessibilityHudMessagesEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.EnvironmentalHazards", &g_AccessibilityEnvironmentalHazardsEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.InteractableBeacons", &g_AccessibilityInteractableBeaconsEnabledConfig, 0, 1);
+	configRegisterInt("Accessibility.InteractableScannerActive",
+			&g_AccessibilityInteractableScannerActiveConfig, 0, 1);
+	configRegisterInt("Accessibility.DoorScannerActive",
+			&g_AccessibilityDoorScannerActiveConfig, 0, 1);
+	configRegisterInt("Accessibility.PickupScannerActive",
+			&g_AccessibilityPickupScannerActiveConfig, 0, 1);
+	configRegisterInt("Accessibility.NonHostileScannerActive",
+			&g_AccessibilityNonHostileScannerActiveConfig, 0, 1);
 	configRegisterInt("Accessibility.IRScannerAudio", &g_AccessibilityIrScannerAudioEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.NonHostileBeacons", &g_AccessibilityNonHostileBeaconsEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.RTrackerAudio", &g_AccessibilityRTrackerAudioEnabledConfig, 0, 1);

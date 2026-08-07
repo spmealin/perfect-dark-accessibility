@@ -2687,6 +2687,9 @@ void accessibilityBeaconTick(void)
 		}
 		accessibilityBeaconPlayToggleConfirmation(
 				ACCESSIBILITY_BEACON_CATEGORY_OBJECT);
+		accessibilitySetScannerActive(ACCESSIBILITY_SCANNER_INTERACTABLE,
+				g_AccessibilityBeaconCategoryActive[
+					ACCESSIBILITY_BEACON_CATEGORY_OBJECT]);
 
 		toggled = true;
 	}
@@ -2707,6 +2710,9 @@ void accessibilityBeaconTick(void)
 		}
 		accessibilityBeaconPlayToggleConfirmation(
 				ACCESSIBILITY_BEACON_CATEGORY_DOOR);
+		accessibilitySetScannerActive(ACCESSIBILITY_SCANNER_DOOR,
+				g_AccessibilityBeaconCategoryActive[
+					ACCESSIBILITY_BEACON_CATEGORY_DOOR]);
 
 		toggled = true;
 	}
@@ -2727,6 +2733,9 @@ void accessibilityBeaconTick(void)
 		}
 		accessibilityBeaconPlayToggleConfirmation(
 				ACCESSIBILITY_BEACON_CATEGORY_PICKUP);
+		accessibilitySetScannerActive(ACCESSIBILITY_SCANNER_PICKUP,
+				g_AccessibilityBeaconCategoryActive[
+					ACCESSIBILITY_BEACON_CATEGORY_PICKUP]);
 
 		toggled = true;
 	}
@@ -2752,6 +2761,9 @@ void accessibilityBeaconTick(void)
 		}
 		accessibilityBeaconPlayToggleConfirmation(
 				ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE);
+		accessibilitySetScannerActive(ACCESSIBILITY_SCANNER_NON_HOSTILE,
+				g_AccessibilityBeaconCategoryActive[
+					ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE]);
 
 		toggled = true;
 	}
@@ -2856,6 +2868,28 @@ void accessibilityBeaconReset(const char *reason, s32 preservecategories)
 	g_AccessibilityBeaconObserverRemote = false;
 	g_AccessibilityBeaconSuppressed
 			= preservecategories && accessibilityBeaconAnyActive();
+}
+
+void accessibilityBeaconRestoreConfiguredState(void)
+{
+	g_AccessibilityBeaconCategoryActive[
+			ACCESSIBILITY_BEACON_CATEGORY_OBJECT]
+			= accessibilityIsInteractableBeaconsEnabled()
+			&& accessibilityGetScannerActive(
+				ACCESSIBILITY_SCANNER_INTERACTABLE);
+	g_AccessibilityBeaconCategoryActive[
+			ACCESSIBILITY_BEACON_CATEGORY_DOOR]
+			= accessibilityIsInteractableBeaconsEnabled()
+			&& accessibilityGetScannerActive(ACCESSIBILITY_SCANNER_DOOR);
+	g_AccessibilityBeaconCategoryActive[
+			ACCESSIBILITY_BEACON_CATEGORY_PICKUP]
+			= accessibilityIsInteractableBeaconsEnabled()
+			&& accessibilityGetScannerActive(ACCESSIBILITY_SCANNER_PICKUP);
+	g_AccessibilityBeaconCategoryActive[
+			ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE]
+			= accessibilityIsNonHostileBeaconsEnabled()
+			&& accessibilityGetScannerActive(
+				ACCESSIBILITY_SCANNER_NON_HOSTILE);
 }
 
 static s32 accessibilityBeaconDiagnosticFocusSupported(struct prop *prop)
