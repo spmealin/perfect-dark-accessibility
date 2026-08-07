@@ -139,6 +139,8 @@ struct accessibilitytargetingdevicetarget {
 	s32 stagenum;
 	s32 weaponnum;
 	s32 tagid;
+	s32 proptype;
+	s32 mindifficulty;
 	s32 trainingonly;
 };
 
@@ -160,14 +162,47 @@ struct accessibilitytargetingcamspytarget {
 
 static const struct accessibilitytargetingdevicetarget
 		g_AccessibilityTargetingDeviceTargets[] = {
-	{ STAGE_CITRAINING, WEAPON_DATAUPLINK, 0x30, true },
-	{ STAGE_CITRAINING, WEAPON_ECMMINE, 0x32, true },
-	{ STAGE_CITRAINING, WEAPON_DOORDECODER, 0x35, true },
-	{ STAGE_INVESTIGATION, WEAPON_DATAUPLINK, 0x0a, false },
-	{ STAGE_CHICAGO, WEAPON_DATAUPLINK, 0x0a, false },
-	{ STAGE_G5BUILDING, WEAPON_DOORDECODER, 0x11, false },
-	{ STAGE_DEFECTION, WEAPON_ECMMINE, 0x03, false },
-	{ STAGE_DEFECTION, WEAPON_ECMMINE, 0x04, false },
+	/* Carrington Institute device training. */
+	{ STAGE_CITRAINING, WEAPON_DATAUPLINK, 0x30, PROPTYPE_OBJ, DIFF_A, true },
+	{ STAGE_CITRAINING, WEAPON_ECMMINE, 0x32, PROPTYPE_OBJ, DIFF_A, true },
+	{ STAGE_CITRAINING, WEAPON_DOORDECODER, 0x35, PROPTYPE_OBJ, DIFF_A, true },
+
+	/* DataDyne Central: Defection. */
+	{ STAGE_DEFECTION, WEAPON_ECMMINE, 0x03, PROPTYPE_OBJ, DIFF_A, false },
+	{ STAGE_DEFECTION, WEAPON_ECMMINE, 0x04, PROPTYPE_OBJ, DIFF_A, false },
+	{ STAGE_DEFECTION, WEAPON_DATAUPLINK, 0x0c, PROPTYPE_OBJ, DIFF_A, false },
+
+	/* DataDyne Research: Investigation. */
+	{ STAGE_INVESTIGATION, WEAPON_DATAUPLINK, 0x0a, PROPTYPE_OBJ, DIFF_A, false },
+
+	/* Area 51: Infiltration. */
+	{ STAGE_INFILTRATION, WEAPON_COMMSRIDER, 0x07, PROPTYPE_OBJ, DIFF_A, false },
+	{ STAGE_INFILTRATION, WEAPON_EXPLOSIVES, 0x10, PROPTYPE_OBJ, DIFF_A, false },
+
+	/* Area 51: Rescue. */
+	{ STAGE_RESCUE, WEAPON_DATAUPLINK, 0x01, PROPTYPE_OBJ, DIFF_A, false },
+	{ STAGE_RESCUE, WEAPON_DATAUPLINK, 0x02, PROPTYPE_OBJ, DIFF_A, false },
+	{ STAGE_RESCUE, WEAPON_DATAUPLINK, 0x03, PROPTYPE_OBJ, DIFF_A, false },
+
+	/* Area 51: Escape. */
+	{ STAGE_ESCAPE, WEAPON_AUTOSURGEON, 0x00, PROPTYPE_OBJ, DIFF_SA, false },
+
+	/* G5 Building: Reconnaissance. */
+	{ STAGE_G5BUILDING, WEAPON_DOORDECODER, 0x11, PROPTYPE_OBJ, DIFF_A, false },
+
+	/* Chicago: Stealth. */
+	{ STAGE_CHICAGO, WEAPON_REMOTEMINE, 0x08, PROPTYPE_DOOR, DIFF_A, false },
+	{ STAGE_CHICAGO, WEAPON_REMOTEMINE, 0x09, PROPTYPE_DOOR, DIFF_A, false },
+	{ STAGE_CHICAGO, WEAPON_DATAUPLINK, 0x0a, PROPTYPE_OBJ, DIFF_A, false },
+	{ STAGE_CHICAGO, WEAPON_TRACERBUG, 0x0c, PROPTYPE_OBJ, DIFF_A, false },
+
+	/* Carrington Institute: Defense. */
+	{ STAGE_DEFENSE, WEAPON_DATAUPLINK, 0x3c, PROPTYPE_OBJ, DIFF_A, false },
+
+	/* Skedar Ruins: Battle Shrine. */
+	{ STAGE_SKEDARRUINS, WEAPON_TARGETAMPLIFIER, 0x01, PROPTYPE_OBJ, DIFF_A, false },
+	{ STAGE_SKEDARRUINS, WEAPON_TARGETAMPLIFIER, 0x02, PROPTYPE_OBJ, DIFF_A, false },
+	{ STAGE_SKEDARRUINS, WEAPON_TARGETAMPLIFIER, 0x03, PROPTYPE_OBJ, DIFF_A, false },
 };
 
 static struct accessibilitytargetinggameaudit
@@ -976,7 +1011,8 @@ static s32 accessibilityTargetingGameDeviceTargetInScope(
 	}
 
 	if (!target->trainingonly) {
-		return bgunGetWeaponNum(HAND_RIGHT) == target->weaponnum;
+		return lvGetDifficulty() >= target->mindifficulty
+				&& bgunGetWeaponNum(HAND_RIGHT) == target->weaponnum;
 	}
 
 	data = dtGetData();
@@ -2382,7 +2418,7 @@ static void accessibilityTargetingObserveDevice(
 		} else if (propnum < 0 || !obj || !prop) {
 			eligible = false;
 			reason = "target_unavailable";
-		} else if (prop->type != PROPTYPE_OBJ) {
+		} else if (prop->type != targetspec->proptype) {
 			eligible = false;
 			reason = "wrong_prop_type";
 		} else if (!prop->active || (prop->flags & PROPFLAG_ENABLED) == 0) {
@@ -2433,10 +2469,12 @@ static void accessibilityTargetingObserveDevice(
 
 		if (detailed || scopechanged) {
 			accessibilityLogEvent("targeting", "device_candidate",
-					"frame=%d stage=%d player=%d accepted=%d reason=%s weapon=%d equipped=%d target_tag=%d prop=%p propnum=%d obj=%p prop_type=%d prop_flags=0x%02x obj_flags2=0x%08x obj_hidden=0x%08x raw_aim_prop=%p raw_aim_valid=%d aimed=%d",
+					"frame=%d stage=%d player=%d accepted=%d reason=%s weapon=%d equipped=%d target_tag=%d expected_prop_type=%d min_difficulty=%d difficulty=%d prop=%p propnum=%d obj=%p prop_type=%d prop_flags=0x%02x obj_flags2=0x%08x obj_hidden=0x%08x raw_aim_prop=%p raw_aim_valid=%d aimed=%d",
 					g_Vars.lvframe60, g_Vars.stagenum,
 					g_Vars.currentplayernum, eligible, reason,
 					targetspec->weaponnum, equipped, targetspec->tagid,
+					targetspec->proptype,
+					targetspec->mindifficulty, lvGetDifficulty(),
 					(void *)prop, propnum, (void *)obj,
 					propnum >= 0 ? prop->type : -1,
 					propnum >= 0 ? prop->flags : 0,

@@ -17,6 +17,12 @@ Completed milestone records are stored in `documentation/milestones/`.
 The existing `docs/` directory contains upstream game-engine notes and retains
 its established path.
 
+Current feature-specific engineering records include:
+
+- `ACCESSIBILITY_SPECIAL_DEVICE_TARGET_AUDIT.md` — campaign setup inventory,
+  target-tag coverage, deliberate exclusions, and maintenance rules for
+  special-device lock tones.
+
 The root accessibility documents describe current behavior and project status.
 Files in this directory preserve design decisions, implementation handoffs, and
 investigation history; their original requirements can therefore differ from
