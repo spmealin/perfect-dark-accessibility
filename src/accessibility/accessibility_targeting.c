@@ -978,9 +978,7 @@ static s32 accessibilityTargetingPrecisionCandidateEligible(
 			&& record->candidate.precisionaimavailable
 			&& record->candidate.hasscreenaimerror
 			&& record->candidate.relationship
-					== ACCESSIBILITY_TARGETING_RELATIONSHIP_HOSTILE
-			&& record->candidate.category
-					!= ACCESSIBILITY_TARGETING_CATEGORY_SECURITY_CAMERA;
+					== ACCESSIBILITY_TARGETING_RELATIONSHIP_HOSTILE;
 }
 
 static f32 accessibilityTargetingPrecisionScore(
@@ -1004,7 +1002,7 @@ static void accessibilityTargetingUpdatePrecisionGuidance(
 	if (!observation->precisionguidanceactive) {
 		if (g_AccessibilityTargetingCurrentState->precisionguidanceactive) {
 			accessibilityLogEvent("targeting", "precision_guidance_stop",
-					"frame=%d reason=scope_inactive propnum=%d",
+					"frame=%d reason=manual_aim_inactive propnum=%d",
 					observation->frame60,
 					g_AccessibilityTargetingCurrentState
 							->precisionguidanceidentity.propnum);
@@ -1320,8 +1318,8 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 
 		camera = record->candidate.category
 				== ACCESSIBILITY_TARGETING_CATEGORY_SECURITY_CAMERA;
-		precisionguidance = !camera
-				&& g_AccessibilityTargetingCurrentState->precisionguidanceactive
+		precisionguidance
+				= g_AccessibilityTargetingCurrentState->precisionguidanceactive
 				&& accessibilityTargetingIdentityEqual(
 					&record->candidate.identity,
 					&g_AccessibilityTargetingCurrentState
@@ -1335,10 +1333,10 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 			elevationfrequency = accessibilityTargetingPrecisionFrequency(
 					&record->candidate, combatfrequency, &elevationzone);
 		}
-		startfrequency = camera
+		startfrequency = camera && !precisionguidance
 				? ACCESSIBILITY_TARGETING_CAMERA_START_FREQUENCY_HZ
 				: elevationfrequency;
-		endfrequency = camera
+		endfrequency = camera && !precisionguidance
 				? ACCESSIBILITY_TARGETING_CAMERA_END_FREQUENCY_HZ
 				: elevationfrequency;
 		slot = accessibilityTargetingFindCombatSlot(&record->candidate.identity);
@@ -1365,8 +1363,8 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 					voice->identity.sourceslot, voice->identity.propnum,
 					(void *)record->candidate.prop,
 					record->candidate.category,
-					camera ? "security_camera_sweep"
-						: precisionguidance ? "sniper_precision"
+					precisionguidance ? "manual_aim_precision"
+						: camera ? "security_camera_sweep"
 						: "enemy_proximity",
 					rawelevationdegrees,
 					elevationdegrees,
@@ -1391,7 +1389,7 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 		}
 
 		voice = &g_AccessibilityTargetingCombatSlots[slot];
-		if (!camera) {
+		if (!camera || precisionguidance) {
 			voice->frequencyhz += (elevationfrequency - voice->frequencyhz)
 					* (precisionguidance
 						? ACCESSIBILITY_TARGETING_PRECISION_FREQUENCY_SMOOTHING
@@ -1424,14 +1422,14 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 		restart |= normalizedvolume > 0.0f && !voice->audible;
 		cuedistance = record->candidate.hasdistancecue
 				? record->candidate.distancecue : record->candidate.distance;
-		if (camera) {
-			periodms = ACCESSIBILITY_TARGETING_CAMERA_PERIOD_MS;
-			durationms = ACCESSIBILITY_TARGETING_CAMERA_DURATION_MS;
-			distancezone = 0;
-			proximity = 0.0f;
-		} else if (precisionguidance) {
+		if (precisionguidance) {
 			periodms = ACCESSIBILITY_TARGETING_PRECISION_PERIOD_MS;
 			durationms = ACCESSIBILITY_TARGETING_PRECISION_DURATION_MS;
+			distancezone = 0;
+			proximity = 0.0f;
+		} else if (camera) {
+			periodms = ACCESSIBILITY_TARGETING_CAMERA_PERIOD_MS;
+			durationms = ACCESSIBILITY_TARGETING_CAMERA_DURATION_MS;
 			distancezone = 0;
 			proximity = 0.0f;
 		} else {
@@ -1440,7 +1438,7 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 					&periodms, &durationms,
 					&distancezone, &proximity);
 		}
-		if (camera) {
+		if (camera && !precisionguidance) {
 			startfrequency = ACCESSIBILITY_TARGETING_CAMERA_START_FREQUENCY_HZ;
 			endfrequency = ACCESSIBILITY_TARGETING_CAMERA_END_FREQUENCY_HZ;
 		} else if (distancezone == 2 && !precisionguidance) {
@@ -1478,8 +1476,8 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 					"frame=%d oscillator_slot=%d propnum=%d category=%d cue=%s center_distance=%.3f cue_distance=%.3f cue_distance_available=%d punch_range=%.3f punch_range_exit=%.3f far_threshold=%.3f zone=%s proximity=%.4f period_ms=%d duration_ms=%d contour=%s continuous=%d trigger_now=%d raw_elevation_degrees=%.2f elevation_degrees=%.2f elevation_zone=%s target_screen=%.2f,%.2f aim_screen=%.2f,%.2f precision_anchor_source=%d precision_anchor_hitpart=%d precision_anchor_node=%p precision_anchor_nodes_examined=%d base_frequency_hz=%.1f target_frequency_hz=%.1f start_frequency_hz=%.1f end_frequency_hz=%.1f volume=%.4f pan=%.4f",
 					frame60, slot, voice->identity.propnum,
 					record->candidate.category,
-					camera ? "security_camera_sweep"
-						: precisionguidance ? "sniper_precision"
+					precisionguidance ? "manual_aim_precision"
+						: camera ? "security_camera_sweep"
 						: "enemy_proximity",
 					record->candidate.distance, cuedistance,
 					record->candidate.hasdistancecue, distancecuereference,
@@ -1489,7 +1487,7 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 					distancezone == 2 ? "punch_range"
 						: distancezone == 1 ? "ramping" : "far",
 					proximity, periodms, durationms,
-					camera ? "camera_sweep"
+					camera && !precisionguidance ? "camera_sweep"
 						: frequencycontour
 								== ACCESSIBILITY_TONE_COMBAT_CONTOUR_BASE_THEN_END
 							? "base_then_elevation"

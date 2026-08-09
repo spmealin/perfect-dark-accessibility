@@ -51,6 +51,7 @@ enum accessibilitytargetingprecisionanchorsource {
 	ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_MODEL_HITBOX = 1,
 	ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_NATIVE_AUTOAIM = 2,
 	ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_MODEL_GEOMETRY = 3,
+	ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_MODEL_BOUNDS = 4,
 };
 
 enum accessibilitytargetingprecisionanchorslot {
@@ -121,6 +122,7 @@ struct accessibilitytargetingcombatprojection {
 			precisionanchors[ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_COUNT];
 	s32 precisionanchornodesexamined;
 	s32 precisionfallbackvalid;
+	s32 precisionfallbacksource;
 	f32 precisionfallbackscreenx;
 	f32 precisionfallbackscreeny;
 	s32 precisionfineattempted;
@@ -318,18 +320,16 @@ static f32 accessibilityTargetingGamePrecisionAnchorScore(f32 screenx,
 }
 
 static void accessibilityTargetingGameCapturePrecisionAnchors(
-		struct prop *prop, struct chrdata *chr,
+		struct prop *prop, struct chrdata *chr, struct defaultobj *obj,
 		struct accessibilitytargetingcombatprojection *projection)
 {
-	struct model *model = chr ? chr->model : NULL;
+	struct model *model = chr ? chr->model : obj ? obj->model : NULL;
 	struct modelnode *node;
 	s32 validanchors = 0;
 	s32 i;
 
 	if (!prop || !model || !model->definition || !model->matrices
-			|| bgunGetWeaponNum(HAND_RIGHT) != WEAPON_SNIPERRIFLE
-			|| g_Vars.currentplayer->zoominfovy <= 0.0f
-			|| g_Vars.currentplayer->zoominfovy >= PLAYER_DEFAULT_FOV) {
+			|| !g_Vars.currentplayer->insightaimmode) {
 		return;
 	}
 
@@ -338,8 +338,9 @@ static void accessibilityTargetingGameCapturePrecisionAnchors(
 	while (node) {
 		if ((node->type & 0xff) == MODELNODETYPE_BBOX) {
 			struct modelrodata_bbox *bbox = &node->rodata->bbox;
-			s32 slot = accessibilityTargetingGamePrecisionAnchorSlot(
-					bbox->hitpart);
+			s32 slot = chr
+					? accessibilityTargetingGamePrecisionAnchorSlot(bbox->hitpart)
+					: ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_OTHER;
 
 			projection->precisionanchornodesexamined++;
 
@@ -400,19 +401,31 @@ static void accessibilityTargetingGameCapturePrecisionAnchors(
 	}
 
 	if (!validanchors) {
-		struct coord nativepos;
-		f32 xbounds[2];
-		f32 ybounds[2];
-		f32 screen[2];
+		if (chr) {
+			struct coord nativepos;
+			f32 xbounds[2];
+			f32 ybounds[2];
+			f32 screen[2];
 
-		if (chrCalculateAutoAim(prop, &nativepos, xbounds, ybounds)) {
-			cam0f0b4eb8(&nativepos, screen, viGetFovY(), viGetAspect());
+			if (chrCalculateAutoAim(prop, &nativepos, xbounds, ybounds)) {
+				cam0f0b4eb8(&nativepos, screen, viGetFovY(), viGetAspect());
 
-			if (isfinite(screen[0]) && isfinite(screen[1])) {
-				projection->precisionfallbackvalid = true;
-				projection->precisionfallbackscreenx = screen[0];
-				projection->precisionfallbackscreeny = screen[1];
+				if (isfinite(screen[0]) && isfinite(screen[1])) {
+					projection->precisionfallbackvalid = true;
+					projection->precisionfallbacksource
+							= ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_NATIVE_AUTOAIM;
+					projection->precisionfallbackscreenx = screen[0];
+					projection->precisionfallbackscreeny = screen[1];
+				}
 			}
+		} else if (obj && projection->finite) {
+			projection->precisionfallbackvalid = true;
+			projection->precisionfallbacksource
+					= ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_MODEL_BOUNDS;
+			projection->precisionfallbackscreenx
+					= (projection->x1 + projection->x2) * 0.5f;
+			projection->precisionfallbackscreeny
+					= (projection->y1 + projection->y2) * 0.5f;
 		}
 	}
 }
@@ -480,6 +493,8 @@ static const char *accessibilityTargetingGamePrecisionAnchorSourceName(
 		return "model_hitbox";
 	case ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_NATIVE_AUTOAIM:
 		return "native_autoaim_fallback";
+	case ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_MODEL_BOUNDS:
+		return "model_bounds_fallback";
 	}
 
 	return "none";
@@ -535,10 +550,11 @@ static s32 accessibilityTargetingGameProjectPrecisionSample(
 }
 
 static s32 accessibilityTargetingGameTestPrecisionGeometry(
-		struct prop *prop, struct chrdata *chr, f32 screenx, f32 screeny,
+		struct prop *prop, struct chrdata *chr, struct defaultobj *obj,
+		f32 screenx, f32 screeny,
 		RoomNum *camrooms, s32 *hitpart, uintptr_t *hitnode)
 {
-	struct model *model = chr ? chr->model : NULL;
+	struct model *model = chr ? chr->model : obj ? obj->model : NULL;
 	struct modelnode *bboxnode = NULL;
 	struct modelnode *polygonnode = NULL;
 	struct modelnode *dlnode = NULL;
@@ -551,7 +567,8 @@ static s32 accessibilityTargetingGameTestPrecisionGeometry(
 	s32 matrixindex;
 	s32 part;
 
-	if (!prop || !chr || !model || !model->definition || !model->matrices) {
+	if (!prop || (!chr && !obj) || !model || !model->definition
+			|| !model->matrices) {
 		return false;
 	}
 
@@ -562,7 +579,7 @@ static s32 accessibilityTargetingGameTestPrecisionGeometry(
 		return false;
 	}
 
-	if (chrGetShield(chr) <= 0.0f) {
+	if (!chr || chrGetShield(chr) <= 0.0f) {
 		if (!func0f06bea0(model, model->definition->rootnode,
 				model->definition->rootnode, &gunpos, &gundir,
 				&polygonhit, &distance, &polygonnode, &part,
@@ -609,7 +626,8 @@ static void accessibilityTargetingGameRefinePrecisionProjection(
 {
 	struct prop *prop = (struct prop *)projection->prop;
 	struct chrdata *chr = (struct chrdata *)projection->chr;
-	struct model *model = chr ? chr->model : NULL;
+	struct defaultobj *obj = (struct defaultobj *)projection->obj;
+	struct model *model = chr ? chr->model : obj ? obj->model : NULL;
 	const struct accessibilitytargetingprecisionanchor *preferred;
 	u32 testedslots = 0;
 	s32 querybudget = ACCESSIBILITY_TARGETING_PRECISION_FINE_QUERY_BUDGET;
@@ -702,7 +720,7 @@ static void accessibilityTargetingGameRefinePrecisionProjection(
 			querybudget--;
 			projection->precisionfinequeries++;
 
-			if (accessibilityTargetingGameTestPrecisionGeometry(prop, chr,
+			if (accessibilityTargetingGameTestPrecisionGeometry(prop, chr, obj,
 					samplesx[bestsample], samplesy[bestsample], camrooms,
 					&projection->precisionfinehitpart,
 					&projection->precisionfinenode)) {
@@ -1442,8 +1460,8 @@ static void accessibilityTargetingCaptureCombat(void)
 		projection->finite = projection->projected
 				&& isfinite(projection->x2) && isfinite(projection->x1)
 				&& isfinite(projection->y2) && isfinite(projection->y1);
-		if (chr) {
-			accessibilityTargetingGameCapturePrecisionAnchors(prop, chr,
+		if (chr || obj) {
+			accessibilityTargetingGameCapturePrecisionAnchors(prop, chr, obj,
 					projection);
 		}
 
@@ -1495,7 +1513,7 @@ static void accessibilityTargetingCaptureCombat(void)
 			}
 		}
 
-		if (chr && projection->finite && projection->lineofsight
+		if ((chr || obj) && projection->finite && projection->lineofsight
 				&& accessibilityTargetingGamePrecisionFineEnvelope(projection)) {
 			const struct accessibilitytargetingprecisionanchor *anchor
 					= accessibilityTargetingGameSelectPrecisionAnchor(
@@ -1837,9 +1855,7 @@ static void accessibilityTargetingObserveCombat(
 			observation->zoomblend = 1.0f;
 		}
 	}
-	observation->precisionguidanceactive
-			= bgunGetWeaponNum(HAND_RIGHT) == WEAPON_SNIPERRIFLE
-			&& observation->zoomblend > 0.0f;
+	observation->precisionguidanceactive = observation->sighton;
 
 	/*
 	 * Native threats are admitted before the generic combat scan so a
@@ -2023,7 +2039,8 @@ static void accessibilityTargetingObserveCombat(
 			}
 		}
 
-		if (eligible && chr && observation->precisionguidanceactive) {
+		if (eligible && (chr || objecttarget)
+				&& observation->precisionguidanceactive) {
 			if (projection->precisionfineavailable) {
 				precisionaimsource
 						= ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_MODEL_GEOMETRY;
@@ -2049,8 +2066,7 @@ static void accessibilityTargetingObserveCombat(
 					targetscreenx = precisionanchor->screenx;
 					targetscreeny = precisionanchor->screeny;
 				} else if (projection->precisionfallbackvalid) {
-					precisionaimsource
-							= ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_NATIVE_AUTOAIM;
+					precisionaimsource = projection->precisionfallbacksource;
 					targetscreenx = projection->precisionfallbackscreenx;
 					targetscreeny = projection->precisionfallbackscreeny;
 					precisionaimscore
