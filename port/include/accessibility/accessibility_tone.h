@@ -97,7 +97,7 @@ void accessibilityTonePlayRadarPing(f32 frequencyhz, f32 volume, f32 pan,
 		s32 height, s32 rear, s32 kind);
 void accessibilityToneStopRadar(void);
 void accessibilityToneSetHillBeacon(s32 enabled, f32 volume, f32 pan,
-		s32 rear, s32 identitychirp, s32 restart);
+		s32 rear, s32 identitychirp, s32 scoring, s32 restart);
 void accessibilityToneStopHillBeacon(void);
 void accessibilityTonePlayCaneSlot(s32 slot, f32 startfrequencyhz,
 		f32 endfrequencyhz, f32 volume, f32 pan, s32 durationms,

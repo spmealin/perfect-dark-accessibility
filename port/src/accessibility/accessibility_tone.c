@@ -93,6 +93,7 @@
 #define ACCESSIBILITY_MARKER_RELEASE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.005f))
 #define ACCESSIBILITY_MARKER_MIN_START_SPACING_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.50f))
 #define ACCESSIBILITY_HILL_CHIRP_PERIOD_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 1.0f))
+#define ACCESSIBILITY_HILL_SCORING_CHIRP_PERIOD_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.5f))
 #define ACCESSIBILITY_HILL_REAR_MODULATION_HZ 30.0f
 #define ACCESSIBILITY_TONE_MIX_BUFFER_SAMPLES 2048
 #define TWO_PI 6.28318530717958647692f
@@ -166,6 +167,7 @@ static SDL_atomic_t g_AccessibilityHillVolumeMillionths;
 static SDL_atomic_t g_AccessibilityHillPanMillionths;
 static SDL_atomic_t g_AccessibilityHillRear;
 static SDL_atomic_t g_AccessibilityHillIdentityChirp;
+static SDL_atomic_t g_AccessibilityHillScoring;
 static SDL_atomic_t g_AccessibilityCaneEnabled[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityCaneSequence[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityCaneFrequencyMilliHz[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
@@ -785,7 +787,7 @@ void accessibilityToneStopRadar(void)
 }
 
 void accessibilityToneSetHillBeacon(s32 enabled, f32 volume, f32 pan,
-		s32 rear, s32 identitychirp, s32 restart)
+		s32 rear, s32 identitychirp, s32 scoring, s32 restart)
 {
 	if (volume < 0.0f) {
 		volume = 0.0f;
@@ -804,6 +806,7 @@ void accessibilityToneSetHillBeacon(s32 enabled, f32 volume, f32 pan,
 			(s32)(pan * 1000000.0f));
 	SDL_AtomicSet(&g_AccessibilityHillRear, rear != 0);
 	SDL_AtomicSet(&g_AccessibilityHillIdentityChirp, identitychirp != 0);
+	SDL_AtomicSet(&g_AccessibilityHillScoring, scoring != 0);
 	SDL_AtomicSet(&g_AccessibilityHillEnabled, enabled && volume > 0.0f);
 	if (restart) {
 		SDL_AtomicAdd(&g_AccessibilityHillSequence, 1);
@@ -1022,6 +1025,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 	s32 hillenabled = SDL_AtomicGet(&g_AccessibilityHillEnabled);
 	s32 hillidentitychirp = SDL_AtomicGet(
 			&g_AccessibilityHillIdentityChirp);
+	s32 hillscoring = SDL_AtomicGet(&g_AccessibilityHillScoring);
 	s32 hillrear = SDL_AtomicGet(&g_AccessibilityHillRear);
 	s32 hazardenabled = SDL_AtomicGet(&g_AccessibilityHazardEnabled);
 	s32 combatenabled[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
@@ -2343,7 +2347,9 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		}
 		g_AccessibilityHillChirpSample++;
 		if (g_AccessibilityHillChirpSample
-				>= ACCESSIBILITY_HILL_CHIRP_PERIOD_SAMPLES) {
+				>= (hillscoring
+						? ACCESSIBILITY_HILL_SCORING_CHIRP_PERIOD_SAMPLES
+						: ACCESSIBILITY_HILL_CHIRP_PERIOD_SAMPLES)) {
 			g_AccessibilityHillChirpSample = 0;
 			g_AccessibilityHillChirpPhase = 0.0f;
 		}

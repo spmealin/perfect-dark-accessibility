@@ -6,6 +6,7 @@
 #include "data.h"
 #include "game/lv.h"
 #include "game/propsnd.h"
+#include "game/radar.h"
 #include "lib/collision.h"
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_combat_radar.h"
@@ -16,15 +17,20 @@
 
 #define ACCESSIBILITY_HILL_INNER_DISTANCE 100.0f
 #define ACCESSIBILITY_HILL_RANGE_HYSTERESIS 75.0f
-#define ACCESSIBILITY_HILL_RADAR_GAIN 0.25f
+#define ACCESSIBILITY_HILL_RADAR_GAIN 0.50f
 #define ACCESSIBILITY_HILL_LOG_TICKS TICKS(60)
+#define ACCESSIBILITY_HILL_SCORING_GRACE_TICKS TICKS(2)
 
 static s32 g_AccessibilityHillAudible;
 static s32 g_AccessibilityHillLocal;
 static s32 g_AccessibilityHillInRange;
 static s32 g_AccessibilityHillLineOfSight;
 static s32 g_AccessibilityHillRadarShown;
+static s32 g_AccessibilityHillInside;
+static s32 g_AccessibilityHillScoring;
 static s32 g_AccessibilityHillIndex = -1;
+static s32 g_AccessibilityHillElapsed240 = -1;
+static s32 g_AccessibilityHillLastProgressTick = -1000;
 static s32 g_AccessibilityHillNextLogTick;
 static s32 g_AccessibilityHillSuppressed;
 
@@ -144,6 +150,10 @@ void accessibilityHillTick(void)
 	s32 lineofsight;
 	s32 radarshown;
 	s32 local;
+	s32 inside;
+	s32 playerteam;
+	s32 teamcontrols;
+	s32 scoring;
 	s32 rear;
 	s32 restart;
 	s32 wasSuppressed;
@@ -164,6 +174,10 @@ void accessibilityHillTick(void)
 		g_AccessibilityHillInRange = false;
 		g_AccessibilityHillLineOfSight = false;
 		g_AccessibilityHillRadarShown = false;
+		g_AccessibilityHillInside = false;
+		g_AccessibilityHillScoring = false;
+		g_AccessibilityHillElapsed240 = -1;
+		g_AccessibilityHillLastProgressTick = -1000;
 		return;
 	}
 
@@ -189,6 +203,20 @@ void accessibilityHillTick(void)
 	gain = localgain > radargain ? localgain : radargain;
 	gain *= mastervolume;
 	local = localgain > 0.0f;
+	inside = g_Vars.currentplayer->prop->rooms[0]
+			== g_ScenarioData.koh.hillrooms[0];
+	playerteam = radarGetTeamIndex(g_Vars.currentplayer->prop->chr->team);
+	teamcontrols = playerteam == g_ScenarioData.koh.occupiedteam;
+
+	if (g_AccessibilityHillIndex == g_ScenarioData.koh.hillindex
+			&& g_AccessibilityHillElapsed240 >= 0
+			&& g_ScenarioData.koh.elapsed240 > g_AccessibilityHillElapsed240) {
+		g_AccessibilityHillLastProgressTick = g_Vars.lvframe60;
+	}
+
+	scoring = inside && teamcontrols
+			&& g_Vars.lvframe60 - g_AccessibilityHillLastProgressTick
+				<= ACCESSIBILITY_HILL_SCORING_GRACE_TICKS;
 
 	pan = psCalculatePan2(&g_ScenarioData.koh.hillpos, 0, -1.0f, NULL);
 	normalizedpan = ((f32)pan - (f32)AL_PAN_CENTER)
@@ -197,16 +225,19 @@ void accessibilityHillTick(void)
 	restart = wasSuppressed
 			|| (!g_AccessibilityHillAudible && gain > 0.0f)
 			|| g_AccessibilityHillIndex != g_ScenarioData.koh.hillindex
-			|| g_AccessibilityHillLocal != local;
+			|| g_AccessibilityHillLocal != local
+			|| g_AccessibilityHillScoring != scoring;
 
 	accessibilityToneSetHillBeacon(gain > 0.0f, gain, normalizedpan,
-			rear, local, restart);
+			rear, gain > 0.0f, scoring, restart);
 
 	if (restart || g_AccessibilityHillInRange != inrange
 			|| g_AccessibilityHillLineOfSight != lineofsight
-			|| g_AccessibilityHillRadarShown != radarshown) {
+			|| g_AccessibilityHillRadarShown != radarshown
+			|| g_AccessibilityHillInside != inside
+			|| g_AccessibilityHillScoring != scoring) {
 		accessibilityLogEvent("hill_beacon", "state",
-				"tick=%d hill_index=%d position=%.3f,%.3f,%.3f room=%d observer=%p remote=%d observer_position=%.3f,%.3f,%.3f observer_room=%d distance=%.3f range=%.3f in_range=%d line_of_sight=%d radar_shown=%d mode=%s gain=%.5f pan=%.5f rear=%d restart=%d",
+				"tick=%d hill_index=%d position=%.3f,%.3f,%.3f room=%d observer=%p remote=%d observer_position=%.3f,%.3f,%.3f observer_room=%d distance=%.3f range=%.3f in_range=%d line_of_sight=%d radar_shown=%d mode=%s gain=%.5f pan=%.5f rear=%d inside=%d player_team=%d occupied_team=%d elapsed240=%d scoring=%d restart=%d",
 				g_Vars.lvframe60, g_ScenarioData.koh.hillindex,
 				g_ScenarioData.koh.hillpos.x,
 				g_ScenarioData.koh.hillpos.y,
@@ -216,15 +247,19 @@ void accessibilityHillTick(void)
 				observer.camera.x, observer.camera.y, observer.camera.z,
 				observer.room, distance, range, inrange, lineofsight,
 				radarshown, local ? "local" : radarshown ? "radar" : "silent",
-				gain, normalizedpan, rear, restart);
+				gain, normalizedpan, rear, inside, playerteam,
+				g_ScenarioData.koh.occupiedteam,
+				g_ScenarioData.koh.elapsed240, scoring, restart);
 	}
 
 	if (gain > 0.0f && g_Vars.lvframe60 >= g_AccessibilityHillNextLogTick) {
 		accessibilityLogEvent("hill_beacon", "summary",
-				"tick=%d hill_index=%d mode=%s distance=%.3f gain=%.5f pan=%.5f rear=%d in_range=%d line_of_sight=%d radar_shown=%d",
+				"tick=%d hill_index=%d mode=%s distance=%.3f gain=%.5f pan=%.5f rear=%d in_range=%d line_of_sight=%d radar_shown=%d inside=%d player_team=%d occupied_team=%d elapsed240=%d scoring=%d",
 				g_Vars.lvframe60, g_ScenarioData.koh.hillindex,
 				local ? "local" : "radar", distance, gain, normalizedpan,
-				rear, inrange, lineofsight, radarshown);
+				rear, inrange, lineofsight, radarshown, inside, playerteam,
+				g_ScenarioData.koh.occupiedteam,
+				g_ScenarioData.koh.elapsed240, scoring);
 		g_AccessibilityHillNextLogTick
 				= g_Vars.lvframe60 + ACCESSIBILITY_HILL_LOG_TICKS;
 	}
@@ -234,7 +269,10 @@ void accessibilityHillTick(void)
 	g_AccessibilityHillInRange = inrange;
 	g_AccessibilityHillLineOfSight = lineofsight;
 	g_AccessibilityHillRadarShown = radarshown;
+	g_AccessibilityHillInside = inside;
+	g_AccessibilityHillScoring = scoring;
 	g_AccessibilityHillIndex = g_ScenarioData.koh.hillindex;
+	g_AccessibilityHillElapsed240 = g_ScenarioData.koh.elapsed240;
 }
 
 void accessibilityHillReset(const char *reason)
@@ -249,7 +287,11 @@ void accessibilityHillReset(const char *reason)
 	g_AccessibilityHillInRange = false;
 	g_AccessibilityHillLineOfSight = false;
 	g_AccessibilityHillRadarShown = false;
+	g_AccessibilityHillInside = false;
+	g_AccessibilityHillScoring = false;
 	g_AccessibilityHillIndex = -1;
+	g_AccessibilityHillElapsed240 = -1;
+	g_AccessibilityHillLastProgressTick = -1000;
 	g_AccessibilityHillNextLogTick = 0;
 	g_AccessibilityHillSuppressed = false;
 }
