@@ -158,6 +158,7 @@ InteractableBeacons=1
 IRScannerAudio=1
 NonHostileBeacons=1
 TargetingFeedback=1
+TargetingVolume=0.15
 WeaponFunctionCues=1
 XRayScannerAudio=1
 VirtualCaneMode=1
@@ -417,7 +418,7 @@ Correlate `targeting/combat_candidate`, `scope_gate`, `observation`, `combat_slo
 
 #### Special-device target alignment
 
-With `Accessibility.TargetingFeedback=1`, start the Data Uplink exercise. Before equipping the Uplink, point at the designated terminal and confirm silence. Equip it, point directly at the designated terminal, and confirm the same fixed 660 Hz centered alignment tone used for a generic valid combat aim. Point at nearby computers, doors, the terminal edge/background, and other interactables; each must remain silent. Acquire the tone from beyond interaction range and verify that ordinary use still requires the game's stated range, so the cue is understood as target identity rather than action readiness. Complete, fail/abort, pause, open a menu, unequip the device, and leave CI; each transition must stop the tone.
+With `Accessibility.TargetingFeedback=1` and `Accessibility.TargetingVolume=0.15`, start the Data Uplink exercise. Before equipping the Uplink, point at the designated terminal and confirm silence. Equip it, point directly at the designated terminal, and confirm the same fixed 660 Hz centered alignment tone used for a generic valid combat aim. Point at nearby computers, doors, the terminal edge/background, and other interactables; each must remain silent. Acquire the tone from beyond interaction range and verify that ordinary use still requires the game's stated range, so the cue is understood as target identity rather than action readiness. Complete, fail/abort, pause, open a menu, unequip the device, and leave CI; each transition must stop the tone. Restart with values `0`, `0.15`, and `0.4`; confirm silence, the new default level, and the bounded maximum respectively, while positioned enemy cues remain unchanged. The session-start record must report the effective `targeting_volume`.
 
 Repeat with the ECM Mine exercise and hub. Only tagged hub `0x32` should acquire the tone. After acquiring it, make deliberate throws that land correctly, miss, or strike intervening geometry. Confirm the tone means “correct destination surface” and never announces or implies a guaranteed landing. Verify there is no positioned presence beacon from the targeting subsystem in either device profile and that independent F5/F6/F8 beacons retain their existing behavior. Logs should report `profile=3`/`source=3`, the expected weapon and target tag, raw aim identity, eligibility reason, acquisition/loss, and clean profile reset without new allocations or sound channels.
 

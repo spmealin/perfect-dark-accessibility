@@ -173,7 +173,7 @@ While looking through a CamSpy, the people scan and its range, room, bearing, an
 
 ### Targeting feedback and Carrington Institute firing-range proof
 
-`Accessibility.TargetingFeedback` defaults to `1` and is subordinate to `Accessibility.Enabled`. It has no provisional key binding. During supported single-player gameplay, the targeting coordinator automatically selects the applicable semantic source: Carrington Institute firing-range targets, admitted hostile characters and security devices, or a validated special-device target profile. It remains silent when the current context has no supported target source.
+`Accessibility.TargetingFeedback` defaults to `1` and is subordinate to `Accessibility.Enabled`. It has no provisional key binding. The centered lock-on/alignment tone uses the independently configurable `Accessibility.TargetingVolume`, which defaults to `0.15` (up from the original fixed `0.12`) and is bounded from `0` through `0.4`. This does not change the separately configurable positioned enemy-presence volume. During supported single-player gameplay, the targeting coordinator automatically selects the applicable semantic source: Carrington Institute firing-range targets, admitted hostile characters and security devices, or a validated special-device target profile. It remains silent when the current context has no supported target source.
 
 - Every active, undestroyed firing-range target that the renderer placed in the current viewport becomes eligible after two consecutive observations.
 - Eligible targets emit 100 ms positioned pulses using the same configurable 900 Hz carrier, quiet second harmonic, and master gain as enemy-presence feedback. One dedicated procedural one-shot lane rotates through the set: one target repeats every 36 ticks, while larger sets divide that cycle down to a minimum six-tick gap. It consumes no native game-sound channel or combat slot.
@@ -238,6 +238,7 @@ EnemyMaximumDistance=6000.000000
 EnemyScopedFullVolumeDistance=6000.000000
 EnemyScopedFadeDistance=9000.000000
 EnemyScopedMaximumDistance=12000.000000
+TargetingVolume=0.150000
 EnemyVolume=0.250000
 EnemyFrequency=900.000000
 AudibleMarkers=1
@@ -245,7 +246,7 @@ MarkerRange=1200.000000
 MarkerVolume=1.000000
 ```
 
-Distances are world units. The effective full/fade/maximum values are normalized into nondecreasing order; the cane maximum-audible distance is also raised to at least its reach. Cane reach is bounded to 100–5,000, cane attenuation values to 0–10,000, cane and enemy volume to 0–0.4, ordinary enemy distances to 6,000, scoped enemy distances to 20,000, and enemy frequency to 100–4,000 Hz. Non-finite values fall back to the documented defaults. The effective startup values are recorded in the accessibility session log.
+Distances are world units. The effective full/fade/maximum values are normalized into nondecreasing order; the cane maximum-audible distance is also raised to at least its reach. Cane reach is bounded to 100–5,000, cane attenuation values to 0–10,000, and cane, targeting, and enemy volume to 0–0.4. Ordinary enemy distances are bounded to 6,000, scoped enemy distances to 20,000, and enemy frequency to 100–4,000 Hz. Non-finite values fall back to the documented defaults. The effective startup values are recorded in the accessibility session log.
 
 Cane frequencies are bounded to 20–4,000 Hz. If the configured near frequency is lower than the far frequency, the effective endpoints are exchanged so closer obstacles remain higher pitched. Terrain reach is bounded to 50–2,000 units and its height threshold to 1–100 units. Marker range is bounded to 100–10,000 world units and its linear master multiplier to 0–4.
 

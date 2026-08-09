@@ -1634,7 +1634,7 @@ static void accessibilityTargetingUpdateAlignment(s32 frame60,
 	if (starting || frame60 >= g_AccessibilityTargetingNextAlignmentLog60) {
 		accessibilityLogEvent("targeting",
 				starting ? "alignment_start" : "alignment_update",
-				"update=%llu frame=%d reason=%s source=%d slot=%d propnum=%d category=%d relationship=%d interrupted=%d pattern=%s aim_region=%d quality_available=%d quality=%.4f distance=%.3f frequency_hz=%.2f",
+				"update=%llu frame=%d reason=%s source=%d slot=%d propnum=%d category=%d relationship=%d interrupted=%d pattern=%s aim_region=%d quality_available=%d quality=%.4f distance=%.3f frequency_hz=%.2f volume=%.4f",
 				(unsigned long long)g_AccessibilityTargetingAlignmentUpdateCount,
 				frame60, reason,
 				g_AccessibilityTargetingAimedIdentity.source,
@@ -1645,7 +1645,7 @@ static void accessibilityTargetingUpdateAlignment(s32 frame60,
 				interrupted ? "90ms_on_10ms_off" : "continuous",
 				candidate->aimregion,
 				candidate->hasaimquality, quality, candidate->aimdistance,
-				frequencyhz);
+				frequencyhz, accessibilityGetTargetingVolume());
 		g_AccessibilityTargetingNextAlignmentLog60
 				= frame60 + ACCESSIBILITY_TARGETING_ALIGNMENT_LOG_TICKS;
 	}

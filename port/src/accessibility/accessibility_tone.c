@@ -5,7 +5,6 @@
 #include "accessibility/accessibility_tone.h"
 
 #define ACCESSIBILITY_TONE_SAMPLE_RATE 22020.0f
-#define ACCESSIBILITY_TONE_VOLUME 0.12f
 #define ACCESSIBILITY_TONE_GAIN_STEP (1.0f / (ACCESSIBILITY_TONE_SAMPLE_RATE * 0.01f))
 #define ACCESSIBILITY_ALIGNMENT_CYCLE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.100f))
 #define ACCESSIBILITY_ALIGNMENT_GAP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.010f))
@@ -1060,7 +1059,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			&g_AccessibilityMarkerResetSequence);
 	f32 targetfrequency = (f32)SDL_AtomicGet(
 			&g_AccessibilityToneFrequencyMilliHz) / 1000.0f;
-	f32 targetgain = enabled ? ACCESSIBILITY_TONE_VOLUME : 0.0f;
+	f32 targetgain = enabled ? accessibilityGetTargetingVolume() : 0.0f;
 	f32 hazardtargetfrequency = (f32)SDL_AtomicGet(
 			&g_AccessibilityHazardFrequencyMilliHz) / 1000.0f;
 	f32 hazardtargetgain = hazardenabled
