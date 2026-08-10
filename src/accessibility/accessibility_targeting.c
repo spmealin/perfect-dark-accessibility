@@ -1601,6 +1601,8 @@ static void accessibilityTargetingUpdateAlignment(s32 frame60,
 				== ACCESSIBILITY_TARGETING_CATEGORY_BREAKABLE_PATH_BLOCKER
 			|| candidate->category
 				== ACCESSIBILITY_TARGETING_CATEGORY_LOOT_CONTAINER;
+	interrupted = interrupted || candidate->category
+			== ACCESSIBILITY_TARGETING_CATEGORY_REACTIVE_OBJECT;
 	s32 starting = !g_AccessibilityTargetingAlignmentActive;
 
 	if (quality < 0.0f) {

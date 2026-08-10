@@ -2344,6 +2344,79 @@ static void accessibilityTargetingObserveCombat(
 		}
 	}
 
+	/*
+	 * Mirror the native reactive-reticle contract for ordinary world objects.
+	 * lv.c has already limited lookingatprop to OBJFLAG3_REACTTOSIGHT (apart
+	 * from the firing-range exceptions), and sightTick has removed destroyed
+	 * objects through sightIsReactiveToProp. Requiring the retained exact query
+	 * hit keeps this an equal-access lock cue rather than a forgiving aim aid.
+	 */
+	if (aimedprop
+			&& (aimedprop->type == PROPTYPE_OBJ
+				|| aimedprop->type == PROPTYPE_WEAPON
+				|| aimedprop->type == PROPTYPE_DOOR)
+			&& aimedprop->obj
+			&& aimedprop == (struct prop *)g_AccessibilityTargetingGameAimProp
+			&& g_AccessibilityTargetingGameAimHitValid
+			&& sightIsReactiveToProp(aimedprop)
+			&& !accessibilityTargetingGameObservationHasProp(
+				observation, aimedprop)) {
+		struct accessibilitytargetingcandidate *candidate;
+		struct defaultobj *obj = aimedprop->obj;
+		s32 propnum = accessibilityTargetingGamePropNum(aimedprop);
+		f32 dx;
+		f32 dy;
+		f32 dz;
+
+		if (propnum >= 0) {
+			if (observation->candidatecount
+					>= ACCESSIBILITY_TARGETING_MAX_CANDIDATES) {
+				observation->candidatecount--;
+			}
+			candidate = &observation->candidates[observation->candidatecount++];
+			memset(candidate, 0, sizeof(*candidate));
+			candidate->identity.playernum = g_Vars.currentplayernum;
+			candidate->identity.source = ACCESSIBILITY_TARGETING_SOURCE_COMBAT;
+			candidate->identity.sourceslot = propnum;
+			candidate->identity.propnum = propnum;
+			candidate->identity.proptype = aimedprop->type;
+			candidate->identity.objectidentity = (uintptr_t)obj;
+			candidate->prop = aimedprop;
+			candidate->category
+					= ACCESSIBILITY_TARGETING_CATEGORY_REACTIVE_OBJECT;
+			candidate->relationship
+					= ACCESSIBILITY_TARGETING_RELATIONSHIP_NEUTRAL;
+			candidate->shootability
+					= ACCESSIBILITY_TARGETING_SHOOTABILITY_SHOOTABLE;
+			candidate->position = g_AccessibilityTargetingGameAimHitPos;
+			candidate->aimonly = true;
+			dx = candidate->position.x - g_Vars.currentplayer->prop->pos.x;
+			dy = candidate->position.y - g_Vars.currentplayer->prop->pos.y;
+			dz = candidate->position.z - g_Vars.currentplayer->prop->pos.z;
+			candidate->distance = sqrtf(dx * dx + dy * dy + dz * dz);
+			dx = candidate->position.x - g_Vars.currentplayer->cam_pos.x;
+			dy = candidate->position.y - g_Vars.currentplayer->cam_pos.y;
+			dz = candidate->position.z - g_Vars.currentplayer->cam_pos.z;
+			candidate->aimdistance = sqrtf(dx * dx + dy * dy + dz * dz);
+			observation->hasaimedtarget = true;
+			observation->aimedidentity = candidate->identity;
+			aimedshootability = candidate->shootability;
+			alignmentusesraw = true;
+			alignmentsource = "native_reactive_reticle";
+
+			if (detailed) {
+				accessibilityLogEvent("targeting", "reactive_object_aim",
+						"frame=%d stage=%d player=%d accepted=1 reason=native_reactive_reticle prop=%p propnum=%d prop_type=%d obj=%p obj_type=%d model=%d obj_flags3=0x%08x healthy=%d mortal=%d hit=%.3f,%.3f,%.3f",
+						g_Vars.lvframe60, g_Vars.stagenum,
+						g_Vars.currentplayernum, (void *)aimedprop,
+						propnum, aimedprop->type, (void *)obj, obj->type,
+						obj->modelnum, obj->flags3, objIsHealthy(obj),
+						objIsMortal(obj), candidate->position.x,
+						candidate->position.y, candidate->position.z);
+			}
+		}
+	}
+
 	if (aimedprop && !observation->hasaimedtarget
 			&& (detailed || (uintptr_t)aimedprop
 					!= g_AccessibilityTargetingGameLastRejectedAim)) {
