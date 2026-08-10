@@ -18,6 +18,7 @@ enum accessibilitytonecombatcontour {
 enum accessibilitytonecanepattern {
 	ACCESSIBILITY_TONE_CANE_PATTERN_CONTOUR,
 	ACCESSIBILITY_TONE_CANE_PATTERN_CROUCH_DOUBLE,
+	ACCESSIBILITY_TONE_CANE_PATTERN_LADDER_TRIPLE,
 };
 
 enum accessibilitytoneradarkind {

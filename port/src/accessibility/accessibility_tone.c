@@ -79,6 +79,7 @@
 #define ACCESSIBILITY_CANE_ATTACK_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.003f))
 #define ACCESSIBILITY_CANE_RELEASE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.008f))
 #define ACCESSIBILITY_CANE_CROUCH_GAP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.025f))
+#define ACCESSIBILITY_CANE_LADDER_GAP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.015f))
 #define ACCESSIBILITY_MARKER_BASE_VOLUME 0.08f
 #define ACCESSIBILITY_MARKER_CHIRP_VOLUME 0.12f
 #define ACCESSIBILITY_MARKER_LOW_FREQUENCY_HZ 300.0f
@@ -850,7 +851,8 @@ void accessibilityTonePlayCaneSlot(s32 slot, f32 startfrequencyhz,
 	} else if (durationms > 500) {
 		durationms = 500;
 	}
-	if (pattern != ACCESSIBILITY_TONE_CANE_PATTERN_CROUCH_DOUBLE) {
+	if (pattern != ACCESSIBILITY_TONE_CANE_PATTERN_CROUCH_DOUBLE
+			&& pattern != ACCESSIBILITY_TONE_CANE_PATTERN_LADDER_TRIPLE) {
 		pattern = ACCESSIBILITY_TONE_CANE_PATTERN_CONTOUR;
 	}
 
@@ -2392,6 +2394,36 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 							if (localsample == 0) {
 								g_AccessibilityCanePhase[slot] = 0.0f;
 							}
+						}
+					} else if (g_AccessibilityCanePatternState[slot]
+							== ACCESSIBILITY_TONE_CANE_PATTERN_LADDER_TRIPLE) {
+						s32 gap = ACCESSIBILITY_CANE_LADDER_GAP_SAMPLES;
+						s32 beep;
+						s32 segment;
+
+						if (gap > g_AccessibilityCaneDurationSamples[slot] / 5) {
+							gap = g_AccessibilityCaneDurationSamples[slot] / 5;
+						}
+						beep = (g_AccessibilityCaneDurationSamples[slot] - gap * 2) / 3;
+						segment = g_AccessibilityCaneSample[slot] / (beep + gap);
+
+						if (segment > 2) {
+							segment = 2;
+						}
+						localsample = g_AccessibilityCaneSample[slot]
+								- segment * (beep + gap);
+						if (localsample >= beep) {
+							sounding = 0;
+							localremaining = gap - (localsample - beep);
+						} else {
+							localremaining = beep - localsample;
+						}
+						frequency = g_AccessibilityCaneFrequencyHz[slot]
+								* powf(g_AccessibilityCaneEndFrequencyHz[slot]
+										/ g_AccessibilityCaneFrequencyHz[slot],
+										(f32)segment / 2.0f);
+						if (localsample == 0) {
+							g_AccessibilityCanePhase[slot] = 0.0f;
 						}
 					} else {
 						f32 progress = (f32)g_AccessibilityCaneSample[slot]
