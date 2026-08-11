@@ -1385,6 +1385,46 @@ static s32 accessibilityTargetingGameCharacterLineOfSight(
 	return false;
 }
 
+static s32 accessibilityTargetingGameObjectLineOfSight(
+		struct prop *prop, struct defaultobj *obj,
+		const struct accessibilitytargetingcombatprojection *projection,
+		RoomNum *camrooms, s32 *sample, s32 *queries)
+{
+	static const f32 xfactors[ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_COUNT]
+			= { 0.50f, 0.50f, 0.50f, 0.25f, 0.75f };
+	static const f32 yfactors[ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_COUNT]
+			= { 0.50f, 0.20f, 0.80f, 0.30f, 0.30f };
+	f32 left = fminf(projection->x1, projection->x2);
+	f32 right = fmaxf(projection->x1, projection->x2);
+	f32 top = fminf(projection->y1, projection->y2);
+	f32 bottom = fmaxf(projection->y1, projection->y2);
+	s32 hitpart;
+	uintptr_t hitnode;
+	s32 i;
+
+	*sample = ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_NONE;
+	*queries = 0;
+
+	if (!projection->projected || !projection->finite) {
+		return false;
+	}
+
+	for (i = 0; i < ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_COUNT; i++) {
+		f32 screenx = left + (right - left) * xfactors[i];
+		f32 screeny = top + (bottom - top) * yfactors[i];
+
+		(*queries)++;
+
+		if (accessibilityTargetingGameTestPrecisionGeometry(prop, NULL, obj,
+				screenx, screeny, camrooms, &hitpart, &hitnode)) {
+			*sample = ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_CENTER + i;
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static void accessibilityTargetingCaptureCombat(void)
 {
 	struct prop **propptr;
@@ -1412,7 +1452,6 @@ static void accessibilityTargetingCaptureCombat(void)
 		struct defaultobj *obj = NULL;
 		struct model *model;
 		struct accessibilitytargetingcombatprojection *projection;
-		struct coord targetpos;
 		s32 category;
 		s32 propnum;
 
@@ -1475,11 +1514,6 @@ static void accessibilityTargetingCaptureCombat(void)
 			projection->hasverticalaimerror = true;
 		}
 
-		targetpos = prop->pos;
-		if (chr) {
-			targetpos.y = chr->manground + chr->height * 0.5f;
-		}
-
 		if (prop->active && (prop->flags & PROPFLAG_ENABLED)
 				&& ((chr
 					&& accessibilityTargetingGameCharacterCombatCapable(chr)
@@ -1502,14 +1536,11 @@ static void accessibilityTargetingCaptureCombat(void)
 							&projection->visibilitysample,
 							&projection->visibilityqueries);
 			} else {
-				projection->visibilityqueries = 1;
 				projection->lineofsight
-						= accessibilityVisibilityHasVisualLineOfSight(
-							&g_Vars.currentplayer->cam_pos, camrooms,
-							&targetpos, prop->rooms, prop);
-				projection->visibilitysample = projection->lineofsight
-						? ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_CENTER
-						: ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_NONE;
+						= accessibilityTargetingGameObjectLineOfSight(
+							prop, obj, projection, camrooms,
+							&projection->visibilitysample,
+							&projection->visibilityqueries);
 			}
 		}
 
