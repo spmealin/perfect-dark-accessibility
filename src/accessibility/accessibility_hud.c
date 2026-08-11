@@ -19,6 +19,7 @@ struct accessibilityrespawnstate {
 
 static struct accessibilityrespawnstate
 		g_AccessibilityRespawnStates[MAX_PLAYERS];
+static u32 g_AccessibilityHudObservationId;
 
 static void accessibilityHudNormalizeText(char *dst, size_t dstlen, const char *src)
 {
@@ -54,16 +55,17 @@ static void accessibilityHudNormalizeText(char *dst, size_t dstlen, const char *
 	dst[out] = '\0';
 }
 
-void accessibilityHudMessageAccepted(const char *text, s32 type, u32 flags,
-		s32 playernum, s32 channelnum, u32 id)
+void accessibilityHudMessageObserved(const char *text, s32 type, u32 flags,
+		s32 playernum, s32 channelnum)
 {
 	char normalized[ACCESSIBILITY_HUD_TEXT_MAX];
+	u32 id = g_AccessibilityHudObservationId++;
 
 	if (!accessibilityIsEnabled()) {
 		return;
 	}
 
-	accessibilityLogEvent("hud", "message_accepted",
+	accessibilityLogEvent("hud", "message_observed",
 			"id=%u player=%d type=%d flags=0x%08x channel=%d text=%s",
 			id, playernum, type, flags, channelnum, text ? text : "");
 
@@ -160,6 +162,7 @@ void accessibilityHudReset(const char *reason)
 {
 	memset(g_AccessibilityRespawnStates, 0,
 			sizeof(g_AccessibilityRespawnStates));
+	g_AccessibilityHudObservationId = 0;
 	accessibilityLogEvent("respawn_countdown", "reset", "reason=%s",
 			reason ? reason : "unspecified");
 }

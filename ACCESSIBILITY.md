@@ -34,7 +34,7 @@ This initial slice observes only active-menu screen `0`, the weapon/device scree
 
 ### HUD message narration
 
-`Accessibility.HudMessages` defaults to `1` for blind-user acceptance testing and is subordinate to both `Accessibility.Enabled` and the speech setting. Every message successfully admitted by the common HUD queue is eligible regardless of the stage or script that created it. The accessibility layer speaks its resolved, wrapped text at normal, non-interrupting priority after replacing line breaks and other control whitespace with spaces. Messages rejected by the HUD's existing alive, duplicate, subtitle-option, or capacity rules are not announced.
+`Accessibility.HudMessages` defaults to `1` for blind-user acceptance testing and is subordinate to both `Accessibility.Enabled` and the speech setting. Every live-player message offered to the common HUD queue is eligible regardless of the stage or script that created it. The accessibility layer observes the resolved semantic text before the visual queue applies duplicate and capacity policies, so identical back-to-back pickups are each queued for speech even when the sighted HUD retains one copy. It speaks at normal, non-interrupting priority after replacing line breaks and other control whitespace with spaces. Messages rejected by the native alive or subtitle-option rules remain unannounced, and dialogue/subtitle message types remain explicitly excluded.
 
 The explicit in-game and cutscene subtitle HUD types are never spoken by this feature. This keeps dialogue and subtitles out of generic gameplay-message narration and leaves their timing, splitting, and user preference policy for a separate subtitle feature. Logs retain admitted subtitle metadata and record the exclusion without sending it to speech.
 
@@ -352,7 +352,7 @@ Announce dialog context, focused control, role, value, availability, relevant hi
 
 ### Messages, dialogue, and objectives
 
-Expose accepted HUD messages and subtitle text without duplicating messages that the HUD rejects. Announce objective state changes with priority and allow the current objective list and briefing to be queried.
+Expose every semantic HUD-message event needed for equal access without inheriting visual duplicate/capacity suppression; keep dialogue and subtitles on their separate path. Announce objective state changes with priority and allow the current objective list and briefing to be queried.
 
 ### Player status and inventory
 

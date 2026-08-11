@@ -3,8 +3,8 @@
 
 #include <PR/ultratypes.h>
 
-void accessibilityHudMessageAccepted(const char *text, s32 type, u32 flags,
-		s32 playernum, s32 channelnum, u32 id);
+void accessibilityHudMessageObserved(const char *text, s32 type, u32 flags,
+		s32 playernum, s32 channelnum);
 void accessibilityHudRespawnCountdownObserve(s32 visible, const char *prompt,
 		s32 seconds, s32 playernum);
 void accessibilityHudReset(const char *reason);

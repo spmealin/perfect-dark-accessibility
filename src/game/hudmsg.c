@@ -993,6 +993,15 @@ void hudmsgCreateFromArgs(char *text, s32 type, s32 conf00, s32 conf01, s32 conf
 	}
 
 	if ((flags & HUDMSGFLAG_ONLYIFALIVE) == 0 || !g_Vars.currentplayer->isdead) {
+		/*
+		 * Publish the semantic event before the visual queue's duplicate and
+		 * capacity policies. Accessibility speech must not lose a second pickup
+		 * merely because an identical message is already on screen.
+		 */
+		accessibilityHudMessageObserved(text, type, flags,
+				g_Vars.currentplayernum,
+				flags & HUDMSGFLAG_NOCHANNEL ? -1 : arg14);
+
 		if ((flags & HUDMSGFLAG_ALLOWDUPES) == 0) {
 			// Check for duplicate messages
 			s32 dupeofindex = -1;
@@ -1111,8 +1120,6 @@ void hudmsgCreateFromArgs(char *text, s32 type, s32 conf00, s32 conf01, s32 conf
 				msg->channelnum = arg14;
 			}
 
-			accessibilityHudMessageAccepted(msg->text, msg->type, msg->flags,
-					msg->playernum, msg->channelnum, msg->id);
 		}
 
 		g_ScaleX = 1;

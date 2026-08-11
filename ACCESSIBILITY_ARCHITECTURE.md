@@ -86,7 +86,7 @@ This means focus identity is centralized but accessible names and values are typ
 
 ### HUD messages, subtitles, and dialogue
 
-`src/game/hudmsg.c:hudmsgCreateFromArgs` is the common sink used by the public HUD-message wrappers. It applies subtitle preferences, alive checks, and duplicate suppression before allocating and filling a `struct hudmessage`. A hook after successful queue admission can announce only messages the HUD accepted.
+`src/game/hudmsg.c:hudmsgCreateFromArgs` is the common sink used by the public HUD-message wrappers. After the native subtitle-option and alive checks, a semantic hook publishes each message before the visual queue's duplicate and capacity policies. This preserves every back-to-back pickup event for speech without changing which messages the sighted HUD allocates or renders. The accessibility adapter still excludes in-game and cutscene subtitle types.
 
 `hudmsgCreateAsSubtitle` checks in-game/cutscene subtitle options, may split long text according to audio duration, and eventually calls the common sink. `src/game/chraicommands.c:aiSpeak` plays prop audio and sends eligible text to `hudmsgCreateAsSubtitle`. The accessibility queue must account for subtitle chunks and audio channel context to avoid repeats.
 
@@ -144,7 +144,7 @@ src/accessibility/
   accessibility_cane.c           live seven-angle movement/terrain orientation cue
   accessibility_hazard.c         damaging-laser semantic adapter and sweep policy
   accessibility_hill.c           King of the Hill center and native-radar guide policy
-  accessibility_hud.c            admitted HUD messages and direct respawn overlay adapter
+  accessibility_hud.c            semantic HUD-message events and direct respawn overlay adapter
   accessibility_incident.c       Shift+F2 bounded history and semantic state capture
   accessibility_log.c            buffered structured development log
   accessibility_marker.c         four player-authored landmark slots and LOS policy
@@ -264,7 +264,7 @@ Suggested behaviour:
 
 - **Critical:** death or immediately blocking failure; interrupts lower output.
 - **High:** objective failure/change or severe status threshold; replaces stale events in its group.
-- **Normal:** focus, selected value, weapon change or function label, accepted HUD message.
+- **Normal:** focus, selected value, weapon change or function label, semantic HUD message.
 - **Low:** exploratory scanner detail and optional hints; expires quickly.
 - Repeated focus on the same semantic item is suppressed unless the user invokes repeat.
 - Rapid slider/list changes replace an earlier value from the same control.
