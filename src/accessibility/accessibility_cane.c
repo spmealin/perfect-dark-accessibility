@@ -122,6 +122,15 @@ struct accessibilitycanesample {
 	s32 terrainqueries;
 	s32 droprefinements;
 	f32 dropheightthreshold;
+	s32 stancestate;
+	s32 terraintraversaltested;
+	s32 terraintraversable;
+	s32 terrainplateau;
+	s32 terrainsuppressed;
+	s32 terrainclearanceresult;
+	s32 terrainclearancequeries;
+	f32 terrainclearancedistance;
+	f32 terrainplateaudistance;
 	s32 crouchresult;
 	s32 crouchpass;
 	f32 crouchymax;
@@ -213,6 +222,20 @@ static const char *accessibilityCaneSampleStateName(s32 state)
 		return "skipped";
 	default:
 		return "pending";
+	}
+}
+
+static const char *accessibilityCaneStanceName(s32 stance)
+{
+	switch (stance) {
+	case CROUCHPOS_STAND:
+		return "stand";
+	case CROUCHPOS_DUCK:
+		return "duck";
+	case CROUCHPOS_SQUAT:
+		return "squat";
+	default:
+		return "remote";
 	}
 }
 
@@ -340,7 +363,7 @@ static void accessibilityCaneLogSweep(const char *reason)
 		struct accessibilitycanesample *sample = &g_AccessibilityCaneSamples[i];
 
 		accessibilityCaneAppendLog(
-				"%ss%d={angle:%d state:%s scheduled:%d actual:%d late:%d result:%d pass:%d observer:%p remote:%d origin:%.2f,%.2f,%.2f forward:%.5f,%.5f direction:%.5f,%.5f end:%.2f,%.2f,%.2f bbox:%.2f,%.2f,%.2f raw:%.2f,%.2f,%.2f audio:%.2f,%.2f,%.2f distance:%.2f frequency_hz:%.2f end_frequency_hz:%.2f duration_ms:%d tone_pattern:%d terrain:%d drop:%d crouch:%d ladder:%d crouch_terrain_merge:%d breakable:%d terrain_ground:%.2f terrain_height:%.2f terrain_distance:%.2f terrain_room:%d terrain_flags:0x%04x terrain_queries:%d drop_refinements:%d drop_threshold:%.2f crouch_result:%d crouch_pass:%d crouch_ymax:%.2f obstacle:%p type:%d geoflags:0x%08x normal:%.5f,%.5f,%.5f edge:%.2f,%.2f,%.2f,%.2f volume:%d pan:%d normalized:%.5f,%.5f master_volume:%.5f effective_volume:%.5f query_us:%" PRIu64 " probes=[",
+				"%ss%d={angle:%d state:%s scheduled:%d actual:%d late:%d result:%d pass:%d observer:%p remote:%d origin:%.2f,%.2f,%.2f forward:%.5f,%.5f direction:%.5f,%.5f end:%.2f,%.2f,%.2f bbox:%.2f,%.2f,%.2f raw:%.2f,%.2f,%.2f audio:%.2f,%.2f,%.2f distance:%.2f frequency_hz:%.2f end_frequency_hz:%.2f duration_ms:%d tone_pattern:%d terrain:%d drop:%d crouch:%d ladder:%d crouch_terrain_merge:%d breakable:%d terrain_ground:%.2f terrain_height:%.2f terrain_distance:%.2f terrain_room:%d terrain_flags:0x%04x terrain_queries:%d drop_refinements:%d drop_threshold:%.2f stance:%s traversal_tested:%d traversable:%d plateau:%d terrain_suppressed:%d clearance_result:%d clearance_queries:%d clearance_distance:%.2f plateau_distance:%.2f crouch_result:%d crouch_pass:%d crouch_ymax:%.2f obstacle:%p type:%d geoflags:0x%08x normal:%.5f,%.5f,%.5f edge:%.2f,%.2f,%.2f,%.2f volume:%d pan:%d normalized:%.5f,%.5f master_volume:%.5f effective_volume:%.5f query_us:%" PRIu64 " probes=[",
 				i ? " " : "", i, sample->angledegrees,
 				accessibilityCaneSampleStateName(sample->state),
 				sample->scheduledtick, sample->actualtick, sample->lateness,
@@ -364,7 +387,16 @@ static void accessibilityCaneLogSweep(const char *reason)
 				sample->terrainheight, sample->terraindistance,
 				sample->terrainroom, sample->terrainflags,
 				sample->terrainqueries, sample->droprefinements,
-				sample->dropheightthreshold, sample->crouchresult,
+				sample->dropheightthreshold,
+				accessibilityCaneStanceName(sample->stancestate),
+				sample->terraintraversaltested,
+				sample->terraintraversable, sample->terrainplateau,
+				sample->terrainsuppressed,
+				sample->terrainclearanceresult,
+				sample->terrainclearancequeries,
+				sample->terrainclearancedistance,
+				sample->terrainplateaudistance,
+				sample->crouchresult,
 				sample->crouchpass, sample->crouchymax,
 				(void *)sample->obstacle,
 				sample->obstacletype, sample->geoflags, sample->normal.x,
@@ -419,6 +451,8 @@ static void accessibilityCaneBeginSweep(s32 mode, s32 starttick)
 		g_AccessibilityCaneSamples[i].scheduledtick = starttick + offsets[i];
 		g_AccessibilityCaneSamples[i].terrainroom = -1;
 		g_AccessibilityCaneSamples[i].crouchresult = -1;
+		g_AccessibilityCaneSamples[i].terrainclearanceresult = -1;
+		g_AccessibilityCaneSamples[i].stancestate = -1;
 	}
 
 	g_AccessibilityCaneSweepId++;
@@ -619,6 +653,7 @@ static s32 accessibilityCaneFindTerrain(
 
 	accessibilityGetVirtualCaneTerrainTuning(&reach, &heightthreshold,
 			&dropheightthreshold);
+	(void)dropheightthreshold;
 	sample->dropheightthreshold = dropheightthreshold;
 	limit = reach;
 
@@ -715,6 +750,114 @@ static s32 accessibilityCaneFindTerrain(
 	return sample->terrain != 0;
 }
 
+static void accessibilityCaneClassifyTraversableRise(
+		struct accessibilitycanesample *sample,
+		const struct accessibilityobserver *observer,
+		f32 barrierdistance, s32 types)
+{
+	RoomNum rooms[8];
+	struct coord testpos;
+	f32 reach;
+	f32 heightthreshold;
+	f32 dropheightthreshold;
+	f32 plateautolerance;
+	s32 oldenableslopes;
+	s32 allclear = true;
+	s32 i;
+
+	if (sample->terrain <= 0 || sample->drop || observer->isremote
+			|| !g_Vars.currentplayer
+			|| g_Vars.currentplayer->bondmovemode != MOVEMODE_WALK) {
+		return;
+	}
+
+	accessibilityGetVirtualCaneTerrainTuning(&reach, &heightthreshold,
+			&dropheightthreshold);
+	plateautolerance = heightthreshold > 5.0f ? heightthreshold : 5.0f;
+	sample->terraintraversaltested = true;
+	sample->stancestate = g_Vars.currentplayer->crouchpos;
+
+	/*
+	 * A nearby rise that settles onto a stable floor is a short ledge rather
+	 * than a sustained stair or ramp. Requiring two sampled floors avoids
+	 * treating an isolated room/floor result as a plateau.
+	 */
+	for (i = 1; i < sample->terrainqueries; i++) {
+		struct accessibilitycaneterrainprobe *previous
+				= &sample->terrainprobes[i - 1];
+		struct accessibilitycaneterrainprobe *current
+				= &sample->terrainprobes[i];
+
+		if (previous->room >= 0 && current->room >= 0
+				&& previous->delta >= heightthreshold
+				&& current->delta >= heightthreshold
+				&& fabsf(current->ground - previous->ground)
+						<= plateautolerance
+				&& previous->distance <= reach * 0.25f + 0.01f) {
+			sample->terrainplateau = true;
+			sample->terrainplateaudistance = previous->distance;
+			break;
+		}
+	}
+
+	oldenableslopes = g_Vars.enableslopes;
+	g_Vars.enableslopes
+			= (g_Vars.currentplayer->floorflags & GEOFLAG_SLOPE) == 0;
+	propSetPerimEnabled(observer->prop, false);
+
+	/*
+	 * Test the live player envelope at each sampled raised floor. This uses
+	 * the current animated standing/duck/squat height, not a synthetic fixed
+	 * stance. Stop before a farther barrier so its own volume does not make
+	 * the approach floor look untraversable.
+	 */
+	for (i = 0; i < sample->terrainqueries; i++) {
+		struct accessibilitycaneterrainprobe *probe
+				= &sample->terrainprobes[i];
+
+		if (probe->room < 0 || probe->delta < heightthreshold) {
+			continue;
+		}
+
+		if (barrierdistance > 0.0f
+				&& probe->distance + sample->radius >= barrierdistance) {
+			break;
+		}
+
+		testpos.x = observer->origin.x
+				+ sample->direction.x * probe->distance;
+		testpos.y = observer->origin.y + probe->delta;
+		testpos.z = observer->origin.z
+				+ sample->direction.z * probe->distance;
+		{
+			s32 j;
+
+			for (j = 0; j < ARRAYCOUNT(rooms); j++) {
+				rooms[j] = probe->rooms[j];
+			}
+		}
+		bmoveFindEnteredRoomsByPos(g_Vars.currentplayer, &testpos, rooms);
+		sample->terrainclearanceresult = cdTestVolume(&testpos,
+				sample->radius, rooms, types, CHECKVERTICAL_YES,
+				sample->ymax - observer->origin.y,
+				sample->ymin - observer->origin.y - 0.1f);
+		sample->terrainclearancequeries++;
+		sample->terrainclearancedistance = probe->distance;
+
+		if (sample->terrainclearanceresult != CDRESULT_NOCOLLISION) {
+			allclear = false;
+			break;
+		}
+	}
+
+	propSetPerimEnabled(observer->prop, true);
+	g_Vars.enableslopes = oldenableslopes;
+	sample->terraintraversable = allclear
+			&& sample->terrainclearancequeries > 0
+			&& sample->terrainclearancedistance + 0.01f
+					>= sample->terraindistance;
+}
+
 static s32 accessibilityCaneFindCrouchPassage(
 		struct accessibilitycanesample *sample,
 		const struct accessibilityobserver *observer, struct coord *start,
@@ -803,6 +946,7 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 	s32 result;
 	s32 collisionpass = 0;
 	s32 terrainfound = false;
+	s32 terraincedes = false;
 	s32 crouchfound = false;
 #if VERSION < VERSION_NTSC_1_0
 	s32 i;
@@ -820,6 +964,8 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 	start = observer.origin;
 	sample->observerprop = observer.prop;
 	sample->observerremote = observer.isremote;
+	sample->stancestate = observer.isremote
+			? -1 : g_Vars.currentplayer->crouchpos;
 	sample->origin = start;
 	sample->forward.x = observer.look.x;
 	sample->forward.y = 0.0f;
@@ -927,10 +1073,17 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 	if (result == CDRESULT_COLLISION || result == CDRESULT_NOCOLLISION) {
 		terrainfound = accessibilityCaneFindTerrain(
 				sample, &observer, barrierdistance);
+		if (terrainfound) {
+			accessibilityCaneClassifyTraversableRise(sample, &observer,
+					barrierdistance, types);
+			terraincedes = sample->terraintraversable
+					&& (barrierdistance > 0.0f || sample->terrainplateau);
+			sample->terrainsuppressed = terraincedes;
+		}
 	}
 
 	if (result == CDRESULT_COLLISION && !sample->drop
-			&& (!terrainfound
+			&& (!terrainfound || terraincedes
 				|| sample->terraindistance + sample->radius
 						>= barrierdistance)) {
 		crouchfound = accessibilityCaneFindCrouchPassage(sample,
@@ -947,7 +1100,7 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 	}
 #endif
 
-	if (terrainfound
+	if (terrainfound && !terraincedes
 			&& (barrierdistance < 0.0f
 				|| sample->terraindistance < barrierdistance)
 			&& !sample->crouchterrainmerge) {
