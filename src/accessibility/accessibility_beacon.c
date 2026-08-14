@@ -128,6 +128,22 @@ struct accessibilitybeacondoorslot {
 	struct accessibilitybeaconresult result;
 };
 
+struct accessibilitybeaconobjectoverride {
+	s32 stagenum;
+	s32 tag;
+	const char *reason;
+};
+
+/*
+ * Some mission guidance is drawn on non-activatable setup geometry rather
+ * than represented by a usable prop. Keep these exceptions explicit and
+ * narrow so the ordinary scanner does not turn arbitrary scenery into cues.
+ */
+static const struct accessibilitybeaconobjectoverride
+		g_AccessibilityBeaconObjectOverrides[] = {
+	{ STAGE_RESCUE, 0x18, "mission_crate_placement_marker" },
+};
+
 static struct accessibilitybeaconresult g_AccessibilityBeaconResults[ACCESSIBILITY_BEACON_CAPACITY];
 static struct accessibilitybeacondroneslot
 		g_AccessibilityBeaconFriendlySlots[
@@ -574,12 +590,40 @@ static s32 accessibilityBeaconRoomsRelated(RoomNum *playerrooms, RoomNum *target
 	return false;
 }
 
+static s32 accessibilityBeaconObjectOverrideEligible(
+		struct defaultobj *obj, const char **reason)
+{
+	s32 tag;
+	s32 i;
+
+	if (!obj) {
+		return false;
+	}
+
+	tag = objGetTagNum(obj);
+
+	for (i = 0; i < ARRAYCOUNT(g_AccessibilityBeaconObjectOverrides); i++) {
+		const struct accessibilitybeaconobjectoverride *override
+				= &g_AccessibilityBeaconObjectOverrides[i];
+
+		if (override->stagenum == g_Vars.stagenum && override->tag == tag) {
+			*reason = override->reason;
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static s32 accessibilityBeaconObjectEligible(struct prop *prop, u32 *citag, const char **reason)
 {
 	struct defaultobj *obj;
 	u32 tag;
+	s32 semanticoverride;
 
-	if (!prop || (prop->type != PROPTYPE_OBJ && prop->type != PROPTYPE_WEAPON)) {
+	if (!prop || (prop->type != PROPTYPE_OBJ
+			&& prop->type != PROPTYPE_WEAPON
+			&& prop->type != PROPTYPE_DOOR)) {
 		*reason = "not_object_category";
 		return false;
 	}
@@ -606,19 +650,26 @@ static s32 accessibilityBeaconObjectEligible(struct prop *prop, u32 *citag, cons
 		return false;
 	}
 
+	semanticoverride = accessibilityBeaconObjectOverrideEligible(obj, reason);
+
 	/*
 	 * Match objTestForInteract here. Setup data uses OBJFLAG_DEACTIVATED on
 	 * objects that remain player-activatable, including the CI Night Vision
-	 * light switch. OBJFLAG_CANNOT_ACTIVATE is the authoritative exclusion.
+	 * light switch. OBJFLAG_CANNOT_ACTIVATE is the authoritative exclusion
+	 * except for an explicit non-interactive mission-landmark override.
 	 */
-	if (obj->flags & OBJFLAG_CANNOT_ACTIVATE) {
+	if (!semanticoverride && (obj->flags & OBJFLAG_CANNOT_ACTIVATE)) {
 		*reason = "object_activation_disabled";
 		return false;
 	}
 
-	if (!objIsPotentiallyInteractable(prop)) {
+	if (!semanticoverride && !objIsPotentiallyInteractable(prop)) {
 		*reason = "object_not_deliberately_interactable";
 		return false;
+	}
+
+	if (semanticoverride) {
+		return true;
 	}
 
 	tag = propobjGetCiTagId(prop);
@@ -648,6 +699,8 @@ void accessibilityBeaconCaptureGame(void)
 
 	while (prop && traversed <= g_Vars.maxprops) {
 		struct defaultobj *obj = prop->obj;
+		const char *reason = NULL;
+		u32 citag = 0;
 
 		traversed++;
 
@@ -656,7 +709,8 @@ void accessibilityBeaconCaptureGame(void)
 				|| prop->type == PROPTYPE_WEAPON)
 				&& obj && obj->prop == prop && obj->model
 				&& (prop->type == PROPTYPE_DOOR
-					|| objIsPotentiallyInteractable(prop))) {
+					|| accessibilityBeaconObjectEligible(
+							prop, &citag, &reason))) {
 			struct accessibilitybeaconprojection *projection;
 
 			if (g_AccessibilityBeaconProjectionCount
@@ -1392,6 +1446,15 @@ static s32 accessibilityBeaconScan(s32 detailed)
 		memset(&result, 0, sizeof(result));
 
 		if (prop->type == PROPTYPE_DOOR
+				&& g_AccessibilityBeaconCategoryActive[
+						ACCESSIBILITY_BEACON_CATEGORY_OBJECT]
+				&& accessibilityBeaconObjectOverrideEligible(
+						prop->obj, &reason)) {
+			eligible = accessibilityBeaconObjectEligible(
+					prop, &citag, &reason);
+			result.category = ACCESSIBILITY_BEACON_CATEGORY_OBJECT;
+			result.kind = ACCESSIBILITY_BEACON_KIND_OBJECT;
+		} else if (prop->type == PROPTYPE_DOOR
 				&& g_AccessibilityBeaconCategoryActive[
 						ACCESSIBILITY_BEACON_CATEGORY_DOOR]) {
 			eligible = accessibilityBeaconDoorEligible(prop, &reason);
@@ -2950,7 +3013,24 @@ static void accessibilityBeaconDumpDiagnosticCandidate(u64 captureid,
 
 	memset(&result, 0, sizeof(result));
 
-	if (prop->type == PROPTYPE_DOOR) {
+	if (prop->type == PROPTYPE_DOOR
+			&& accessibilityBeaconObjectOverrideEligible(
+					prop->obj, &semanticreason)) {
+		result.category = ACCESSIBILITY_BEACON_CATEGORY_OBJECT;
+		result.kind = ACCESSIBILITY_BEACON_KIND_OBJECT;
+		categoryactive = g_AccessibilityBeaconCategoryActive[
+				ACCESSIBILITY_BEACON_CATEGORY_OBJECT];
+		semanticeligible = accessibilityBeaconObjectEligible(
+				prop, &citag, &semanticreason);
+		finalreason = semanticreason;
+
+		if (observer->isremote) {
+			contexteligible = false;
+			finalreason = "body_action_paused_for_remote_observer";
+		} else if (!categoryactive) {
+			finalreason = "object_category_inactive";
+		}
+	} else if (prop->type == PROPTYPE_DOOR) {
 		result.category = ACCESSIBILITY_BEACON_CATEGORY_DOOR;
 		result.kind = ACCESSIBILITY_BEACON_KIND_DOOR;
 		categoryactive = g_AccessibilityBeaconCategoryActive[

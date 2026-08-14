@@ -308,7 +308,8 @@ static const char *accessibilityCaneGameplayScopeReason(void)
 	}
 
 	if (g_Vars.currentplayer->cameramode != CAMERAMODE_EYESPY
-			&& g_Vars.currentplayer->bondmovemode != MOVEMODE_WALK) {
+			&& g_Vars.currentplayer->bondmovemode != MOVEMODE_WALK
+			&& g_Vars.currentplayer->bondmovemode != MOVEMODE_GRAB) {
 		return "unsupported_movement_mode";
 	}
 
