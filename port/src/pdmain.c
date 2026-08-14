@@ -82,6 +82,7 @@
 #include "accessibility/accessibility_status.h"
 #include "accessibility/accessibility_hud.h"
 #include "accessibility/accessibility_incident.h"
+#include "accessibility/accessibility_landmark.h"
 #include "accessibility/accessibility_marker.h"
 #include "accessibility/accessibility_targeting.h"
 #include "accessibility/accessibility_tracker.h"
@@ -529,6 +530,7 @@ void mainLoop(void)
 		accessibilityHillReset("stage_stop");
 		accessibilityHudReset("stage_stop");
 		accessibilityIncidentReset("stage_stop");
+		accessibilityLandmarkReset("stage_stop");
 		accessibilityMarkerReset("stage_stop");
 		accessibilityStatusReset("stage_stop");
 		accessibilityTargetingReset("stage_stop");
@@ -572,6 +574,7 @@ void mainTick(void)
 			accessibilityCombatRadarTick();
 			accessibilityHazardTick();
 			accessibilityHillTick();
+			accessibilityLandmarkTick();
 			accessibilityMarkerTick();
 			accessibilityStatusTick();
 			accessibilityTrackerTick();

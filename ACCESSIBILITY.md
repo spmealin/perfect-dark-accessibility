@@ -246,6 +246,7 @@ TargetingVolume=0.150000
 EnemyVolume=0.250000
 EnemyFrequency=900.000000
 AudibleMarkers=1
+AuthoredLandmarks=1
 MarkerRange=1200.000000
 MarkerVolume=1.000000
 ```
@@ -289,6 +290,25 @@ presentation states preserve marker locations. This engineering
 implementation builds successfully but still requires runtime and blind-user
 acceptance for sound identity, masking, line-of-sight transitions, preferred
 range, CamSpy behavior, and long-session performance.
+
+### Authored navigation landmarks
+
+`Accessibility.AuthoredLandmarks=1` enables semantic navigation destinations
+that a stage explicitly registers. These are separate from F5 interactable
+objects and from the four F9–F12 player markers. Each uses the same continuous
+opposed 300–600 Hz sweeps as a player marker but never plays an 800 Hz identity
+chirp: no chirps consistently means a level-authored landmark.
+
+The initial registry entry is Area 51: Rescue's intact wall marked by the
+silver X, where the hovercrate is intended to be positioned. It follows the
+shared active observer, uses `Accessibility.MarkerRange` and
+`Accessibility.MarkerVolume`, requires a direct visual line of sight, and
+stops when the tagged wall is destroyed or unavailable. It does not require
+F5, consume an interactable-scanner result, imply that the wall can be
+activated, or create a targeting lock. Four dedicated mixer voices are
+preallocated for future stage-authored landmarks; adding one requires a stage,
+setup tag, expected prop type, and stable semantic name in the registry rather
+than new playback logic.
 
 ### View orientation recovery
 

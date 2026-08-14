@@ -85,6 +85,9 @@
 #define ACCESSIBILITY_MARKER_LOW_FREQUENCY_HZ 300.0f
 #define ACCESSIBILITY_MARKER_HIGH_FREQUENCY_HZ 600.0f
 #define ACCESSIBILITY_MARKER_IDENTITY_FREQUENCY_HZ 800.0f
+#define ACCESSIBILITY_TONE_MARKER_VOICE_COUNT \
+	(ACCESSIBILITY_TONE_MARKER_SLOT_COUNT \
+			+ ACCESSIBILITY_TONE_LANDMARK_SLOT_COUNT)
 #define ACCESSIBILITY_MARKER_REMOVAL_FREQUENCY_HZ 400.0f
 #define ACCESSIBILITY_MARKER_SWEEP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 2.0f))
 #define ACCESSIBILITY_MARKER_PERIOD_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 2.0f))
@@ -177,10 +180,10 @@ static SDL_atomic_t g_AccessibilityCaneVolumeMillionths[ACCESSIBILITY_TONE_CANE_
 static SDL_atomic_t g_AccessibilityCanePanMillionths[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityCaneDurationMs[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityCanePattern[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
-static SDL_atomic_t g_AccessibilityMarkerEnabled[ACCESSIBILITY_TONE_MARKER_SLOT_COUNT];
-static SDL_atomic_t g_AccessibilityMarkerSequence[ACCESSIBILITY_TONE_MARKER_SLOT_COUNT];
-static SDL_atomic_t g_AccessibilityMarkerVolumeMillionths[ACCESSIBILITY_TONE_MARKER_SLOT_COUNT];
-static SDL_atomic_t g_AccessibilityMarkerPanMillionths[ACCESSIBILITY_TONE_MARKER_SLOT_COUNT];
+static SDL_atomic_t g_AccessibilityMarkerEnabled[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
+static SDL_atomic_t g_AccessibilityMarkerSequence[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
+static SDL_atomic_t g_AccessibilityMarkerVolumeMillionths[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
+static SDL_atomic_t g_AccessibilityMarkerPanMillionths[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
 static SDL_atomic_t g_AccessibilityMarkerRemovalSequence[ACCESSIBILITY_TONE_MARKER_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityMarkerResetSequence;
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
@@ -285,13 +288,13 @@ static f32 g_AccessibilityCaneFrequencyHz[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 static f32 g_AccessibilityCaneEndFrequencyHz[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 static f32 g_AccessibilityCaneVolume[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 static f32 g_AccessibilityCanePan[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
-static s32 g_AccessibilityMarkerObservedSequence[ACCESSIBILITY_TONE_MARKER_SLOT_COUNT];
-static s32 g_AccessibilityMarkerEnabledState[ACCESSIBILITY_TONE_MARKER_SLOT_COUNT];
-static s32 g_AccessibilityMarkerDueSample[ACCESSIBILITY_TONE_MARKER_SLOT_COUNT];
-static f32 g_AccessibilityMarkerPhaseA[ACCESSIBILITY_TONE_MARKER_SLOT_COUNT];
-static f32 g_AccessibilityMarkerPhaseB[ACCESSIBILITY_TONE_MARKER_SLOT_COUNT];
-static f32 g_AccessibilityMarkerPan[ACCESSIBILITY_TONE_MARKER_SLOT_COUNT];
-static f32 g_AccessibilityMarkerGain[ACCESSIBILITY_TONE_MARKER_SLOT_COUNT];
+static s32 g_AccessibilityMarkerObservedSequence[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
+static s32 g_AccessibilityMarkerEnabledState[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
+static s32 g_AccessibilityMarkerDueSample[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
+static f32 g_AccessibilityMarkerPhaseA[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
+static f32 g_AccessibilityMarkerPhaseB[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
+static f32 g_AccessibilityMarkerPan[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
+static f32 g_AccessibilityMarkerGain[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
 static s32 g_AccessibilityMarkerSweepSample;
 static s32 g_AccessibilityMarkerIdentitySlot = -1;
 static s32 g_AccessibilityMarkerIdentitySample;
@@ -889,7 +892,7 @@ void accessibilityToneStopCane(void)
 void accessibilityToneSetMarkerSlot(s32 slot, s32 enabled,
 		f32 volume, f32 pan, s32 restart)
 {
-	if (slot < 0 || slot >= ACCESSIBILITY_TONE_MARKER_SLOT_COUNT) {
+	if (slot < 0 || slot >= ACCESSIBILITY_TONE_MARKER_VOICE_COUNT) {
 		return;
 	}
 
@@ -937,6 +940,30 @@ void accessibilityToneStopMarkers(void)
 	SDL_AtomicAdd(&g_AccessibilityMarkerResetSequence, 1);
 }
 
+void accessibilityToneSetLandmarkSlot(s32 slot, s32 enabled,
+		f32 volume, f32 pan, s32 restart)
+{
+	if (slot < 0 || slot >= ACCESSIBILITY_TONE_LANDMARK_SLOT_COUNT) {
+		return;
+	}
+
+	accessibilityToneSetMarkerSlot(
+			ACCESSIBILITY_TONE_MARKER_SLOT_COUNT + slot,
+			enabled, volume, pan, restart);
+}
+
+void accessibilityToneStopLandmarks(void)
+{
+	s32 slot;
+
+	for (slot = 0; slot < ACCESSIBILITY_TONE_LANDMARK_SLOT_COUNT; slot++) {
+		s32 voice = ACCESSIBILITY_TONE_MARKER_SLOT_COUNT + slot;
+
+		SDL_AtomicSet(&g_AccessibilityMarkerEnabled[voice], 0);
+		SDL_AtomicAdd(&g_AccessibilityMarkerSequence[voice], 1);
+	}
+}
+
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 void accessibilityToneGetDiagnostics(struct accessibilitytonediagnostics *diagnostics)
 {
@@ -962,6 +989,7 @@ void accessibilityToneGetDiagnostics(struct accessibilitytonediagnostics *diagno
 	diagnostics->friendlyenabledslots = 0;
 	diagnostics->doorenabledslots = 0;
 	diagnostics->markerenabledslots = 0;
+	diagnostics->landmarkenabledslots = 0;
 	diagnostics->canerequestedmask = 0;
 	for (slot = 0; slot < ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT; slot++) {
 		diagnostics->combatenabledslots += SDL_AtomicGet(
@@ -982,6 +1010,11 @@ void accessibilityToneGetDiagnostics(struct accessibilitytonediagnostics *diagno
 	for (slot = 0; slot < ACCESSIBILITY_TONE_MARKER_SLOT_COUNT; slot++) {
 		diagnostics->markerenabledslots += SDL_AtomicGet(
 				&g_AccessibilityMarkerEnabled[slot]) != 0;
+	}
+	for (slot = 0; slot < ACCESSIBILITY_TONE_LANDMARK_SLOT_COUNT; slot++) {
+		diagnostics->landmarkenabledslots += SDL_AtomicGet(
+				&g_AccessibilityMarkerEnabled[
+						ACCESSIBILITY_TONE_MARKER_SLOT_COUNT + slot]) != 0;
 	}
 	for (slot = 0; slot < ACCESSIBILITY_TONE_CANE_SLOT_COUNT; slot++) {
 		if (SDL_AtomicGet(&g_AccessibilityCaneEnabled[slot])) {
@@ -1052,9 +1085,9 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 	s32 doorenabled[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
 	f32 doorvolume[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
 	f32 doorpan[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
-	s32 markerenabled[ACCESSIBILITY_TONE_MARKER_SLOT_COUNT];
-	f32 markervolume[ACCESSIBILITY_TONE_MARKER_SLOT_COUNT];
-	f32 markerpan[ACCESSIBILITY_TONE_MARKER_SLOT_COUNT];
+	s32 markerenabled[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
+	f32 markervolume[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
+	f32 markerpan[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
 	s32 anycombatenabled = 0;
 	s32 anytrackerenabled = 0;
 	s32 anyfriendlyenabled = 0;
@@ -1346,7 +1379,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		anycaneactive |= g_AccessibilityCaneSamplesRemaining[slot] > 0;
 	}
 
-	for (slot = 0; slot < ACCESSIBILITY_TONE_MARKER_SLOT_COUNT; slot++) {
+	for (slot = 0; slot < ACCESSIBILITY_TONE_MARKER_VOICE_COUNT; slot++) {
 		s32 sequence = SDL_AtomicGet(&g_AccessibilityMarkerSequence[slot]);
 
 		markerenabled[slot] = SDL_AtomicGet(
@@ -1360,8 +1393,9 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 		if (sequence != g_AccessibilityMarkerObservedSequence[slot]) {
 			g_AccessibilityMarkerObservedSequence[slot] = sequence;
-			g_AccessibilityMarkerDueSample[slot] = markerenabled[slot]
-					? 0 : -1;
+			g_AccessibilityMarkerDueSample[slot]
+					= slot < ACCESSIBILITY_TONE_MARKER_SLOT_COUNT
+							&& markerenabled[slot] ? 0 : -1;
 			g_AccessibilityMarkerEnabledState[slot] = markerenabled[slot];
 			if (markerenabled[slot]) {
 				g_AccessibilityMarkerPan[slot] = markerpan[slot];
@@ -1371,9 +1405,11 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			g_AccessibilityMarkerEnabledState[slot] = 0;
 		} else if (!g_AccessibilityMarkerEnabledState[slot]) {
 			g_AccessibilityMarkerEnabledState[slot] = 1;
-			g_AccessibilityMarkerDueSample[slot]
-					= ACCESSIBILITY_MARKER_PERIOD_SAMPLES
-						* slot / ACCESSIBILITY_TONE_MARKER_SLOT_COUNT;
+			if (slot < ACCESSIBILITY_TONE_MARKER_SLOT_COUNT) {
+				g_AccessibilityMarkerDueSample[slot]
+						= ACCESSIBILITY_MARKER_PERIOD_SAMPLES
+							* slot / ACCESSIBILITY_TONE_MARKER_SLOT_COUNT;
+			}
 			g_AccessibilityMarkerPan[slot] = markerpan[slot];
 		}
 	}
@@ -2464,7 +2500,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			}
 		}
 
-		for (slot = 0; slot < ACCESSIBILITY_TONE_MARKER_SLOT_COUNT; slot++) {
+		for (slot = 0; slot < ACCESSIBILITY_TONE_MARKER_VOICE_COUNT; slot++) {
 			f32 targetmarkergain = markerenabled[slot]
 					? markervolume[slot] * ACCESSIBILITY_MARKER_BASE_VOLUME
 					: 0.0f;

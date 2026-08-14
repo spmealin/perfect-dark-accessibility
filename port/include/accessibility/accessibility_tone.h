@@ -7,6 +7,7 @@
 #define ACCESSIBILITY_TONE_CANE_SLOT_COUNT 7
 #define ACCESSIBILITY_TONE_TRACKER_SLOT_COUNT 10
 #define ACCESSIBILITY_TONE_MARKER_SLOT_COUNT 4
+#define ACCESSIBILITY_TONE_LANDMARK_SLOT_COUNT 4
 #define ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT 3
 #define ACCESSIBILITY_TONE_DOOR_SLOT_COUNT 3
 
@@ -47,6 +48,7 @@ struct accessibilitytonediagnostics {
 	s32 radarsequence;
 	s32 hillenabled;
 	s32 markerenabledslots;
+	s32 landmarkenabledslots;
 	s32 canerequestedmask;
 	s32 caneactivemask;
 	s32 canecommands;
@@ -108,6 +110,9 @@ void accessibilityToneSetMarkerSlot(s32 slot, s32 enabled,
 		f32 volume, f32 pan, s32 restart);
 void accessibilityTonePlayMarkerRemoval(s32 slot);
 void accessibilityToneStopMarkers(void);
+void accessibilityToneSetLandmarkSlot(s32 slot, s32 enabled,
+		f32 volume, f32 pan, s32 restart);
+void accessibilityToneStopLandmarks(void);
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 void accessibilityToneGetDiagnostics(struct accessibilitytonediagnostics *diagnostics);
 #endif

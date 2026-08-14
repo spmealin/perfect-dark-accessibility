@@ -29,6 +29,7 @@ s32 accessibilityIsWeaponChangeAnnouncementsEnabled(void);
 s32 accessibilityIsWeaponFunctionCuesEnabled(void);
 s32 accessibilityIsXrayScannerAudioEnabled(void);
 s32 accessibilityIsAudibleMarkersEnabled(void);
+s32 accessibilityIsAuthoredLandmarksEnabled(void);
 s32 accessibilityIsCombatRadarAudioEnabled(void);
 s32 accessibilityIsKingOfTheHillBeaconEnabled(void);
 s32 accessibilityIsPlayerStatusEnabled(void);
