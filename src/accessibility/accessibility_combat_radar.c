@@ -12,6 +12,7 @@
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_combat_radar.h"
 #include "accessibility/accessibility_log.h"
+#include "accessibility/accessibility_relationship.h"
 #include "accessibility/accessibility_tone.h"
 #ifndef PLATFORM_N64
 #include "input.h"
@@ -258,14 +259,18 @@ static s32 accessibilityCombatRadarCategoryPriority(s32 category)
 static s32 accessibilityCombatRadarClassify(struct prop *prop,
 		s32 *relationship)
 {
+	s32 accessibilityrelationship;
+
 	*relationship = 0;
 
 	if (prop && (prop->type == PROPTYPE_CHR || prop->type == PROPTYPE_PLAYER)
 			&& prop->chr && g_Vars.currentplayer
 			&& g_Vars.currentplayer->prop
 			&& g_Vars.currentplayer->prop->chr) {
-		if (chrCompareTeams(g_Vars.currentplayer->prop->chr,
-				prop->chr, COMPARE_ENEMIES)) {
+		accessibilityrelationship
+				= accessibilityRelationshipClassifyCharacter(prop);
+
+		if (accessibilityrelationship == ACCESSIBILITY_RELATIONSHIP_HOSTILE) {
 			*relationship = COMPARE_ENEMIES;
 			return ACCESSIBILITY_COMBAT_RADAR_CATEGORY_ENEMY;
 		}

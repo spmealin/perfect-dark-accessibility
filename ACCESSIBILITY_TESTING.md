@@ -376,6 +376,8 @@ Query at full and partial health/shield; change weapons/functions; test loaded a
 
 ### Targeting and scanner
 
+In a mission containing active `TEAM_NONCOMBAT` characters, such as the Rescue biotechnicians or alien survivor, enable both F7 people feedback and hostile targeting feedback. Each living, enabled, perceptible non-combatant must use the friendly/neutral continuous drone and must never receive a hostile presence cue solely because its team mask is disjoint from Joanna's. If one appears on a native Combat Simulator radar, it must be presented as an ally rather than an enemy contact. Hidden or inactive scripted copies, dead or knocked-out characters, occluded characters, and characters outside the applicable observer visibility rules must remain silent. Where a script changes the character's team, verify the next scan reclassifies it without retaining a stale hostile or neutral identity. Confirm scanner diagnostics report `noncombat_character` for accepted F7 candidates.
+
 #### Environmental damaging lasers
 
 With `Accessibility.EnvironmentalHazards=1`, start Carrington Institute holo-training 3 and leave F5/F6/F8 beacons off for the first pass. Approach each horizontal laser while looking toward it. At no more than 500 world units and within the 25-degree facing cone, confirm one 220 Hz tone fades in and audibly sweeps from one physical endpoint to the other and back over 90 ticks. Turn just outside the cone, turn fully away, retreat beyond range, and place opaque background geometry between the camera and beam; each condition must fade the hazard lane out. Restore eligibility and confirm automatic reacquisition without a key press.

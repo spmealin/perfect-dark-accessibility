@@ -25,6 +25,7 @@
 #include "accessibility/accessibility_beacon.h"
 #include "accessibility/accessibility_log.h"
 #include "accessibility/accessibility_observer.h"
+#include "accessibility/accessibility_relationship.h"
 #include "accessibility/accessibility_tone.h"
 #include "accessibility/accessibility_visibility.h"
 #ifndef PLATFORM_N64
@@ -452,6 +453,7 @@ static s32 accessibilityBeaconNonHostileEligible(struct prop *prop,
 		s32 remoteobserver, const char **reason)
 {
 	struct chrdata *chr;
+	s32 relationship;
 
 	if (!prop || prop->type != PROPTYPE_CHR || !prop->chr) {
 		*reason = "not_character_category";
@@ -504,18 +506,22 @@ static s32 accessibilityBeaconNonHostileEligible(struct prop *prop,
 		return false;
 	}
 
-	if (chr->hidden2 & CHRH2FLAG_BLUESIGHT) {
+	relationship = accessibilityRelationshipClassifyCharacter(prop);
+
+	if (relationship == ACCESSIBILITY_RELATIONSHIP_PROTECTED) {
 		*reason = "protected_character";
 		return true;
 	}
 
-	if (chrCompareTeams(g_Vars.currentplayer->prop->chr, chr, COMPARE_ENEMIES)) {
+	if (relationship == ACCESSIBILITY_RELATIONSHIP_HOSTILE) {
 		*reason = "character_hostile";
 		return false;
 	}
 
-	*reason = sightIsPropFriendly(prop)
-			? "friendly_character" : "neutral_character";
+	*reason = relationship == ACCESSIBILITY_RELATIONSHIP_FRIENDLY
+			? "friendly_character"
+			: chr->team == TEAM_NONCOMBAT
+				? "noncombat_character" : "neutral_character";
 	return true;
 }
 

@@ -25,6 +25,7 @@
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_log.h"
 #include "accessibility/accessibility_path_blocker.h"
+#include "accessibility/accessibility_relationship.h"
 #include "accessibility/accessibility_targeting.h"
 #include "accessibility/accessibility_visibility.h"
 
@@ -245,7 +246,6 @@ static struct accessibilitytargetingdiagnostics
 		g_AccessibilityTargetingDiagnostics;
 #endif
 
-static s32 accessibilityTargetingGameRelationship(struct prop *prop);
 static s32 accessibilityTargetingGamePropNum(const struct prop *prop);
 
 static s32 accessibilityTargetingGameAimRegion(s32 hitpart)
@@ -1521,7 +1521,7 @@ static void accessibilityTargetingCaptureCombat(void)
 					&& (chr->hidden & CHRHFLAG_UNTARGETABLE) == 0
 					&& ((chr->hidden & CHRHFLAG_CLOAKED) == 0
 						|| USINGDEVICE(DEVICE_IRSCANNER))
-					&& accessibilityTargetingGameRelationship(prop)
+					&& accessibilityRelationshipClassifyCharacter(prop)
 						== ACCESSIBILITY_TARGETING_RELATIONSHIP_HOSTILE)
 				|| (obj && ((obj->type == OBJTYPE_AUTOGUN
 						&& accessibilityTargetingGameAutogunCombatCapable(
@@ -1738,27 +1738,6 @@ void accessibilityTargetingCaptureGame(struct prop *queryaimedprop,
 	}
 
 	g_AccessibilityTargetingGameProjectionsValid = true;
-}
-
-static s32 accessibilityTargetingGameRelationship(struct prop *prop)
-{
-	if (prop && prop->chr
-			&& (prop->chr->hidden2 & CHRH2FLAG_BLUESIGHT)) {
-		return ACCESSIBILITY_TARGETING_RELATIONSHIP_PROTECTED;
-	}
-
-	if (sightIsPropFriendly(prop)) {
-		return ACCESSIBILITY_TARGETING_RELATIONSHIP_FRIENDLY;
-	}
-
-	if (prop && prop->chr && g_Vars.currentplayer
-			&& g_Vars.currentplayer->prop
-			&& chrCompareTeams(g_Vars.currentplayer->prop->chr,
-				prop->chr, COMPARE_ENEMIES)) {
-		return ACCESSIBILITY_TARGETING_RELATIONSHIP_HOSTILE;
-	}
-
-	return ACCESSIBILITY_TARGETING_RELATIONSHIP_NEUTRAL;
 }
 
 static struct prop *accessibilityTargetingGameFindTolerantTurretAim(
@@ -2054,7 +2033,7 @@ static void accessibilityTargetingObserveCombat(
 		} else {
 			relationship = objecttarget
 					? ACCESSIBILITY_TARGETING_RELATIONSHIP_HOSTILE
-					: accessibilityTargetingGameRelationship(prop);
+					: accessibilityRelationshipClassifyCharacter(prop);
 
 			if (relationship == ACCESSIBILITY_TARGETING_RELATIONSHIP_FRIENDLY) {
 				eligible = false;

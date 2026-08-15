@@ -196,7 +196,7 @@ sound merely because they are nearby. Their valid alignment uses the interrupted
 destroyed, hidden, ordinary decorative glass, and incompatible attacks remain
 silent.
 
-The firing-range behavior remains a bounded proof. The separate hostile-combat slice covers basic single-player character relationship, occlusion, cloak/IR, elimination, automated-gun state/team semantics, and the native threat-detector sight list, but broader vehicle/non-character discovery outside that sight, target speech/repeat, multiplayer output, and full Milestone 9 blind-user acceptance remain pending.
+The firing-range behavior remains a bounded proof. The separate hostile-combat slice covers basic single-player character relationship, occlusion, cloak/IR, elimination, automated-gun state/team semantics, and the native threat-detector sight list. A shared accessibility relationship adapter preserves the engine's special `TEAM_NONCOMBAT` semantics: those characters cannot become hostile merely because their team mask is disjoint from Joanna's, and eligible living, perceptible examples use the F7 friendly/neutral-character drone instead. Broader vehicle/non-character discovery outside the threat-detector sight, target speech/repeat, multiplayer output, and full Milestone 9 blind-user acceptance remain pending.
 
 ### Virtual cane prototype
 
