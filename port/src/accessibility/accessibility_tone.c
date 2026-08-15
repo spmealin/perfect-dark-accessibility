@@ -60,6 +60,10 @@
 #define ACCESSIBILITY_FRIENDLY_VOLUME 0.10f
 #define ACCESSIBILITY_FRIENDLY_BASE_GAIN 0.72f
 #define ACCESSIBILITY_FRIENDLY_THIRD_GAIN 0.28f
+#define ACCESSIBILITY_FRIENDLY_THIRD_PULSE_ON_SAMPLES ACCESSIBILITY_TONE_SAMPLE_RATE
+#define ACCESSIBILITY_FRIENDLY_THIRD_PULSE_OFF_SAMPLES ACCESSIBILITY_TONE_SAMPLE_RATE
+#define ACCESSIBILITY_FRIENDLY_THIRD_PULSE_EDGE_SAMPLES \
+		((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.01f))
 #define ACCESSIBILITY_DOOR_FREQUENCY_HZ 440.0f
 #define ACCESSIBILITY_DOOR_VOLUME 0.24f
 #define ACCESSIBILITY_DOOR_PERIOD_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.75f))
@@ -153,6 +157,7 @@ static SDL_atomic_t g_AccessibilityFriendlyEnabled[ACCESSIBILITY_TONE_FRIENDLY_S
 static SDL_atomic_t g_AccessibilityFriendlySequence[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityFriendlyVolumeMillionths[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityFriendlyPanMillionths[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
+static SDL_atomic_t g_AccessibilityFriendlyPulseThird[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityDoorEnabled[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityDoorSequence[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityDoorVolumeMillionths[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
@@ -253,6 +258,7 @@ static f32 g_AccessibilityFriendlyPhaseBase[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COU
 static f32 g_AccessibilityFriendlyPhaseThird[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
 static f32 g_AccessibilityFriendlyPan[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
 static f32 g_AccessibilityFriendlyGain[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
+static s32 g_AccessibilityFriendlyCycleSample[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
 static s32 g_AccessibilityDoorObservedSequence[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
 static s32 g_AccessibilityDoorCycleSample[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
 static f32 g_AccessibilityDoorPhase[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
@@ -669,7 +675,7 @@ void accessibilityToneStopTracker(void)
 }
 
 void accessibilityToneSetFriendlySlot(s32 slot, s32 enabled,
-		f32 volume, f32 pan, s32 restart)
+		f32 volume, f32 pan, s32 pulsethird, s32 restart)
 {
 	if (slot < 0 || slot >= ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT) {
 		return;
@@ -690,6 +696,7 @@ void accessibilityToneSetFriendlySlot(s32 slot, s32 enabled,
 			(s32)(volume * 1000000.0f));
 	SDL_AtomicSet(&g_AccessibilityFriendlyPanMillionths[slot],
 			(s32)(pan * 1000000.0f));
+	SDL_AtomicSet(&g_AccessibilityFriendlyPulseThird[slot], pulsethird != 0);
 	SDL_AtomicSet(&g_AccessibilityFriendlyEnabled[slot],
 			enabled != 0 && volume > 0.0f);
 
@@ -1080,6 +1087,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 	s32 trackerheight[ACCESSIBILITY_TONE_TRACKER_SLOT_COUNT];
 	s32 trackerrear[ACCESSIBILITY_TONE_TRACKER_SLOT_COUNT];
 	s32 friendlyenabled[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
+	s32 friendlypulsethird[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
 	f32 friendlyvolume[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
 	f32 friendlypan[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
 	s32 doorenabled[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
@@ -1241,6 +1249,8 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 		friendlyenabled[slot] = SDL_AtomicGet(
 				&g_AccessibilityFriendlyEnabled[slot]);
+		friendlypulsethird[slot] = SDL_AtomicGet(
+				&g_AccessibilityFriendlyPulseThird[slot]);
 		friendlyvolume[slot] = (f32)SDL_AtomicGet(
 				&g_AccessibilityFriendlyVolumeMillionths[slot])
 				/ 1000000.0f;
@@ -1254,6 +1264,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			g_AccessibilityFriendlyObservedSequence[slot] = sequence;
 			g_AccessibilityFriendlyPhaseBase[slot] = 0.0f;
 			g_AccessibilityFriendlyPhaseThird[slot] = 0.0f;
+			g_AccessibilityFriendlyCycleSample[slot] = 0;
 			g_AccessibilityFriendlyPan[slot] = friendlypan[slot];
 			g_AccessibilityFriendlyGain[slot] = 0.0f;
 		}
@@ -2082,6 +2093,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 					/ (ACCESSIBILITY_TONE_SAMPLE_RATE * 0.01f);
 			f32 leftpan;
 			f32 rightpan;
+			f32 thirdgain = ACCESSIBILITY_FRIENDLY_THIRD_GAIN;
 			f32 wave;
 			f32 friendly;
 
@@ -2110,10 +2122,28 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 					? 1.0f - g_AccessibilityFriendlyPan[slot] : 1.0f;
 			rightpan = g_AccessibilityFriendlyPan[slot] < 0.0f
 					? 1.0f + g_AccessibilityFriendlyPan[slot] : 1.0f;
+
+			if (friendlypulsethird[slot]) {
+				s32 sample = g_AccessibilityFriendlyCycleSample[slot];
+
+				if (sample < ACCESSIBILITY_FRIENDLY_THIRD_PULSE_EDGE_SAMPLES) {
+					thirdgain *= (f32)sample
+							/ ACCESSIBILITY_FRIENDLY_THIRD_PULSE_EDGE_SAMPLES;
+				} else if (sample >= ACCESSIBILITY_FRIENDLY_THIRD_PULSE_ON_SAMPLES
+						- ACCESSIBILITY_FRIENDLY_THIRD_PULSE_EDGE_SAMPLES
+						&& sample < ACCESSIBILITY_FRIENDLY_THIRD_PULSE_ON_SAMPLES) {
+					thirdgain *= (f32)(ACCESSIBILITY_FRIENDLY_THIRD_PULSE_ON_SAMPLES
+							- sample)
+							/ ACCESSIBILITY_FRIENDLY_THIRD_PULSE_EDGE_SAMPLES;
+				} else if (sample >= ACCESSIBILITY_FRIENDLY_THIRD_PULSE_ON_SAMPLES) {
+					thirdgain = 0.0f;
+				}
+			}
+
 			wave = sinf(g_AccessibilityFriendlyPhaseBase[slot])
 						* ACCESSIBILITY_FRIENDLY_BASE_GAIN
 					+ sinf(g_AccessibilityFriendlyPhaseThird[slot])
-						* ACCESSIBILITY_FRIENDLY_THIRD_GAIN;
+						* thirdgain;
 			friendly = wave * g_AccessibilityFriendlyGain[slot] * 32767.0f;
 			friendlyleft += (s32)(friendly * leftpan);
 			friendlyright += (s32)(friendly * rightpan);
@@ -2129,6 +2159,17 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			}
 			if (g_AccessibilityFriendlyPhaseThird[slot] >= TWO_PI) {
 				g_AccessibilityFriendlyPhaseThird[slot] -= TWO_PI;
+			}
+
+			if (friendlyenabled[slot] && friendlypulsethird[slot]) {
+				g_AccessibilityFriendlyCycleSample[slot]++;
+				if (g_AccessibilityFriendlyCycleSample[slot]
+						>= ACCESSIBILITY_FRIENDLY_THIRD_PULSE_ON_SAMPLES
+							+ ACCESSIBILITY_FRIENDLY_THIRD_PULSE_OFF_SAMPLES) {
+					g_AccessibilityFriendlyCycleSample[slot] = 0;
+				}
+			} else if (!friendlypulsethird[slot]) {
+				g_AccessibilityFriendlyCycleSample[slot] = 0;
 			}
 		}
 

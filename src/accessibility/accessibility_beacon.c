@@ -85,6 +85,7 @@ enum accessibilitybeaconkind {
 struct accessibilitybeaconresult {
 	s32 category;
 	s32 kind;
+	s32 relationship;
 	s32 propnum;
 	s32 canonicalpropnum;
 	void *entity;
@@ -1454,6 +1455,8 @@ static s32 accessibilityBeaconScan(s32 detailed)
 					prop, observer.isremote, &reason);
 			result.kind = ACCESSIBILITY_BEACON_KIND_NON_HOSTILE;
 			result.category = ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE;
+			result.relationship
+					= accessibilityRelationshipClassifyCharacter(prop);
 		}
 
 		if (eligible && result.category == ACCESSIBILITY_BEACON_CATEGORY_OBJECT
@@ -2048,6 +2051,15 @@ static void accessibilityBeaconRefreshFriendlyDrones(const char *reason)
 
 		index = accessibilityBeaconFindResultIdentity(&drone->result);
 		if (index >= 0) {
+			if (drone->result.relationship
+					!= g_AccessibilityBeaconResults[index].relationship) {
+				accessibilityLogEvent("beacon", "friendly_drone_reclassify",
+						"slot=%d propnum=%d entity=%p old_relationship=%d new_relationship=%d",
+						slot, drone->result.propnum, drone->result.entity,
+						drone->result.relationship,
+						g_AccessibilityBeaconResults[index].relationship);
+				drone->restart = true;
+			}
 			drone->result = g_AccessibilityBeaconResults[index];
 		} else {
 			accessibilityLogEvent("beacon", "friendly_drone_release",
@@ -2055,7 +2067,7 @@ static void accessibilityBeaconRefreshFriendlyDrones(const char *reason)
 					slot, drone->result.propnum, drone->result.entity,
 					reason ? reason : "unknown");
 			accessibilityToneSetFriendlySlot(slot, false, 0.0f, 0.0f,
-					false);
+					false, false);
 			memset(drone, 0, sizeof(*drone));
 		}
 	}
@@ -2111,9 +2123,11 @@ static void accessibilityBeaconRefreshFriendlyDrones(const char *reason)
 			drone->restart = true;
 			drone->result = *result;
 			accessibilityLogEvent("beacon", "friendly_drone_assign",
-					"slot=%d propnum=%d entity=%p distance=%.3f reason=%s base_frequency_hz=440 third_frequency_hz=550 base_gain=0.72 third_gain=0.28",
+					"slot=%d propnum=%d entity=%p distance=%.3f relationship=%d third_pulsed=%d reason=%s base_frequency_hz=440 third_frequency_hz=550 base_gain=0.72 third_gain=0.28",
 					targetslot, result->propnum, result->entity,
-					result->distance, reason ? reason : "unknown");
+					result->distance, result->relationship,
+					result->relationship == ACCESSIBILITY_RELATIONSHIP_FRIENDLY,
+					reason ? reason : "unknown");
 		}
 	}
 }
@@ -2144,7 +2158,7 @@ static void accessibilityBeaconUpdateFriendlyDrones(void)
 					slot, validreason, drone->result.propnum,
 					drone->result.entity);
 			accessibilityToneSetFriendlySlot(slot, false, 0.0f, 0.0f,
-					false);
+					false, false);
 			memset(drone, 0, sizeof(*drone));
 			g_AccessibilityBeaconNextRefresh60 = g_Vars.lvframe60;
 			continue;
@@ -2165,7 +2179,10 @@ static void accessibilityBeaconUpdateFriendlyDrones(void)
 				/ (f32)AL_PAN_CENTER;
 
 		accessibilityToneSetFriendlySlot(slot, volume > 0,
-				normalizedvolume, normalizedpan, drone->restart);
+				normalizedvolume, normalizedpan,
+				drone->result.relationship
+						== ACCESSIBILITY_RELATIONSHIP_FRIENDLY,
+				drone->restart);
 		drone->restart = false;
 	}
 }
@@ -2838,7 +2855,7 @@ void accessibilityBeaconReset(const char *reason, s32 preservecategories)
 	}
 
 	accessibilityLogEvent("beacon", "reset",
-			"reason=%s preserve_categories=%d object_active=%d door_active=%d pickup_active=%d non_hostile_active=%d scans=%llu pulses=%llu interactable_enabled=%d non_hostile_enabled=%d radius=%.1f door_radius=%.1f base_cadence_ticks=%d refresh_ticks=%d min_slot_ticks=%d per_category_cap=%d object_frequency_hz=%.1f pickup_pulses=3 door_frequency_hz=%.1f door_period_ms=750 door_slots=%d non_hostile_voice=continuous_drone non_hostile_slots=%d non_hostile_base_frequency_hz=440 non_hostile_third_frequency_hz=550 non_hostile_base_gain=0.72 non_hostile_third_gain=0.28 lane=procedural_object_pickup_chirp_door_chirps_and_friendly_drone",
+			"reason=%s preserve_categories=%d object_active=%d door_active=%d pickup_active=%d non_hostile_active=%d scans=%llu pulses=%llu interactable_enabled=%d non_hostile_enabled=%d radius=%.1f door_radius=%.1f base_cadence_ticks=%d refresh_ticks=%d min_slot_ticks=%d per_category_cap=%d object_frequency_hz=%.1f pickup_pulses=3 door_frequency_hz=%.1f door_period_ms=750 door_slots=%d non_hostile_voice=continuous_drone non_hostile_slots=%d non_hostile_base_frequency_hz=440 non_hostile_third_frequency_hz=550 non_hostile_base_gain=0.72 non_hostile_third_gain=0.28 friendly_third_pulse_on_ms=1000 friendly_third_pulse_off_ms=1000 lane=procedural_object_pickup_chirp_door_chirps_and_friendly_drone",
 			reason ? reason : "reset",
 			preservecategories,
 			g_AccessibilityBeaconCategoryActive[

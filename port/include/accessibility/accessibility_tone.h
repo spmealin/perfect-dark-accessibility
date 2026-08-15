@@ -91,7 +91,7 @@ void accessibilityToneSetTrackerSlot(s32 slot, s32 enabled, f32 frequencyhz,
 		s32 restart);
 void accessibilityToneStopTracker(void);
 void accessibilityToneSetFriendlySlot(s32 slot, s32 enabled,
-		f32 volume, f32 pan, s32 restart);
+		f32 volume, f32 pan, s32 pulsethird, s32 restart);
 void accessibilityToneStopFriendly(void);
 void accessibilityToneSetDoorSlot(s32 slot, s32 enabled,
 		f32 volume, f32 pan, s32 restart);
