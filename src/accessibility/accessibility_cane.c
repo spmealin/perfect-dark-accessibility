@@ -137,6 +137,7 @@ struct accessibilitycanesample {
 	struct accessibilitycaneterrainprobe
 			terrainprobes[ACCESSIBILITY_CANE_TERRAIN_PROBE_COUNT];
 	struct prop *obstacle;
+	struct prop *ignoredgrabbedprop;
 	s32 obstacletype;
 	u32 geoflags;
 	struct coord normal;
@@ -364,12 +365,13 @@ static void accessibilityCaneLogSweep(const char *reason)
 		struct accessibilitycanesample *sample = &g_AccessibilityCaneSamples[i];
 
 		accessibilityCaneAppendLog(
-				"%ss%d={angle:%d state:%s scheduled:%d actual:%d late:%d result:%d pass:%d observer:%p remote:%d origin:%.2f,%.2f,%.2f forward:%.5f,%.5f direction:%.5f,%.5f end:%.2f,%.2f,%.2f bbox:%.2f,%.2f,%.2f raw:%.2f,%.2f,%.2f audio:%.2f,%.2f,%.2f distance:%.2f frequency_hz:%.2f end_frequency_hz:%.2f duration_ms:%d tone_pattern:%d terrain:%d drop:%d crouch:%d ladder:%d crouch_terrain_merge:%d breakable:%d terrain_ground:%.2f terrain_height:%.2f terrain_distance:%.2f terrain_room:%d terrain_flags:0x%04x terrain_queries:%d drop_refinements:%d drop_threshold:%.2f stance:%s traversal_tested:%d traversable:%d plateau:%d terrain_suppressed:%d clearance_result:%d clearance_queries:%d clearance_distance:%.2f plateau_distance:%.2f crouch_result:%d crouch_pass:%d crouch_ymax:%.2f obstacle:%p type:%d geoflags:0x%08x normal:%.5f,%.5f,%.5f edge:%.2f,%.2f,%.2f,%.2f volume:%d pan:%d normalized:%.5f,%.5f master_volume:%.5f effective_volume:%.5f query_us:%" PRIu64 " probes=[",
+				"%ss%d={angle:%d state:%s scheduled:%d actual:%d late:%d result:%d pass:%d observer:%p remote:%d ignored_grabbed_prop:%p origin:%.2f,%.2f,%.2f forward:%.5f,%.5f direction:%.5f,%.5f end:%.2f,%.2f,%.2f bbox:%.2f,%.2f,%.2f raw:%.2f,%.2f,%.2f audio:%.2f,%.2f,%.2f distance:%.2f frequency_hz:%.2f end_frequency_hz:%.2f duration_ms:%d tone_pattern:%d terrain:%d drop:%d crouch:%d ladder:%d crouch_terrain_merge:%d breakable:%d terrain_ground:%.2f terrain_height:%.2f terrain_distance:%.2f terrain_room:%d terrain_flags:0x%04x terrain_queries:%d drop_refinements:%d drop_threshold:%.2f stance:%s traversal_tested:%d traversable:%d plateau:%d terrain_suppressed:%d clearance_result:%d clearance_queries:%d clearance_distance:%.2f plateau_distance:%.2f crouch_result:%d crouch_pass:%d crouch_ymax:%.2f obstacle:%p type:%d geoflags:0x%08x normal:%.5f,%.5f,%.5f edge:%.2f,%.2f,%.2f,%.2f volume:%d pan:%d normalized:%.5f,%.5f master_volume:%.5f effective_volume:%.5f query_us:%" PRIu64 " probes=[",
 				i ? " " : "", i, sample->angledegrees,
 				accessibilityCaneSampleStateName(sample->state),
 				sample->scheduledtick, sample->actualtick, sample->lateness,
 				sample->result, sample->collisionpass,
 				(void *)sample->observerprop, sample->observerremote,
+				(void *)sample->ignoredgrabbedprop,
 				sample->origin.x, sample->origin.y,
 				sample->origin.z, sample->forward.x, sample->forward.z,
 				sample->direction.x, sample->direction.z,
@@ -949,6 +951,7 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 	s32 terrainfound = false;
 	s32 terraincedes = false;
 	s32 crouchfound = false;
+	struct prop *grabbedprop = NULL;
 #if VERSION < VERSION_NTSC_1_0
 	s32 i;
 #endif
@@ -1027,6 +1030,21 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 			? CDTYPE_BG | CDTYPE_OBJS | CDTYPE_DOORS | CDTYPE_PATHBLOCKER
 			: CDTYPE_BG;
 
+	/*
+	 * The grabbed object travels immediately in front of Joanna and remains
+	 * part of ordinary world collision. Exclude exactly that live perimeter
+	 * while sampling, as the native grab-movement queries do, so the cane
+	 * describes the route beyond the carried object rather than the object
+	 * itself. Other props and all background geometry remain eligible.
+	 */
+	if (!observer.isremote && g_Vars.currentplayer
+			&& g_Vars.currentplayer->bondmovemode == MOVEMODE_GRAB
+			&& g_Vars.currentplayer->grabbedprop) {
+		grabbedprop = g_Vars.currentplayer->grabbedprop;
+		sample->ignoredgrabbedprop = grabbedprop;
+		propSetPerimEnabled(grabbedprop, false);
+	}
+
 	result = cdExamCylMove06(&start, observer.prop->rooms,
 			&end, dstrooms, sample->radius, types, 1,
 			sample->ymax - start.y, sample->ymin - start.y);
@@ -1091,6 +1109,10 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 				&observer, &start, barrierdistance, maxdistance, types);
 		sample->crouchterrainmerge = crouchfound && terrainfound
 				&& sample->terraindistance < barrierdistance;
+	}
+
+	if (grabbedprop) {
+		propSetPerimEnabled(grabbedprop, true);
 	}
 
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
