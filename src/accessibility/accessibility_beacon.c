@@ -39,10 +39,10 @@
 #define ACCESSIBILITY_BEACON_FULL_DISTANCE 200.0f
 #define ACCESSIBILITY_BEACON_FADE_DISTANCE 1200.0f
 #define ACCESSIBILITY_BEACON_SILENT_DISTANCE 1400.0f
-#define ACCESSIBILITY_BEACON_DOOR_SCAN_DISTANCE 1800.0f
-#define ACCESSIBILITY_BEACON_DOOR_FULL_DISTANCE 250.0f
-#define ACCESSIBILITY_BEACON_DOOR_FADE_DISTANCE 1600.0f
-#define ACCESSIBILITY_BEACON_DOOR_SILENT_DISTANCE 1900.0f
+#define ACCESSIBILITY_BEACON_DOOR_SCAN_DISTANCE 3000.0f
+#define ACCESSIBILITY_BEACON_DOOR_FULL_DISTANCE 416.6667f
+#define ACCESSIBILITY_BEACON_DOOR_FADE_DISTANCE 2666.6667f
+#define ACCESSIBILITY_BEACON_DOOR_SILENT_DISTANCE 3166.6667f
 #define ACCESSIBILITY_BEACON_DOOR_FREQUENCY_HZ 440.0f
 #define ACCESSIBILITY_BEACON_OBJECT_FREQUENCY_HZ 880.0f
 #define ACCESSIBILITY_BEACON_NON_HOSTILE_GAIN 2.0f
@@ -2855,7 +2855,7 @@ void accessibilityBeaconReset(const char *reason, s32 preservecategories)
 	}
 
 	accessibilityLogEvent("beacon", "reset",
-			"reason=%s preserve_categories=%d object_active=%d door_active=%d pickup_active=%d non_hostile_active=%d scans=%llu pulses=%llu interactable_enabled=%d non_hostile_enabled=%d radius=%.1f door_radius=%.1f base_cadence_ticks=%d refresh_ticks=%d min_slot_ticks=%d per_category_cap=%d object_frequency_hz=%.1f pickup_pulses=3 door_frequency_hz=%.1f door_period_ms=750 door_slots=%d non_hostile_voice=continuous_drone non_hostile_slots=%d non_hostile_base_frequency_hz=440 non_hostile_third_frequency_hz=550 non_hostile_base_gain=0.72 non_hostile_third_gain=0.28 friendly_third_pulse_on_ms=1000 friendly_third_pulse_off_ms=1000 lane=procedural_object_pickup_chirp_door_chirps_and_friendly_drone",
+			"reason=%s preserve_categories=%d object_active=%d door_active=%d pickup_active=%d non_hostile_active=%d scans=%llu pulses=%llu interactable_enabled=%d non_hostile_enabled=%d radius=%.1f door_radius=%.1f base_cadence_ticks=%d refresh_ticks=%d min_slot_ticks=%d per_category_cap=%d object_frequency_hz=%.1f pickup_pulses=3 door_frequency_hz=%.1f door_period_ms=375 door_slots=%d non_hostile_voice=continuous_drone non_hostile_slots=%d non_hostile_base_frequency_hz=440 non_hostile_third_frequency_hz=550 non_hostile_base_gain=0.72 non_hostile_third_gain=0.28 friendly_third_pulse_on_ms=1000 friendly_third_pulse_off_ms=1000 lane=procedural_object_pickup_chirp_door_chirps_and_friendly_drone",
 			reason ? reason : "reset",
 			preservecategories,
 			g_AccessibilityBeaconCategoryActive[
