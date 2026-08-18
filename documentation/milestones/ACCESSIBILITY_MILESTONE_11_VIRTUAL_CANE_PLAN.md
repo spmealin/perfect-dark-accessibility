@@ -23,7 +23,7 @@ Prepared: 2026-07-21
 
 This document specifies a self-contained virtual-cane prototype for handoff to a coding agent. It is a prioritized slice of roadmap Milestone 11, **Navigation and orientation assistance**. Completing this plan does not complete the rest of Milestone 11: route guidance, landmarks, recovery from disorientation, and broader navigation settings remain separate work.
 
-The virtual cane sweeps seven collision probes from left to right in front of the current player. A short spatialized tone is emitted at the impact point of every probe that encounters a movement-blocking environmental surface. The resulting pattern should let a blind player perceive broad geometry such as flat and angled walls, doorways, pillars, and intermittent obstacles while continuing to move and turn.
+The virtual cane sweeps nine collision probes from left to right in front of the current player. A short spatialized tone is emitted at the impact point of every probe that encounters a movement-blocking environmental surface. The resulting pattern should let a blind player perceive broad geometry such as flat and angled walls, doorways, pillars, and intermittent obstacles while continuing to move and turn.
 
 This is an orientation cue, not an automated movement system. It must expose geometry already available through the game's movement collision system and must not alter movement, collision, aim, enemies, or gameplay state.
 
@@ -52,10 +52,10 @@ A permanent controller binding and an options-menu control are outside this prot
 Each sweep samples these camera-relative horizontal angles in this exact order:
 
 ```text
--45, -30, -15, 0, +15, +30, +45 degrees
+-60, -45, -30, -15, 0, +15, +30, +45, +60 degrees
 ```
 
-The observed sound must move left to right. Do not assume the sign convention from the mathematical rotation alone: verify in the game that `-45` pans left and `+45` pans right, and reverse the rotation signs if the engine coordinate system requires it.
+The observed sound must move left to right. Do not assume the sign convention from the mathematical rotation alone: verify in the game that `-60` pans left and `+60` pans right, and reverse the rotation signs if the engine coordinate system requires it.
 
 Each probe originally had a maximum horizontal distance of 600 world units. Blind-user acceptance testing increased the default reach by 50 percent to 900 world units. Reach and attenuation are now bounded `pd.ini` settings, so later testing can tune them without recompilation. A miss produces silence but still consumes its position in the sweep. There is no distance-to-pitch mapping in this prototype.
 
@@ -67,10 +67,10 @@ The nominal NTSC-final schedules are:
 
 | Mode | Cycle | Probe offsets from cycle start | End pause |
 | --- | --- | --- | --- |
-| Slow | 120 ticks / 2.0 s | `0, 15, 30, 45, 60, 75, 90` | 30 ticks / 0.5 s |
-| Fast | 60 ticks / 1.0 s | `0, 8, 15, 23, 30, 38, 45` | 15 ticks / 0.25 s |
+| Slow | 120 ticks / 2.0 s | `0, 11, 23, 34, 45, 56, 68, 79, 90` | 30 ticks / 0.5 s |
+| Fast | 60 ticks / 1.0 s | `0, 6, 11, 17, 23, 28, 34, 39, 45` | 15 ticks / 0.25 s |
 
-The alternating 8/7-tick intervals in Fast approximate 125 ms between samples. The cycle restarts at the leftmost probe after its end pause.
+The alternating 5/6-tick intervals in Fast approximate 94 ms between samples. The cycle restarts at the leftmost probe after its end pause.
 
 Movement and camera rotation must **not** cancel, restart, or freeze a sweep. Immediately before each scheduled probe, read the current player position, current stance bounds, and current camera direction. This keeps the cane live during combat even when the player turns or moves between successive samples.
 
@@ -91,7 +91,7 @@ The 330 Hz frequency is intentionally separated from existing accessibility cues
 
 Because the revised probe stops at 900 units, the attenuation curve's silent threshold must be farther than 900 so a maximum-range hit remains faintly audible. Use the collision X/Z coordinates for direction and distance. For playback, use camera/player ear height as the audio source Y coordinate so crouching or a collision polygon's vertical coordinate does not accidentally encode elevation in this horizontal-only prototype. Preserve both the raw collision position and final audio-source position in diagnostics.
 
-The user requested one dedicated channel for each angle. Implement this as seven preallocated virtual-cane voices in the accessibility procedural mixer, not seven scarce native game sound channels. Ordinarily only one short voice will be audible because samples are scheduled sequentially. Fixed slot ownership prevents one probe from stealing another probe's voice and isolates the cane from beacons, hazards, combat cues, fine aim, and weapon-function feedback.
+The user requested one dedicated channel for each angle. Implement this as nine preallocated virtual-cane voices in the accessibility procedural mixer, not nine scarce native game sound channels. Ordinarily only one short voice will be audible because samples are scheduled sequentially. Fixed slot ownership prevents one probe from stealing another probe's voice and isolates the cane from beacons, hazards, combat cues, fine aim, and weapon-function feedback.
 
 ## Gameplay scope
 
@@ -105,7 +105,7 @@ Run the virtual cane only when all of the following are true:
 - No menu, pause screen, cutscene, stage transition, or other non-gameplay context is active.
 - The mode is single-player for this prototype.
 
-On scope loss, immediately stop all cane voices and reset the sweep scheduler, but preserve the configured mode. On scope regain, begin a fresh left-to-right sweep at `-45` degrees. A stage change or player-context change must do the same. Turning, walking, crouching, or changing rooms is not a scope loss.
+On scope loss, immediately stop all cane voices and reset the sweep scheduler, but preserve the configured mode. On scope regain, begin a fresh left-to-right sweep at `-60` degrees. A stage change or player-context change must do the same. Turning, walking, crouching, or changing rooms is not a scope loss.
 
 Multiplayer and split-screen behavior are explicitly deferred. Do not accidentally use the wrong player's camera or combine geometry from several player contexts.
 
@@ -243,10 +243,10 @@ Extend the existing files:
 - `port/include/accessibility/accessibility_tone.h`
 - `port/src/accessibility/accessibility_tone.c`
 
-Add seven fixed cane slots, for example:
+Add nine fixed cane slots, for example:
 
 ```c
-#define ACCESSIBILITY_TONE_CANE_SLOT_COUNT 7
+#define ACCESSIBILITY_TONE_CANE_SLOT_COUNT 9
 
 void accessibilityTonePlayCaneSlot(
     s32 slot,
@@ -266,7 +266,7 @@ The audio callback must:
 - Sum cane voices with the existing accessibility mix and clamp only through the established final path.
 - Keep cane sequence and mixed-sample counters available for diagnostics.
 
-Do not use `sndStart`, native game sound handles, or seven native sound channels. The procedural mixer is already designed to keep accessibility cues isolated from the game's channel pool.
+Do not use `sndStart`, native game sound handles, or nine native sound channels. The procedural mixer is already designed to keep accessibility cues isolated from the game's channel pool.
 
 ## Scheduler state machine
 
@@ -274,10 +274,10 @@ The implementation should behave as this state machine:
 
 1. **Disabled:** mode is Off or global accessibility is disabled. No scheduler work and no active voices.
 2. **Out of scope:** mode is Slow/Fast, but gameplay scope is invalid. Preserve mode, stop voices, and wait.
-3. **Begin sweep:** scope becomes valid or mode changes to Slow/Fast. Set cursor to `-45`, assign a new sweep identifier, and allow the first sample immediately.
+3. **Begin sweep:** scope becomes valid or mode changes to Slow/Fast. Set cursor to `-60`, assign a new sweep identifier, and allow the first sample immediately.
 4. **Sample:** at the scheduled offset, capture the live pose and bbox, perform one query, optionally play that slot, record the result, and advance the cursor.
-5. **End pause:** after `+45`, make no queries until the cycle boundary.
-6. **Next sweep:** assign a new sweep identifier and return to `-45` using the current live pose.
+5. **End pause:** after `+60`, make no queries until the cycle boundary.
+6. **Next sweep:** assign a new sweep identifier and return to `-60` using the current live pose.
 
 Changing Slow to Fast or Fast to Slow starts a new left-to-right sweep immediately. Changing to Off stops all cane voices and discards partial diagnostic aggregation after emitting a reset/mode-change record.
 
@@ -308,7 +308,7 @@ Emit on transitions, not every tick.
 
 ### `cane/sweep`
 
-Prefer one aggregate record per completed 1-second or 2-second sweep over seven independently flushed lines. It should contain:
+Prefer one aggregate record per completed 1-second or 2-second sweep over nine independently flushed lines. It should contain:
 
 - Sweep identifier, mode, cycle start/end tick, intended and actual duration.
 - Per-slot angle, scheduled tick, actual tick, lateness, and skipped state.
@@ -340,7 +340,7 @@ Performance is the principal implementation risk in this prototype.
 
 ### 1. Player-cylinder collision checks are not cheap rays
 
-The proposed query traverses rooms and tests background, object, door, and path-blocker collision with a player-sized cylinder. This is intentionally more useful than a thin visual ray, but more expensive. Fast mode schedules seven queries per second; Slow schedules 3.5 per second. Never run seven queries at once, never query every render frame, and never probe unscheduled angles speculatively.
+The proposed query traverses rooms and tests background, object, door, and path-blocker collision with a player-sized cylinder. This is intentionally more useful than a thin visual ray, but more expensive. Fast mode schedules nine queries per second; Slow schedules 4.5 per second. Never run nine queries at once, never query every render frame, and never probe unscheduled angles speculatively.
 
 Measure a baseline before enabling the cane, then measure the same controlled CI/holo route with Slow and Fast. Treat an individual query above 2 ms or a sweep average above 0.5 ms as an investigation trigger, not as an automatically acceptable cost. These are provisional diagnostic thresholds, not proof of a universal budget.
 
@@ -360,7 +360,7 @@ The collision API's shared result storage makes parallelization unsafe. Keep the
 
 ### 3. Audio callback overhead
 
-Seven persistent slots must not mean seven unconditional oscillators calculated for every output sample. Maintain a fast inactive path. With the approved sequential schedule, normally zero or one cane voice is active for only about 35 ms. Use fixed arrays and atomic command transfer; allocate nothing at runtime.
+Nine persistent slots must not mean nine unconditional oscillators calculated for every output sample. Maintain a fast inactive path. With the approved sequential schedule, normally zero or one cane voice is active for only about 35 ms. Use fixed arrays and atomic command transfer; allocate nothing at runtime.
 
 ### 4. Hitch recovery
 
@@ -390,7 +390,7 @@ The coding agent should use this order so each layer can be verified independent
 1. Re-read `README.md`, all accessibility guidance, this plan, and the current collision/audio/input implementations.
 2. Confirm branch/status and repeat the F4/Alt binding search.
 3. Add configuration parsing, validation, effective-mode startup logging, and initialization/shutdown reset.
-4. Add the seven preallocated mixer slots, stop path, counters, and a temporary internal diagnostic trigger if needed. Verify there are no allocations or native sound handles.
+4. Add the nine preallocated mixer slots, stop path, counters, and a temporary internal diagnostic trigger if needed. Verify there are no allocations or native sound handles.
 5. Implement the scheduler with a stub miss result. Verify exact Slow/Fast timing, mode cycling, scope transitions, no movement reset, and hitch skipping from logs.
 6. Implement and instrument the read-only movement-cylinder adapter on the main thread.
 7. Validate raw collision positions and left/right sign in simple geometry before enabling sound requests.
@@ -441,7 +441,7 @@ Do not leave temporary developer keybindings or unconditional verbose logs in th
 - No cane sound steals, stops, retunes, or spatially relocates another accessibility cue.
 - Cane tones remain distinguishable from the 220/440/660+/880/1000 Hz cue families.
 - No two cane probes start simultaneously, including after a hitch.
-- Mode Off and scope loss leave all seven requested and active slot masks clear.
+- Mode Off and scope loss leave all nine requested and active slot masks clear.
 
 ### Build/runtime
 
@@ -454,12 +454,12 @@ Do not leave temporary developer keybindings or unconditional verbose logs in th
 
 Engineering acceptance requires all of the following:
 
-- The seven angles, ordering, maximum range, and complete-cycle timing match this specification.
+- The nine angles, ordering, maximum range, and complete-cycle timing match this specification.
 - F4 mode cycling and default-on acceptance configuration work without conflicting with Alt+F4 or game/menu controls.
 - Every sample uses live pose and stance data without restarting on movement.
 - The nearest qualifying player-blocking environment produces a spatialized fixed-pitch chirp; misses are silent.
 - Characters, players, pickups, and drop-offs are not represented.
-- The implementation uses seven preallocated accessibility mixer slots, performs no runtime allocation in the sample/audio paths, and consumes no native game sound channels.
+- The implementation uses nine preallocated accessibility mixer slots, performs no runtime allocation in the sample/audio paths, and consumes no native game sound channels.
 - The collision query runs at most once per logical tick and never on the audio thread.
 - No query bursts, stuck voices, unbounded logs, memory growth, or measurable sustained stability regression are present.
 - Configuration, shortcut, diagnostics, testing guidance, and the upstream hook ledger are updated.
@@ -474,7 +474,7 @@ Accessibility acceptance additionally requires blind-user testing in controlled 
 - Route guidance, waypoints, landmarks, objective direction, or automatic movement.
 - Controller binding, rebinding UI, or settings-menu presentation.
 - Vertical/elevation encoding, HRTF changes, or front/back sound redesign.
-- A frozen seven-ray snapshot or restarting sweeps whenever the player moves.
+- A frozen nine-ray snapshot or restarting sweeps whenever the player moves.
 - Spoken mode feedback.
 - Completing all of roadmap Milestone 11.
 

@@ -25,7 +25,7 @@
 #include "accessibility/accessibility_path_blocker.h"
 #include "accessibility/accessibility_tone.h"
 
-#define ACCESSIBILITY_CANE_PROBE_COUNT 7
+#define ACCESSIBILITY_CANE_PROBE_COUNT 9
 #define ACCESSIBILITY_CANE_TERRAIN_BASE_SAMPLE_COUNT 4
 #define ACCESSIBILITY_CANE_TERRAIN_PROBE_COUNT 12
 #define ACCESSIBILITY_CANE_DROP_REFINEMENT_COUNT 5
@@ -155,15 +155,17 @@ struct accessibilitycanesample {
 };
 
 static const s32 g_AccessibilityCaneAngles[ACCESSIBILITY_CANE_PROBE_COUNT] = {
-	-45, -30, -15, 0, 15, 30, 45,
+	-60, -45, -30, -15, 0, 15, 30, 45, 60,
 };
 
 static const s32 g_AccessibilityCaneSlowOffsets[ACCESSIBILITY_CANE_PROBE_COUNT] = {
-	TICKS(0), TICKS(15), TICKS(30), TICKS(45), TICKS(60), TICKS(75), TICKS(90),
+	TICKS(0), TICKS(11), TICKS(23), TICKS(34), TICKS(45), TICKS(56),
+	TICKS(68), TICKS(79), TICKS(90),
 };
 
 static const s32 g_AccessibilityCaneFastOffsets[ACCESSIBILITY_CANE_PROBE_COUNT] = {
-	TICKS(0), TICKS(8), TICKS(15), TICKS(23), TICKS(30), TICKS(38), TICKS(45),
+	TICKS(0), TICKS(6), TICKS(11), TICKS(17), TICKS(23), TICKS(28),
+	TICKS(34), TICKS(39), TICKS(45),
 };
 
 static struct accessibilitycanesample
