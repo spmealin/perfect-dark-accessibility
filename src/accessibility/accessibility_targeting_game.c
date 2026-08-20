@@ -14,6 +14,7 @@
 #include "game/game_0b0fd0.h"
 #include "game/lv.h"
 #include "game/objectives.h"
+#include "game/options.h"
 #include "game/propobj.h"
 #include "game/sight.h"
 #include "game/training.h"
@@ -1014,6 +1015,40 @@ static const char *accessibilityTargetingGameScopeReason(void)
 	return NULL;
 }
 
+/**
+ * Mirror sightDraw's decision to render the native target marker.
+ *
+ * gunsightoff only describes the full fine-aim sight, so using it directly
+ * suppresses alignment for ordinary weapons when Always Show Target renders
+ * the marker outside fine aim. currentPlayerGetSight also rejects melee
+ * functions, which keeps the hidden unarmed attack ray inaccessible.
+ */
+static s32 accessibilityTargetingGameTargetIndicatorVisible(void)
+{
+	s32 sight;
+	s32 sighton;
+
+	if (!g_Vars.currentplayer || !g_Vars.currentplayerstats
+			|| g_Vars.currentplayer->activemenumode != AMMODE_CLOSED
+			|| g_Vars.currentplayer->gunctrl.passivemode
+			|| g_Vars.currentplayer->bondhealth <= 0.0f) {
+		return false;
+	}
+
+	sight = currentPlayerGetSight();
+
+	if (sight == SIGHT_NONE
+			|| !optionsGetSightOnScreen(g_Vars.currentplayerstats->mpindex)) {
+		return false;
+	}
+
+	sighton = g_Vars.currentplayer->gunsightoff == 0;
+
+	return (optionsGetAlwaysShowTarget(g_Vars.currentplayerstats->mpindex)
+			&& !sighton)
+		|| (sighton && sightHasTargetWhileAiming(sight));
+}
+
 static s32 accessibilityTargetingGameIsFiringRange(void)
 {
 	return g_Vars.stagenum == STAGE_CITRAINING && g_FrIsValidWeapon;
@@ -1854,7 +1889,8 @@ static void accessibilityTargetingObserveCombat(
 	observation->inscope = true;
 	observation->distancecuereference = accessibilityTargetingGamePunchRange();
 	observation->sighton = g_Vars.currentplayer->lastsighton;
-	observation->targetindicatorvisible = !g_Vars.currentplayer->gunsightoff;
+	observation->targetindicatorvisible
+			= accessibilityTargetingGameTargetIndicatorVisible();
 	observation->viewfovy = g_Vars.currentplayer->zoominfovy;
 	observation->defaultfovy = PLAYER_DEFAULT_FOV;
 	if (observation->defaultfovy > 0.0f && observation->viewfovy > 0.0f
@@ -2486,7 +2522,7 @@ static void accessibilityTargetingObserveDevice(
 	observation->inscope = true;
 	observation->sighton = g_Vars.currentplayer->lastsighton;
 	observation->targetindicatorvisible = camspyscope
-			|| !g_Vars.currentplayer->gunsightoff;
+			|| accessibilityTargetingGameTargetIndicatorVisible();
 
 	for (i = 0; i < ARRAYCOUNT(g_AccessibilityTargetingDeviceTargets); i++) {
 		const struct accessibilitytargetingdevicetarget *targetspec
@@ -2763,7 +2799,8 @@ void accessibilityTargetingObserveGame(void)
 
 	observation.inscope = true;
 	observation.sighton = g_Vars.currentplayer->lastsighton;
-	observation.targetindicatorvisible = !g_Vars.currentplayer->gunsightoff;
+	observation.targetindicatorvisible
+			= accessibilityTargetingGameTargetIndicatorVisible();
 	frdata = frGetData();
 	aimedprop = g_Vars.currentplayer->lookingatprop.prop;
 
