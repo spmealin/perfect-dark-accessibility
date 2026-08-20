@@ -1658,6 +1658,7 @@ void accessibilityTargetingObserve(
 	s32 aimedcandidate;
 	s32 aimedshootability;
 	s32 aimedvalid;
+	s32 alignmentpermitted;
 	s32 retainingaim;
 	s32 i;
 	struct accessibilitytargetingidentity effectiveaimidentity;
@@ -1695,6 +1696,7 @@ void accessibilityTargetingObserve(
 	aimedcandidate = false;
 	aimedshootability = ACCESSIBILITY_TARGETING_SHOOTABILITY_UNKNOWN;
 	aimedvalid = false;
+	alignmentpermitted = observation->targetindicatorvisible;
 	retainingaim = false;
 	memset(&effectiveaimidentity, 0, sizeof(effectiveaimidentity));
 
@@ -1713,7 +1715,18 @@ void accessibilityTargetingObserve(
 		}
 	}
 
+	/*
+	 * Alignment mirrors the native visible aiming point. Keep semantic target
+	 * observations available for presence and distance feedback, but do not
+	 * expose the hidden camera-center attack ray while the game suppresses its
+	 * target indicator (notably while unarmed).
+	 */
+	if (aimedvalid && !alignmentpermitted) {
+		aimedvalid = false;
+	}
+
 	if (!aimedvalid
+			&& alignmentpermitted
 			&& observation->profile == ACCESSIBILITY_TARGETING_PROFILE_COMBAT
 			&& g_AccessibilityTargetingHasAimedIdentity
 			&& g_AccessibilityTargetingAimLossFrames
@@ -1778,7 +1791,9 @@ void accessibilityTargetingObserve(
 					g_AccessibilityTargetingAimedIdentity.sourceslot,
 					g_AccessibilityTargetingAimedIdentity.propnum,
 					aimedcandidate, aimedshootability,
-					aimedcandidate
+					!alignmentpermitted
+						? "target_indicator_hidden"
+						: aimedcandidate
 						? accessibilityTargetingShootabilityName(aimedshootability)
 						: "aim_lost");
 		}
@@ -1787,9 +1802,11 @@ void accessibilityTargetingObserve(
 		g_AccessibilityTargetingAimLossFrames = 0;
 		memset(&g_AccessibilityTargetingAimedIdentity, 0,
 				sizeof(g_AccessibilityTargetingAimedIdentity));
-		accessibilityTargetingStopAlignment(aimedcandidate
-				? accessibilityTargetingShootabilityName(aimedshootability)
-				: "aim_lost");
+		accessibilityTargetingStopAlignment(!alignmentpermitted
+				? "target_indicator_hidden"
+				: aimedcandidate
+					? accessibilityTargetingShootabilityName(aimedshootability)
+					: "aim_lost");
 	} else {
 		if (acquisition && g_AccessibilityTargetingHasAimedIdentity) {
 			accessibilityTargetingStopAlignment("aim_changed");
@@ -1862,11 +1879,12 @@ void accessibilityTargetingObserve(
 			|| observation->frame60
 					>= g_AccessibilityTargetingCurrentState->nextobservationlog60) {
 		accessibilityLogEvent("targeting", "observation",
-				"count=%llu frame=%d stage=%d player=%d source=%d profile=%d sight_on=%d indicator_visible=%d view_fovy=%.3f default_fovy=%.3f zoom_blend=%.4f precision_guidance=%d precision_propnum=%d range_profile=%s full_distance=%.3f fade_distance=%.3f maximum_distance=%.3f candidates=%d tracked=%d aimed_candidate=%d aimed_shootable=%d shootability=%d shootability_reason=%s acquisition=%d next_presence=%d alignment_active=%d quality_available=%d quality=%.4f distance=%.3f frequency_hz=%.2f",
+				"count=%llu frame=%d stage=%d player=%d source=%d profile=%d sight_on=%d indicator_visible=%d alignment_permitted=%d view_fovy=%.3f default_fovy=%.3f zoom_blend=%.4f precision_guidance=%d precision_propnum=%d range_profile=%s full_distance=%.3f fade_distance=%.3f maximum_distance=%.3f candidates=%d tracked=%d aimed_candidate=%d aimed_shootable=%d shootability=%d shootability_reason=%s acquisition=%d next_presence=%d alignment_active=%d quality_available=%d quality=%.4f distance=%.3f frequency_hz=%.2f",
 				(unsigned long long)g_AccessibilityTargetingObservationCount,
 				observation->frame60, observation->stagenum, observation->playernum,
 				observation->source, observation->profile, observation->sighton,
 				observation->targetindicatorvisible,
+				alignmentpermitted,
 				observation->viewfovy, observation->defaultfovy,
 				observation->zoomblend,
 				g_AccessibilityTargetingCurrentState->precisionguidanceactive,
@@ -1880,7 +1898,10 @@ void accessibilityTargetingObserve(
 				observation->candidatecount,
 				g_AccessibilityTargetingRecordCount, aimedcandidate, aimedvalid,
 				aimedshootability,
-				accessibilityTargetingShootabilityName(aimedshootability), acquisition,
+				!alignmentpermitted && aimedcandidate
+					? "target_indicator_hidden"
+					: accessibilityTargetingShootabilityName(aimedshootability),
+				acquisition,
 				g_AccessibilityTargetingNextPresence60,
 				g_AccessibilityTargetingAlignmentActive,
 				aimedrecord ? aimedrecord->hasaimquality : 0,
