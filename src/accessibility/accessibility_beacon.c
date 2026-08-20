@@ -1205,13 +1205,46 @@ static struct prop *accessibilityBeaconVisibleDoor(struct prop *prop,
 	return bestprop;
 }
 
-static f32 accessibilityBeaconCalculateSpatial(struct prop *prop,
+static void accessibilityBeaconDoorwayPosition(struct prop *prop,
+		struct coord *position)
+{
+	struct doorobj *door = prop ? prop->door : NULL;
+	struct doorobj *sibling;
+	s32 count = 0;
+	s32 guard = 0;
+
+	if (!door) {
+		*position = prop->pos;
+		return;
+	}
+
+	position->x = 0.0f;
+	position->y = 0.0f;
+	position->z = 0.0f;
+	sibling = door;
+
+	do {
+		position->x += sibling->startpos.x;
+		position->y += sibling->startpos.y;
+		position->z += sibling->startpos.z;
+		count++;
+		sibling = sibling->sibling;
+	} while (sibling && sibling != door
+			&& guard++ < ACCESSIBILITY_BEACON_MAX_DOOR_SIBLINGS);
+
+	position->x /= count;
+	position->y /= count;
+	position->z /= count;
+}
+
+static f32 accessibilityBeaconCalculateSpatialAtPosition(
+		const struct coord *position,
 		const struct accessibilityobserver *observer,
 		f32 *bearing, f32 *vertical)
 {
-	f32 x = prop->pos.x - observer->origin.x;
-	f32 y = prop->pos.y - observer->origin.y;
-	f32 z = prop->pos.z - observer->origin.z;
+	f32 x = position->x - observer->origin.x;
+	f32 y = position->y - observer->origin.y;
+	f32 z = position->z - observer->origin.z;
 	f32 absolute = atan2f(x, z) * (180.0f / M_PI);
 	f32 forward = atan2f(observer->look.x, observer->look.z)
 			* (180.0f / M_PI);
@@ -1228,6 +1261,14 @@ static f32 accessibilityBeaconCalculateSpatial(struct prop *prop,
 	*bearing = relative;
 	*vertical = y;
 	return sqrtf(x * x + y * y + z * z);
+}
+
+static f32 accessibilityBeaconCalculateSpatial(struct prop *prop,
+		const struct accessibilityobserver *observer,
+		f32 *bearing, f32 *vertical)
+{
+	return accessibilityBeaconCalculateSpatialAtPosition(&prop->pos,
+			observer, bearing, vertical);
 }
 
 static s32 accessibilityBeaconResultCompare(const void *avalue, const void *bvalue)
@@ -1468,8 +1509,16 @@ static s32 accessibilityBeaconScan(s32 detailed)
 			f32 scandistance = accessibilityBeaconCategoryScanDistance(
 					result.category);
 
-			distance = accessibilityBeaconCalculateSpatial(
-					candidate, &observer, &bearing, &vertical);
+			if (result.category == ACCESSIBILITY_BEACON_CATEGORY_DOOR) {
+				struct coord doorwayposition;
+
+				accessibilityBeaconDoorwayPosition(candidate, &doorwayposition);
+				distance = accessibilityBeaconCalculateSpatialAtPosition(
+						&doorwayposition, &observer, &bearing, &vertical);
+			} else {
+				distance = accessibilityBeaconCalculateSpatial(
+						candidate, &observer, &bearing, &vertical);
+			}
 
 			if (distance > scandistance) {
 				eligible = false;
@@ -1636,8 +1685,16 @@ static struct prop *accessibilityBeaconValidateResult(struct accessibilitybeacon
 		return NULL;
 	}
 
-	distance = accessibilityBeaconCalculateSpatial(
-			prop, &observer, &bearing, &vertical);
+	if (result->category == ACCESSIBILITY_BEACON_CATEGORY_DOOR) {
+		struct coord doorwayposition;
+
+		accessibilityBeaconDoorwayPosition(prop, &doorwayposition);
+		distance = accessibilityBeaconCalculateSpatialAtPosition(
+				&doorwayposition, &observer, &bearing, &vertical);
+	} else {
+		distance = accessibilityBeaconCalculateSpatial(
+				prop, &observer, &bearing, &vertical);
+	}
 
 	if (distance > accessibilityBeaconCategoryScanDistance(result->category)) {
 		*reason = "moved_outside_scan_radius";
@@ -1971,6 +2028,7 @@ static void accessibilityBeaconUpdateDoorChirps(void)
 		struct accessibilitybeacondoorslot *door
 				= &g_AccessibilityBeaconDoorSlots[slot];
 		struct prop *prop;
+		struct coord doorwayposition;
 		const char *validreason;
 		s32 volume;
 		s32 pan;
@@ -1997,7 +2055,8 @@ static void accessibilityBeaconUpdateDoorChirps(void)
 				ACCESSIBILITY_BEACON_DOOR_FULL_DISTANCE,
 				ACCESSIBILITY_BEACON_DOOR_FADE_DISTANCE,
 				ACCESSIBILITY_BEACON_DOOR_SILENT_DISTANCE, AL_VOL_FULL);
-		pan = psCalculatePan(&prop->pos,
+		accessibilityBeaconDoorwayPosition(prop, &doorwayposition);
+		pan = psCalculatePan(&doorwayposition,
 				ACCESSIBILITY_BEACON_DOOR_FULL_DISTANCE,
 				ACCESSIBILITY_BEACON_DOOR_FADE_DISTANCE,
 				ACCESSIBILITY_BEACON_DOOR_SILENT_DISTANCE,

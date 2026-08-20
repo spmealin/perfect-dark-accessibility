@@ -260,8 +260,8 @@ static f32 g_AccessibilityFriendlyPan[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
 static f32 g_AccessibilityFriendlyGain[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
 static s32 g_AccessibilityFriendlyCycleSample[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
 static s32 g_AccessibilityDoorObservedSequence[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
-static s32 g_AccessibilityDoorCycleSample[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
-static f32 g_AccessibilityDoorPhase[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
+static s32 g_AccessibilityDoorCycleSample;
+static s32 g_AccessibilityDoorWaitForWindow[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
 static f32 g_AccessibilityDoorPan[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
 static s32 g_AccessibilityRadarObservedSequence;
 static s32 g_AccessibilityRadarSamplesRemaining;
@@ -1281,11 +1281,18 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		anydoorenabled |= doorenabled[slot];
 
 		if (sequence != g_AccessibilityDoorObservedSequence[slot]) {
-			g_AccessibilityDoorObservedSequence[slot] = sequence;
-			g_AccessibilityDoorCycleSample[slot]
-					= slot * ACCESSIBILITY_DOOR_PERIOD_SAMPLES
+			s32 sample = g_AccessibilityDoorCycleSample
+					- slot * ACCESSIBILITY_DOOR_PERIOD_SAMPLES
 						/ ACCESSIBILITY_TONE_DOOR_SLOT_COUNT;
-			g_AccessibilityDoorPhase[slot] = 0.0f;
+
+			if (sample < 0) {
+				sample += ACCESSIBILITY_DOOR_PERIOD_SAMPLES;
+			}
+
+			g_AccessibilityDoorObservedSequence[slot] = sequence;
+			g_AccessibilityDoorWaitForWindow[slot]
+					= doorenabled[slot]
+						&& sample < ACCESSIBILITY_DOOR_BEEP_SAMPLES;
 			g_AccessibilityDoorPan[slot] = doorpan[slot];
 		}
 	}
@@ -2174,11 +2181,18 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		}
 
 		for (slot = 0; slot < ACCESSIBILITY_TONE_DOOR_SLOT_COUNT; slot++) {
-			s32 sample = g_AccessibilityDoorCycleSample[slot];
+			s32 sample = g_AccessibilityDoorCycleSample
+					- slot * ACCESSIBILITY_DOOR_PERIOD_SAMPLES
+						/ ACCESSIBILITY_TONE_DOOR_SLOT_COUNT;
 			f32 envelope = 1.0f;
+			f32 phase;
 			f32 leftpan;
 			f32 rightpan;
 			f32 door;
+
+			if (sample < 0) {
+				sample += ACCESSIBILITY_DOOR_PERIOD_SAMPLES;
+			}
 
 			if (!doorenabled[slot]) {
 				continue;
@@ -2186,6 +2200,14 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 			g_AccessibilityDoorPan[slot] += (doorpan[slot]
 					- g_AccessibilityDoorPan[slot]) / (f32)(frames - i);
+
+			if (g_AccessibilityDoorWaitForWindow[slot]) {
+				if (sample < ACCESSIBILITY_DOOR_BEEP_SAMPLES) {
+					continue;
+				}
+
+				g_AccessibilityDoorWaitForWindow[slot] = 0;
+			}
 
 			if (sample < ACCESSIBILITY_DOOR_BEEP_SAMPLES) {
 				if (sample < ACCESSIBILITY_DOOR_ATTACK_SAMPLES) {
@@ -2201,25 +2223,20 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 						? 1.0f - g_AccessibilityDoorPan[slot] : 1.0f;
 				rightpan = g_AccessibilityDoorPan[slot] < 0.0f
 						? 1.0f + g_AccessibilityDoorPan[slot] : 1.0f;
-				door = sinf(g_AccessibilityDoorPhase[slot]) * envelope
+				phase = TWO_PI * ACCESSIBILITY_DOOR_FREQUENCY_HZ
+						* sample / ACCESSIBILITY_TONE_SAMPLE_RATE;
+				door = sinf(phase) * envelope
 						* doorvolume[slot] * ACCESSIBILITY_DOOR_VOLUME
 						* 32767.0f;
 				doorleft += (s32)(door * leftpan);
 				doorright += (s32)(door * rightpan);
 			}
+		}
 
-			g_AccessibilityDoorPhase[slot] += TWO_PI
-					* ACCESSIBILITY_DOOR_FREQUENCY_HZ
-					/ ACCESSIBILITY_TONE_SAMPLE_RATE;
-			if (g_AccessibilityDoorPhase[slot] >= TWO_PI) {
-				g_AccessibilityDoorPhase[slot] -= TWO_PI;
-			}
-			g_AccessibilityDoorCycleSample[slot]++;
-			if (g_AccessibilityDoorCycleSample[slot]
-					>= ACCESSIBILITY_DOOR_PERIOD_SAMPLES) {
-				g_AccessibilityDoorCycleSample[slot] = 0;
-				g_AccessibilityDoorPhase[slot] = 0.0f;
-			}
+		g_AccessibilityDoorCycleSample++;
+		if (g_AccessibilityDoorCycleSample
+				>= ACCESSIBILITY_DOOR_PERIOD_SAMPLES) {
+			g_AccessibilityDoorCycleSample = 0;
 		}
 
 		if (g_AccessibilityRadarSamplesRemaining > 0) {
