@@ -70,6 +70,29 @@ struct accessibilityincidentframe {
 	s32 cutscene;
 	s32 cameramode;
 	s32 dead;
+	s32 movementmode;
+	s32 vehiclevalid;
+	s32 vehiclepropnum;
+	struct coord vehicleorigin;
+	struct coord vehicleheading;
+	struct coord vehiclevelocity;
+	struct coord vehicletravel;
+	f32 vehiclespeed;
+	f32 vehicleturnspeed;
+	s32 vehiclemode;
+};
+
+struct accessibilityincidentvehiclemove {
+	s32 valid;
+	s32 tick;
+	struct coord requestedvelocity;
+	f32 angledelta;
+	s32 result;
+	struct prop *obstacle;
+	s32 obstaclepropnum;
+	s32 obstacleproptype;
+	s32 obstacleobjecttype;
+	s32 obstaclemodel;
 };
 
 static struct accessibilityincidentframe
@@ -79,6 +102,10 @@ static s32 g_AccessibilityIncidentHistoryWrite;
 static s32 g_AccessibilityIncidentNextSampleTick;
 static s32 g_AccessibilityIncidentStage = -1;
 static u64 g_AccessibilityIncidentCaptureId;
+static struct accessibilityincidentvehiclemove
+		g_AccessibilityIncidentVehicleMove;
+static struct accessibilityincidentvehiclemove
+		g_AccessibilityIncidentVehicleBlockedMove;
 
 static struct defaultobj *accessibilityIncidentGetObj(struct prop *prop)
 {
@@ -175,6 +202,7 @@ static void accessibilityIncidentRecordFrame(void)
 	struct accessibilityincidentframe *frame
 			= &g_AccessibilityIncidentHistory[g_AccessibilityIncidentHistoryWrite];
 	struct accessibilityobserver observer;
+	struct accessibilityvehicle vehicle;
 	s32 i;
 
 	memset(frame, 0, sizeof(*frame));
@@ -211,6 +239,25 @@ static void accessibilityIncidentRecordFrame(void)
 	if (g_Vars.currentplayer) {
 		frame->cameramode = g_Vars.currentplayer->cameramode;
 		frame->dead = g_Vars.currentplayer->isdead;
+		frame->movementmode = g_Vars.currentplayer->bondmovemode;
+	} else {
+		frame->movementmode = -1;
+	}
+
+	frame->vehiclevalid = accessibilityObserverGetVehicle(&vehicle);
+
+	if (frame->vehiclevalid) {
+		frame->vehiclepropnum = accessibilityIncidentPropNum(vehicle.prop);
+		frame->vehicleorigin = vehicle.origin;
+		frame->vehicleheading = vehicle.heading;
+		frame->vehiclevelocity = vehicle.velocity;
+		frame->vehicletravel = vehicle.travel;
+		frame->vehiclespeed = vehicle.speed;
+		frame->vehicleturnspeed = vehicle.turnspeed;
+		frame->vehiclemode = vehicle.vehiclemode;
+	} else {
+		frame->vehiclepropnum = -1;
+		frame->vehiclemode = -1;
 	}
 
 	g_AccessibilityIncidentHistoryWrite
@@ -237,7 +284,7 @@ static void accessibilityIncidentDumpHistory(u64 captureid)
 						(first + i) % ACCESSIBILITY_INCIDENT_HISTORY_SAMPLES];
 
 		accessibilityLogEvent("incident", "history",
-				"capture=%llu index=%d age_samples=%d t_us=%llu stage=%d tick=%d player=%d tickmode=%d observer_valid=%d observer_remote=%d origin=%.3f,%.3f,%.3f camera=%.3f,%.3f,%.3f look=%.6f,%.6f,%.6f room=%d keymask=0x%08x modifiers=0x%04x controller0=%d,%d,0x%08x controller1=%d,%d,0x%08x controller2=%d,%d,0x%08x controller3=%d,%d,0x%08x menus=%d paused=%d cutscene=%d camera_mode=%d dead=%d",
+				"capture=%llu index=%d age_samples=%d t_us=%llu stage=%d tick=%d player=%d tickmode=%d observer_valid=%d observer_remote=%d origin=%.3f,%.3f,%.3f camera=%.3f,%.3f,%.3f look=%.6f,%.6f,%.6f room=%d keymask=0x%08x modifiers=0x%04x controller0=%d,%d,0x%08x controller1=%d,%d,0x%08x controller2=%d,%d,0x%08x controller3=%d,%d,0x%08x menus=%d paused=%d cutscene=%d camera_mode=%d dead=%d movement_mode=%d vehicle_valid=%d vehicle_propnum=%d vehicle_origin=%.3f,%.3f,%.3f vehicle_heading=%.6f,%.6f,%.6f vehicle_velocity=%.3f,%.3f,%.3f vehicle_travel=%.6f,%.6f,%.6f vehicle_speed=%.3f vehicle_turn_speed=%.6f vehicle_mode=%d",
 				(unsigned long long)captureid, i,
 				g_AccessibilityIncidentHistoryCount - 1 - i,
 				(unsigned long long)frame->timestampus,
@@ -253,8 +300,89 @@ static void accessibilityIncidentDumpHistory(u64 captureid)
 				frame->stickx[2], frame->sticky[2], frame->buttons[2],
 				frame->stickx[3], frame->sticky[3], frame->buttons[3],
 				frame->menucount, frame->paused, frame->cutscene,
-				frame->cameramode, frame->dead);
+				frame->cameramode, frame->dead,
+				frame->movementmode, frame->vehiclevalid,
+				frame->vehiclepropnum,
+				frame->vehicleorigin.x, frame->vehicleorigin.y,
+				frame->vehicleorigin.z,
+				frame->vehicleheading.x, frame->vehicleheading.y,
+				frame->vehicleheading.z,
+				frame->vehiclevelocity.x, frame->vehiclevelocity.y,
+				frame->vehiclevelocity.z,
+				frame->vehicletravel.x, frame->vehicletravel.y,
+				frame->vehicletravel.z,
+				frame->vehiclespeed, frame->vehicleturnspeed,
+				frame->vehiclemode);
 	}
+}
+
+static void accessibilityIncidentDumpVehicle(u64 captureid)
+{
+	struct accessibilityvehicle vehicle;
+	s32 valid = accessibilityObserverGetVehicle(&vehicle);
+
+	accessibilityLogEvent("incident", "vehicle_state",
+			"capture=%llu valid=%d movement_mode=%d vehicle_mode=%d prop=%p propnum=%d origin=%.3f,%.3f,%.3f rooms=%d,%d,%d,%d,%d,%d,%d,%d heading=%.6f,%.6f,%.6f velocity=%.3f,%.3f,%.3f travel=%.6f,%.6f,%.6f speed=%.3f turn_speed=%.6f radius=%.3f ymin=%.3f ymax=%.3f mounted=%d",
+			(unsigned long long)captureid, valid,
+			g_Vars.currentplayer ? g_Vars.currentplayer->bondmovemode : -1,
+			g_Vars.currentplayer ? g_Vars.currentplayer->bondvehiclemode : -1,
+			valid ? (void *)vehicle.prop : NULL,
+			valid ? accessibilityIncidentPropNum(vehicle.prop) : -1,
+			valid ? vehicle.origin.x : 0.0f,
+			valid ? vehicle.origin.y : 0.0f,
+			valid ? vehicle.origin.z : 0.0f,
+			valid ? vehicle.prop->rooms[0] : -1,
+			valid ? vehicle.prop->rooms[1] : -1,
+			valid ? vehicle.prop->rooms[2] : -1,
+			valid ? vehicle.prop->rooms[3] : -1,
+			valid ? vehicle.prop->rooms[4] : -1,
+			valid ? vehicle.prop->rooms[5] : -1,
+			valid ? vehicle.prop->rooms[6] : -1,
+			valid ? vehicle.prop->rooms[7] : -1,
+			valid ? vehicle.heading.x : 0.0f,
+			valid ? vehicle.heading.y : 0.0f,
+			valid ? vehicle.heading.z : 0.0f,
+			valid ? vehicle.velocity.x : 0.0f,
+			valid ? vehicle.velocity.y : 0.0f,
+			valid ? vehicle.velocity.z : 0.0f,
+			valid ? vehicle.travel.x : 0.0f,
+			valid ? vehicle.travel.y : 0.0f,
+			valid ? vehicle.travel.z : 0.0f,
+			valid ? vehicle.speed : 0.0f,
+			valid ? vehicle.turnspeed : 0.0f,
+			valid ? vehicle.radius : 0.0f,
+			valid ? vehicle.ymin : 0.0f,
+			valid ? vehicle.ymax : 0.0f,
+			valid && vehicle.prop->obj
+					&& (vehicle.prop->obj->hidden & OBJHFLAG_MOUNTED) != 0);
+
+	accessibilityLogEvent("incident", "vehicle_movement",
+			"capture=%llu attempt_valid=%d attempt_tick=%d attempt_velocity=%.3f,%.3f,%.3f attempt_angle_delta=%.6f attempt_result=%d attempt_obstacle=%p attempt_obstacle_propnum=%d attempt_obstacle_prop_type=%d attempt_obstacle_object_type=%d attempt_obstacle_model=%d blocked_valid=%d blocked_tick=%d blocked_velocity=%.3f,%.3f,%.3f blocked_angle_delta=%.6f blocked_result=%d blocked_obstacle=%p blocked_obstacle_propnum=%d blocked_obstacle_prop_type=%d blocked_obstacle_object_type=%d blocked_obstacle_model=%d",
+			(unsigned long long)captureid,
+			g_AccessibilityIncidentVehicleMove.valid,
+			g_AccessibilityIncidentVehicleMove.tick,
+			g_AccessibilityIncidentVehicleMove.requestedvelocity.x,
+			g_AccessibilityIncidentVehicleMove.requestedvelocity.y,
+			g_AccessibilityIncidentVehicleMove.requestedvelocity.z,
+			g_AccessibilityIncidentVehicleMove.angledelta,
+			g_AccessibilityIncidentVehicleMove.result,
+			(void *)g_AccessibilityIncidentVehicleMove.obstacle,
+			g_AccessibilityIncidentVehicleMove.obstaclepropnum,
+			g_AccessibilityIncidentVehicleMove.obstacleproptype,
+			g_AccessibilityIncidentVehicleMove.obstacleobjecttype,
+			g_AccessibilityIncidentVehicleMove.obstaclemodel,
+			g_AccessibilityIncidentVehicleBlockedMove.valid,
+			g_AccessibilityIncidentVehicleBlockedMove.tick,
+			g_AccessibilityIncidentVehicleBlockedMove.requestedvelocity.x,
+			g_AccessibilityIncidentVehicleBlockedMove.requestedvelocity.y,
+			g_AccessibilityIncidentVehicleBlockedMove.requestedvelocity.z,
+			g_AccessibilityIncidentVehicleBlockedMove.angledelta,
+			g_AccessibilityIncidentVehicleBlockedMove.result,
+			(void *)g_AccessibilityIncidentVehicleBlockedMove.obstacle,
+			g_AccessibilityIncidentVehicleBlockedMove.obstaclepropnum,
+			g_AccessibilityIncidentVehicleBlockedMove.obstacleproptype,
+			g_AccessibilityIncidentVehicleBlockedMove.obstacleobjecttype,
+			g_AccessibilityIncidentVehicleBlockedMove.obstaclemodel);
 }
 
 static void accessibilityIncidentDumpPlayer(u64 captureid)
@@ -581,6 +709,7 @@ static void accessibilityIncidentCapture(void)
 			ACCESSIBILITY_INCIDENT_PROP_RANGE);
 	accessibilityIncidentDumpHistory(captureid);
 	accessibilityIncidentDumpPlayer(captureid);
+	accessibilityIncidentDumpVehicle(captureid);
 	accessibilityIncidentDumpObjectives(captureid);
 	accessibilityIncidentDumpInventory(captureid);
 	accessibilityBeaconDumpDiagnostics(captureid);
@@ -648,4 +777,36 @@ void accessibilityIncidentReset(const char *reason)
 	g_AccessibilityIncidentHistoryCount = 0;
 	g_AccessibilityIncidentHistoryWrite = 0;
 	g_AccessibilityIncidentNextSampleTick = 0;
+	memset(&g_AccessibilityIncidentVehicleMove, 0,
+			sizeof(g_AccessibilityIncidentVehicleMove));
+	memset(&g_AccessibilityIncidentVehicleBlockedMove, 0,
+			sizeof(g_AccessibilityIncidentVehicleBlockedMove));
+}
+
+void accessibilityIncidentRecordHoverbikeMove(struct coord *requestedvelocity,
+		f32 angledelta, s32 result, struct prop *obstacle)
+{
+	struct accessibilityincidentvehiclemove *move
+			= &g_AccessibilityIncidentVehicleMove;
+	struct defaultobj *obj = accessibilityIncidentGetObj(obstacle);
+
+	if (!accessibilityIsEnabled() || !requestedvelocity) {
+		return;
+	}
+
+	memset(move, 0, sizeof(*move));
+	move->valid = true;
+	move->tick = g_Vars.lvframe60;
+	move->requestedvelocity = *requestedvelocity;
+	move->angledelta = angledelta;
+	move->result = result;
+	move->obstacle = obstacle;
+	move->obstaclepropnum = accessibilityIncidentPropNum(obstacle);
+	move->obstacleproptype = obstacle ? obstacle->type : -1;
+	move->obstacleobjecttype = obj ? obj->type : -1;
+	move->obstaclemodel = obj ? obj->modelnum : -1;
+
+	if (result != CDRESULT_NOCOLLISION) {
+		g_AccessibilityIncidentVehicleBlockedMove = *move;
+	}
 }

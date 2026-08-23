@@ -87,6 +87,20 @@ With accessibility and logging enabled, enter ordinary gameplay and move, turn, 
 
 Repeat while using the CamSpy and confirm observer position, room, direction, nearby-prop range, focus selection, and blocker ray originate from its current camera rather than Joanna. Put an interactable just inside and outside the documented 0.75 focus-dot boundary, then place more than 16 supported props in the cone where practical; verify deterministic alignment/distance ordering and truthful truncation without allocation. Repeat in pause/menu, cutscene, death, and stage-transition contexts to verify state is captured or reset without stale props or history. F2 alone, Control+Shift+F2, and Alt+Shift+F2 must not capture. With logging disabled, Shift+F2 must say `Diagnostic logging unavailable` without creating a log or affecting gameplay. Trigger several captures in one session and confirm identifiers increase, the history remains bounded, JSON Lines remain parseable, no game/audio memory grows per sample, and collection duration is acceptable. A new process may restart capture numbering at one; session identifiers disambiguate it.
 
+Repeat while mounted on a hoverbike. Every history sample must identify
+`movement_mode=MOVEMODE_BIKE`, the mounted prop, vehicle mode, position,
+heading, world velocity, selected travel direction, speed, and turn speed.
+The current `incident/vehicle_state` record must additionally contain the
+native vehicle collision-cylinder radius and vertical bounds. Drive into a
+known wall and capture immediately: `incident/vehicle_movement` must preserve
+both the latest settled movement attempt and the latest blocked attempt,
+including requested displacement/turn, collision result, and the obstacle's
+prop, object type, and model where one exists. Dismount and capture again;
+vehicle validity must clear without retaining a stale mounted identity, while
+the bounded blocked-move snapshot may remain available until the stage reset.
+These diagnostics are observational and must not change vehicle motion,
+collision response, or native audio.
+
 The temporary `ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS` CMake option defaults to `OFF`. Enable it for a diagnostic build in the required MinGW64 environment with `cmake -G"Unix Makefiles" -Bbuild -DACCESSIBILITY_PERFORMANCE_DIAGNOSTICS=ON .`, then rebuild normally. Return to the normal build with the same configure command using `OFF`.
 
 When compiled in and accessibility logging is active, `performance/frame_window` is emitted approximately once per real-time second regardless of whether targeting, beacons, or hazards currently have a selected object. It records rendered-frame rate, the longest observed inter-frame gap, logical game-tick rate and delta fields, stage/menu context, Windows working-set and private-byte totals and session-baseline deltas, desired oscillator states including the enabled combat-slot count, and fixed-buffer mixer call/pass-through/active/frame counters. Use it to correlate a reported slowdown with memory growth, an oscillator that remained enabled, or continued expensive mixing. Hazard `scan` audits additionally include the current, average, and maximum scan duration in microseconds for the preceding audit window. `performance/targeting_window` uses the same one-second window and adds sniper-refinement, detailed-query, hit, miss, budget-exhaustion, total-query-time, and maximum-query-time counters next to the same render FPS, game-tick rate, and maximum frame gap. These records are diagnostic observations only and do not allocate or lock in the audio callback. The session-start record reports `performance_diagnostics=1` and its interval when present, or zero when compiled out.

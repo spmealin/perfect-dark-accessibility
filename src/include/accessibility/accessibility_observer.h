@@ -17,6 +17,23 @@ struct accessibilityobserver {
 	s32 isremote;
 };
 
+struct accessibilityvehicle {
+	struct prop *prop;
+	struct coord origin;
+	struct coord heading;
+	struct coord velocity;
+	struct coord travel;
+	RoomNum room;
+	f32 radius;
+	f32 ymin;
+	f32 ymax;
+	f32 speed;
+	f32 turnspeed;
+	s32 movementmode;
+	s32 vehiclemode;
+};
+
 s32 accessibilityObserverGet(struct accessibilityobserver *observer);
+s32 accessibilityObserverGetVehicle(struct accessibilityvehicle *vehicle);
 
 #endif
