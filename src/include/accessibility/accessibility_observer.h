@@ -15,6 +15,7 @@ struct accessibilityobserver {
 	f32 ymin;
 	f32 ymax;
 	s32 isremote;
+	s32 isvehicle;
 };
 
 struct accessibilityvehicle {
@@ -27,6 +28,7 @@ struct accessibilityvehicle {
 	f32 radius;
 	f32 ymin;
 	f32 ymax;
+	f32 ground;
 	f32 speed;
 	f32 turnspeed;
 	s32 movementmode;

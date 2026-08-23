@@ -98,7 +98,7 @@ s32 accessibilityObserverGetVehicle(struct accessibilityvehicle *vehicle)
 	vehicle->heading.y = 0.0f;
 	vehicle->heading.z = cosf(angle);
 
-	if (vehicle->speed > 0.01f) {
+	if (vehicle->speed > 1.0f) {
 		vehicle->travel.x = vehicle->velocity.x / vehicle->speed;
 		vehicle->travel.z = vehicle->velocity.z / vehicle->speed;
 	} else {
@@ -107,6 +107,7 @@ s32 accessibilityObserverGetVehicle(struct accessibilityvehicle *vehicle)
 
 	objGetBbox(vehicle->prop, &vehicle->radius,
 			&vehicle->ymax, &vehicle->ymin);
+	vehicle->ground = bike->hov.ground;
 
 	return true;
 }

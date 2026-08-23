@@ -322,7 +322,7 @@ static void accessibilityIncidentDumpVehicle(u64 captureid)
 	s32 valid = accessibilityObserverGetVehicle(&vehicle);
 
 	accessibilityLogEvent("incident", "vehicle_state",
-			"capture=%llu valid=%d movement_mode=%d vehicle_mode=%d prop=%p propnum=%d origin=%.3f,%.3f,%.3f rooms=%d,%d,%d,%d,%d,%d,%d,%d heading=%.6f,%.6f,%.6f velocity=%.3f,%.3f,%.3f travel=%.6f,%.6f,%.6f speed=%.3f turn_speed=%.6f radius=%.3f ymin=%.3f ymax=%.3f mounted=%d",
+			"capture=%llu valid=%d movement_mode=%d vehicle_mode=%d prop=%p propnum=%d origin=%.3f,%.3f,%.3f rooms=%d,%d,%d,%d,%d,%d,%d,%d heading=%.6f,%.6f,%.6f velocity=%.3f,%.3f,%.3f travel=%.6f,%.6f,%.6f speed=%.3f turn_speed=%.6f radius=%.3f ymin=%.3f ymax=%.3f ground=%.3f mounted=%d",
 			(unsigned long long)captureid, valid,
 			g_Vars.currentplayer ? g_Vars.currentplayer->bondmovemode : -1,
 			g_Vars.currentplayer ? g_Vars.currentplayer->bondvehiclemode : -1,
@@ -353,6 +353,7 @@ static void accessibilityIncidentDumpVehicle(u64 captureid)
 			valid ? vehicle.radius : 0.0f,
 			valid ? vehicle.ymin : 0.0f,
 			valid ? vehicle.ymax : 0.0f,
+			valid ? vehicle.ground : 0.0f,
 			valid && vehicle.prop->obj
 					&& (vehicle.prop->obj->hidden & OBJHFLAG_MOUNTED) != 0);
 

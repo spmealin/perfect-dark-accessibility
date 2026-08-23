@@ -24,6 +24,7 @@
 #include "lib/joy.h"
 #include "data.h"
 #include "types.h"
+#include "accessibility/accessibility_cane.h"
 #include "accessibility/accessibility_incident.h"
 
 void bbikeInit(void)
@@ -536,6 +537,7 @@ s32 bbikeCalculateNewPositionWithPush(struct coord *arg0, f32 arg1)
 
 	accessibilityIncidentRecordHoverbikeMove(arg0, arg1, result,
 			result != CDRESULT_NOCOLLISION ? cdGetObstacleProp() : NULL);
+	accessibilityCaneObserveHoverbikeMove(arg0, result);
 
 	return result;
 }

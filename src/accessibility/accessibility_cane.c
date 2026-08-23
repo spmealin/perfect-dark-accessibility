@@ -41,6 +41,14 @@
 #define ACCESSIBILITY_CANE_LADDER_CONTOUR_RATIO 1.5f
 #define ACCESSIBILITY_CANE_BREAKABLE_DURATION_MS 90
 #define ACCESSIBILITY_CANE_BREAKABLE_START_RATIO 2.0f
+#define ACCESSIBILITY_CANE_VEHICLE_LOOKAHEAD_TICKS TICKS(60)
+#define ACCESSIBILITY_CANE_VEHICLE_MAX_REACH_MULTIPLIER 3.0f
+#define ACCESSIBILITY_CANE_VEHICLE_MAX_TERRAIN_REACH 1200.0f
+#define ACCESSIBILITY_CANE_VEHICLE_BLOCKED_DURATION_MS 90
+#define ACCESSIBILITY_CANE_VEHICLE_BLOCKED_START_HZ 220.0f
+#define ACCESSIBILITY_CANE_VEHICLE_BLOCKED_END_HZ 140.0f
+#define ACCESSIBILITY_CANE_VEHICLE_BLOCKED_REPEAT_TICKS TICKS(30)
+#define ACCESSIBILITY_CANE_VEHICLE_SLOT 9
 #define ACCESSIBILITY_CANE_SLOW_CYCLE_TICKS TICKS(120)
 #define ACCESSIBILITY_CANE_FAST_CYCLE_TICKS TICKS(60)
 #define ACCESSIBILITY_CANE_LOG_BUFFER_SIZE 32768
@@ -138,6 +146,7 @@ struct accessibilitycanesample {
 			terrainprobes[ACCESSIBILITY_CANE_TERRAIN_PROBE_COUNT];
 	struct prop *obstacle;
 	struct prop *ignoredgrabbedprop;
+	struct prop *ignoredvehicleprop;
 	s32 obstacletype;
 	u32 geoflags;
 	struct coord normal;
@@ -152,6 +161,10 @@ struct accessibilitycanesample {
 	u64 queryus;
 	struct prop *observerprop;
 	s32 observerremote;
+	s32 observervehicle;
+	f32 vehiclespeed;
+	f32 basereach;
+	f32 effectivereach;
 };
 
 static const s32 g_AccessibilityCaneAngles[ACCESSIBILITY_CANE_PROBE_COUNT] = {
@@ -191,6 +204,8 @@ static u64 g_AccessibilityCaneQueryTotalUs;
 static u64 g_AccessibilityCaneQueryMaxUs;
 static uintptr_t g_AccessibilityCaneObserverProp;
 static s32 g_AccessibilityCaneObserverRemote;
+static uintptr_t g_AccessibilityCaneVehicleProp;
+static s32 g_AccessibilityCaneVehicleLastBlockedCueTick = -1;
 
 static const char *accessibilityCaneModeName(s32 mode)
 {
@@ -237,6 +252,8 @@ static const char *accessibilityCaneStanceName(s32 stance)
 		return "duck";
 	case CROUCHPOS_SQUAT:
 		return "squat";
+	case -2:
+		return "vehicle";
 	default:
 		return "remote";
 	}
@@ -312,8 +329,17 @@ static const char *accessibilityCaneGameplayScopeReason(void)
 
 	if (g_Vars.currentplayer->cameramode != CAMERAMODE_EYESPY
 			&& g_Vars.currentplayer->bondmovemode != MOVEMODE_WALK
-			&& g_Vars.currentplayer->bondmovemode != MOVEMODE_GRAB) {
+			&& g_Vars.currentplayer->bondmovemode != MOVEMODE_GRAB
+			&& g_Vars.currentplayer->bondmovemode != MOVEMODE_BIKE) {
 		return "unsupported_movement_mode";
+	}
+
+	if (g_Vars.currentplayer->bondmovemode == MOVEMODE_BIKE) {
+		struct accessibilityvehicle vehicle;
+
+		if (!accessibilityObserverGetVehicle(&vehicle)) {
+			return "vehicle_unavailable";
+		}
 	}
 
 	/*
@@ -367,13 +393,16 @@ static void accessibilityCaneLogSweep(const char *reason)
 		struct accessibilitycanesample *sample = &g_AccessibilityCaneSamples[i];
 
 		accessibilityCaneAppendLog(
-				"%ss%d={angle:%d state:%s scheduled:%d actual:%d late:%d result:%d pass:%d observer:%p remote:%d ignored_grabbed_prop:%p origin:%.2f,%.2f,%.2f forward:%.5f,%.5f direction:%.5f,%.5f end:%.2f,%.2f,%.2f bbox:%.2f,%.2f,%.2f raw:%.2f,%.2f,%.2f audio:%.2f,%.2f,%.2f distance:%.2f frequency_hz:%.2f end_frequency_hz:%.2f duration_ms:%d tone_pattern:%d terrain:%d drop:%d crouch:%d ladder:%d crouch_terrain_merge:%d breakable:%d terrain_ground:%.2f terrain_height:%.2f terrain_distance:%.2f terrain_room:%d terrain_flags:0x%04x terrain_queries:%d drop_refinements:%d drop_threshold:%.2f stance:%s traversal_tested:%d traversable:%d plateau:%d terrain_suppressed:%d clearance_result:%d clearance_queries:%d clearance_distance:%.2f plateau_distance:%.2f crouch_result:%d crouch_pass:%d crouch_ymax:%.2f obstacle:%p type:%d geoflags:0x%08x normal:%.5f,%.5f,%.5f edge:%.2f,%.2f,%.2f,%.2f volume:%d pan:%d normalized:%.5f,%.5f master_volume:%.5f effective_volume:%.5f query_us:%" PRIu64 " probes=[",
+				"%ss%d={angle:%d state:%s scheduled:%d actual:%d late:%d result:%d pass:%d observer:%p remote:%d vehicle:%d vehicle_speed:%.3f base_reach:%.2f effective_reach:%.2f ignored_grabbed_prop:%p ignored_vehicle_prop:%p origin:%.2f,%.2f,%.2f forward:%.5f,%.5f direction:%.5f,%.5f end:%.2f,%.2f,%.2f bbox:%.2f,%.2f,%.2f raw:%.2f,%.2f,%.2f audio:%.2f,%.2f,%.2f distance:%.2f frequency_hz:%.2f end_frequency_hz:%.2f duration_ms:%d tone_pattern:%d terrain:%d drop:%d crouch:%d ladder:%d crouch_terrain_merge:%d breakable:%d terrain_ground:%.2f terrain_height:%.2f terrain_distance:%.2f terrain_room:%d terrain_flags:0x%04x terrain_queries:%d drop_refinements:%d drop_threshold:%.2f stance:%s traversal_tested:%d traversable:%d plateau:%d terrain_suppressed:%d clearance_result:%d clearance_queries:%d clearance_distance:%.2f plateau_distance:%.2f crouch_result:%d crouch_pass:%d crouch_ymax:%.2f obstacle:%p type:%d geoflags:0x%08x normal:%.5f,%.5f,%.5f edge:%.2f,%.2f,%.2f,%.2f volume:%d pan:%d normalized:%.5f,%.5f master_volume:%.5f effective_volume:%.5f query_us:%" PRIu64 " probes=[",
 				i ? " " : "", i, sample->angledegrees,
 				accessibilityCaneSampleStateName(sample->state),
 				sample->scheduledtick, sample->actualtick, sample->lateness,
 				sample->result, sample->collisionpass,
 				(void *)sample->observerprop, sample->observerremote,
+				sample->observervehicle, sample->vehiclespeed,
+				sample->basereach, sample->effectivereach,
 				(void *)sample->ignoredgrabbedprop,
+				(void *)sample->ignoredvehicleprop,
 				sample->origin.x, sample->origin.y,
 				sample->origin.z, sample->forward.x, sample->forward.z,
 				sample->direction.x, sample->direction.z,
@@ -588,7 +617,7 @@ static s32 accessibilityCaneProbeFloor(
 	func0f065dfc(&origin, observer->prop->rooms,
 			&roompoint, rooms, morerooms, 20);
 
-	if (!observer->isremote) {
+	if (!observer->isremote && !observer->isvehicle) {
 		bmoveFindEnteredRoomsByPos(g_Vars.currentplayer, &roompoint, rooms);
 	}
 
@@ -643,7 +672,8 @@ static s32 accessibilityCaneProbeFloor(
 
 static s32 accessibilityCaneFindTerrain(
 		struct accessibilitycanesample *sample,
-		const struct accessibilityobserver *observer, f32 barrier)
+		const struct accessibilityobserver *observer, f32 barrier,
+		f32 minimumreach)
 {
 	static const f32 fractions[ACCESSIBILITY_CANE_TERRAIN_BASE_SAMPLE_COUNT]
 			= { 0.10f, 0.25f, 0.50f, 1.0f };
@@ -658,6 +688,9 @@ static s32 accessibilityCaneFindTerrain(
 
 	accessibilityGetVirtualCaneTerrainTuning(&reach, &heightthreshold,
 			&dropheightthreshold);
+	if (minimumreach > reach) {
+		reach = minimumreach;
+	}
 	(void)dropheightthreshold;
 	sample->dropheightthreshold = dropheightthreshold;
 	limit = reach;
@@ -932,6 +965,7 @@ static s32 accessibilityCaneFindCrouchPassage(
 static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 {
 	struct accessibilityobserver observer;
+	struct accessibilityvehicle vehicle;
 	RoomNum dstrooms[8];
 	RoomNum morerooms[22];
 	struct coord start;
@@ -947,6 +981,7 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 	f32 cosine;
 	f32 sine;
 	f32 barrierdistance = -1.0f;
+	f32 terrainminimumreach = 0.0f;
 	s32 types;
 	s32 result;
 	s32 collisionpass = 0;
@@ -954,6 +989,8 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 	s32 terraincedes = false;
 	s32 crouchfound = false;
 	struct prop *grabbedprop = NULL;
+	struct prop *vehicleprop = NULL;
+	s32 vehiclevalid;
 #if VERSION < VERSION_NTSC_1_0
 	s32 i;
 #endif
@@ -967,15 +1004,30 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 		return CDRESULT_ERROR;
 	}
 
+	vehiclevalid = accessibilityObserverGetVehicle(&vehicle);
+
+	if (vehiclevalid) {
+		observer.prop = vehicle.prop;
+		observer.origin = vehicle.origin;
+		observer.room = vehicle.room;
+		observer.ground = vehicle.ground;
+		observer.radius = vehicle.radius;
+		observer.ymin = vehicle.ymin;
+		observer.ymax = vehicle.ymax;
+		observer.isvehicle = true;
+	}
+
 	start = observer.origin;
 	sample->observerprop = observer.prop;
 	sample->observerremote = observer.isremote;
-	sample->stancestate = observer.isremote
+	sample->stancestate = observer.isvehicle ? -2 : observer.isremote
 			? -1 : g_Vars.currentplayer->crouchpos;
 	sample->origin = start;
-	sample->forward.x = observer.look.x;
+	sample->observervehicle = observer.isvehicle;
+	sample->vehiclespeed = vehiclevalid ? vehicle.speed : 0.0f;
+	sample->forward.x = vehiclevalid ? vehicle.travel.x : observer.look.x;
 	sample->forward.y = 0.0f;
-	sample->forward.z = observer.look.z;
+	sample->forward.z = vehiclevalid ? vehicle.travel.z : observer.look.z;
 	horizontal = sqrtf(sample->forward.x * sample->forward.x
 			+ sample->forward.z * sample->forward.z);
 
@@ -998,6 +1050,36 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 			+ sample->forward.z * cosine;
 	accessibilityGetVirtualCaneTuning(&maxdistance, &fulldistance,
 			&fadedistance, &silentdistance);
+	sample->basereach = maxdistance;
+
+	if (vehiclevalid) {
+		f32 lookahead = vehicle.speed
+				* (f32)ACCESSIBILITY_CANE_VEHICLE_LOOKAHEAD_TICKS
+				+ vehicle.radius;
+		f32 maximumreach = maxdistance
+				* ACCESSIBILITY_CANE_VEHICLE_MAX_REACH_MULTIPLIER;
+
+		if (lookahead > maxdistance) {
+			maxdistance = lookahead < maximumreach
+					? lookahead : maximumreach;
+		}
+
+		if (fadedistance < maxdistance * 0.8333333f) {
+			fadedistance = maxdistance * 0.8333333f;
+		}
+		if (silentdistance < maxdistance * 1.0833333f) {
+			silentdistance = maxdistance * 1.0833333f;
+		}
+
+		terrainminimumreach = maxdistance;
+		if (terrainminimumreach
+				> ACCESSIBILITY_CANE_VEHICLE_MAX_TERRAIN_REACH) {
+			terrainminimumreach
+					= ACCESSIBILITY_CANE_VEHICLE_MAX_TERRAIN_REACH;
+		}
+	}
+
+	sample->effectivereach = maxdistance;
 	accessibilityGetVirtualCanePitch(&nearfrequency, &farfrequency);
 	end.x = start.x + sample->direction.x * maxdistance;
 	end.y = start.y;
@@ -1025,7 +1107,7 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 	}
 #endif
 
-	if (!observer.isremote) {
+	if (!observer.isremote && !observer.isvehicle) {
 		bmoveFindEnteredRoomsByPos(g_Vars.currentplayer, &end, dstrooms);
 	}
 	types = g_Vars.bondcollisions
@@ -1045,6 +1127,13 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 		grabbedprop = g_Vars.currentplayer->grabbedprop;
 		sample->ignoredgrabbedprop = grabbedprop;
 		propSetPerimEnabled(grabbedprop, false);
+	}
+
+	if (observer.isvehicle) {
+		vehicleprop = observer.prop;
+		sample->ignoredvehicleprop = vehicleprop;
+		propSetPerimEnabled(g_Vars.currentplayer->prop, false);
+		propSetPerimEnabled(vehicleprop, false);
 	}
 
 	result = cdExamCylMove06(&start, observer.prop->rooms,
@@ -1093,7 +1182,11 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 
 	if (result == CDRESULT_COLLISION || result == CDRESULT_NOCOLLISION) {
 		terrainfound = accessibilityCaneFindTerrain(
-				sample, &observer, barrierdistance);
+				sample, &observer, barrierdistance, terrainminimumreach);
+		if (observer.isvehicle && terrainfound && !sample->drop) {
+			sample->terrain = 0;
+			terrainfound = false;
+		}
 		if (terrainfound) {
 			accessibilityCaneClassifyTraversableRise(sample, &observer,
 					barrierdistance, types);
@@ -1117,6 +1210,11 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 		propSetPerimEnabled(grabbedprop, true);
 	}
 
+	if (vehicleprop) {
+		propSetPerimEnabled(vehicleprop, true);
+		propSetPerimEnabled(g_Vars.currentplayer->prop, true);
+	}
+
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 	sample->queryus = sysGetMicroseconds() - querystart;
 	g_AccessibilityCaneQueryTotalUs += sample->queryus;
@@ -1138,7 +1236,7 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 		sample->audiosource = sample->rawhit;
 		sample->audiosource.y = observer.camera.y;
 		horizontal = barrierdistance;
-		sample->ladder = (sample->geoflags
+		sample->ladder = !observer.isvehicle && (sample->geoflags
 				& (GEOFLAG_LADDER | GEOFLAG_LADDER_PLAYERONLY)) != 0;
 		sample->state = sample->ladder
 				? ACCESSIBILITY_CANE_SAMPLE_LADDER
@@ -1236,6 +1334,8 @@ static void accessibilityCaneStop(const char *reason, s32 logscope)
 	g_AccessibilityCaneLastQueryTick = -1;
 	g_AccessibilityCaneObserverProp = 0;
 	g_AccessibilityCaneObserverRemote = false;
+	g_AccessibilityCaneVehicleProp = 0;
+	g_AccessibilityCaneVehicleLastBlockedCueTick = -1;
 }
 
 static void accessibilityCaneCycleMode(void)
@@ -1255,10 +1355,83 @@ static void accessibilityCaneCycleMode(void)
 			newmode == 0 ? 440 : 1320, newmode == 2 ? 3 : 2);
 }
 
+void accessibilityCaneObserveHoverbikeMove(struct coord *requestedvelocity,
+		s32 result)
+{
+	struct accessibilityobserver observer;
+	struct accessibilityvehicle vehicle;
+	struct coord direction;
+	struct coord source;
+	f32 magnitude;
+	f32 normalizedpan;
+	f32 volume;
+	s32 pan;
+	s32 now = g_Vars.lvframe60;
+
+	if (result != CDRESULT_COLLISION) {
+		return;
+	}
+
+	if (!requestedvelocity || accessibilityGetVirtualCaneMode() == 0
+			|| accessibilityCaneGameplayScopeReason()
+			|| !accessibilityObserverGet(&observer)
+			|| !accessibilityObserverGetVehicle(&vehicle)) {
+		return;
+	}
+
+	magnitude = sqrtf(requestedvelocity->x * requestedvelocity->x
+			+ requestedvelocity->z * requestedvelocity->z);
+
+	if (magnitude < 0.05f) {
+		return;
+	}
+
+	if (g_AccessibilityCaneVehicleLastBlockedCueTick >= 0
+			&& now - g_AccessibilityCaneVehicleLastBlockedCueTick
+					< ACCESSIBILITY_CANE_VEHICLE_BLOCKED_REPEAT_TICKS) {
+		return;
+	}
+
+	direction.x = requestedvelocity->x / magnitude;
+	direction.y = 0.0f;
+	direction.z = requestedvelocity->z / magnitude;
+	source.x = vehicle.origin.x + direction.x * vehicle.radius;
+	source.y = observer.camera.y;
+	source.z = vehicle.origin.z + direction.z * vehicle.radius;
+	pan = psCalculatePan(&source, 100.0f, 600.0f, 1200.0f,
+			vehicle.radius, false, NULL);
+	normalizedpan = ((f32)pan - (f32)AL_PAN_CENTER)
+			/ (f32)AL_PAN_CENTER;
+	volume = accessibilityGetVirtualCaneVolume() * 0.9f;
+
+	accessibilityTonePlayCaneSlot(ACCESSIBILITY_CANE_VEHICLE_SLOT,
+			ACCESSIBILITY_CANE_VEHICLE_BLOCKED_START_HZ,
+			ACCESSIBILITY_CANE_VEHICLE_BLOCKED_END_HZ,
+			volume, normalizedpan,
+			ACCESSIBILITY_CANE_VEHICLE_BLOCKED_DURATION_MS,
+			ACCESSIBILITY_TONE_CANE_PATTERN_CONTOUR);
+	g_AccessibilityCaneVehicleLastBlockedCueTick = now;
+	accessibilityLogEvent("cane", "vehicle_blocked",
+			"tick=%d stage=%d player=%d vehicle=%p requested_velocity=%.3f,%.3f,%.3f magnitude=%.3f source=%.3f,%.3f,%.3f radius=%.3f pan=%d normalized_pan=%.5f volume=%.5f start_frequency_hz=%.1f end_frequency_hz=%.1f duration_ms=%d repeat_ticks=%d slot=%d",
+			now, g_Vars.stagenum, g_Vars.currentplayernum,
+			(void *)vehicle.prop,
+			requestedvelocity->x, requestedvelocity->y,
+			requestedvelocity->z, magnitude,
+			source.x, source.y, source.z, vehicle.radius,
+			pan, normalizedpan, volume,
+			ACCESSIBILITY_CANE_VEHICLE_BLOCKED_START_HZ,
+			ACCESSIBILITY_CANE_VEHICLE_BLOCKED_END_HZ,
+			ACCESSIBILITY_CANE_VEHICLE_BLOCKED_DURATION_MS,
+			ACCESSIBILITY_CANE_VEHICLE_BLOCKED_REPEAT_TICKS,
+			ACCESSIBILITY_CANE_VEHICLE_SLOT);
+}
+
 void accessibilityCaneTick(void)
 {
 	struct accessibilityobserver observer;
+	struct accessibilityvehicle vehicle;
 	const char *scopereason = accessibilityCaneGameplayScopeReason();
+	s32 vehiclevalid;
 	s32 mode;
 	s32 now;
 	s32 cycleticks;
@@ -1280,17 +1453,26 @@ void accessibilityCaneTick(void)
 		return;
 	}
 
+	vehiclevalid = accessibilityObserverGetVehicle(&vehicle);
+
 	if (g_AccessibilityCaneObserverProp
 			&& (g_AccessibilityCaneObserverProp != (uintptr_t)observer.prop
-				|| g_AccessibilityCaneObserverRemote != observer.isremote)) {
+				|| g_AccessibilityCaneObserverRemote != observer.isremote
+				|| g_AccessibilityCaneVehicleProp
+						!= (uintptr_t)(vehiclevalid ? vehicle.prop : NULL))) {
 		accessibilityCaneStop("observer_changed", false);
 		accessibilityLogEvent("cane", "observer_change",
-				"tick=%d stage=%d player=%d observer=%p remote=%d",
+				"tick=%d stage=%d player=%d observer=%p remote=%d vehicle=%p profile=%s",
 				g_Vars.lvframe60, g_Vars.stagenum, g_Vars.currentplayernum,
-				(void *)observer.prop, observer.isremote);
+				(void *)observer.prop, observer.isremote,
+				vehiclevalid ? (void *)vehicle.prop : NULL,
+				vehiclevalid ? "hoverbike"
+						: observer.isremote ? "remote" : "walk");
 	}
 	g_AccessibilityCaneObserverProp = (uintptr_t)observer.prop;
 	g_AccessibilityCaneObserverRemote = observer.isremote;
+	g_AccessibilityCaneVehicleProp
+			= (uintptr_t)(vehiclevalid ? vehicle.prop : NULL);
 
 	if (!g_AccessibilityCaneScopeActive) {
 		g_AccessibilityCaneScopeActive = true;

@@ -501,7 +501,29 @@ For the current Carrington Institute firing-range proof, first verify that the p
 
 #### Virtual cane prototype
 
-Confirm the effective session-start record contains `virtual_cane_mode=1`, `cane_volume=0.1840`, and the expected remaining cane and enemy tuning fields. During unobscured single-player walking gameplay, press F4 repeatedly and verify the order is Slow to Fast to Off to Slow. Slow must play 880 Hz then 1320 Hz, Fast must be 880 Hz followed by two 1320 Hz beeps, and Off must be 880 Hz then 440 Hz; each beep lasts 35 ms with a 25 ms gap, and there must be no speech. Correlate each change with one `cane/command` record containing the selected mode and earcon fields. Left Alt+F4 and Right Alt+F4 must not change cane state or play an earcon; if the operating system leaves the game running, releasing Alt while F4 remains held must not produce a delayed mode change. Grab and move a pushable crate and confirm the barrier sweep and F4 command continue without a `cane/scope` loss. Each completed sample must log the carried crate as `ignored_grabbed_prop` and must describe geometry beyond it rather than returning that prop as `obstacle`; a different nearby crate must remain detectable. Release it and confirm ordinary walking-only terrain and crouch classification resume. Menus, pause, cutscenes, death, movement modes other than walking, grabbed-object movement, or CamSpy, and multiplayer must suppress the command and stop all cane audio.
+Confirm the effective session-start record contains `virtual_cane_mode=1`, `cane_volume=0.1840`, and the expected remaining cane and enemy tuning fields. During unobscured single-player walking gameplay, press F4 repeatedly and verify the order is Slow to Fast to Off to Slow. Slow must play 880 Hz then 1320 Hz, Fast must be 880 Hz followed by two 1320 Hz beeps, and Off must be 880 Hz then 440 Hz; each beep lasts 35 ms with a 25 ms gap, and there must be no speech. Correlate each change with one `cane/command` record containing the selected mode and earcon fields. Left Alt+F4 and Right Alt+F4 must not change cane state or play an earcon; if the operating system leaves the game running, releasing Alt while F4 remains held must not produce a delayed mode change. Grab and move a pushable crate and confirm the barrier sweep and F4 command continue without a `cane/scope` loss. Each completed sample must log the carried crate as `ignored_grabbed_prop` and must describe geometry beyond it rather than returning that prop as `obstacle`; a different nearby crate must remain detectable. Release it and confirm ordinary walking-only terrain and crouch classification resume. Menus, pause, cutscenes, death, movement modes other than walking, grabbed-object movement, hoverbike movement, or CamSpy, and multiplayer must suppress the command and stop all cane audio.
+
+Mount a hoverbike with the cane in Slow and Fast modes. The partial walking
+sweep must end once with `observer_changed`, then restart with
+`profile=hoverbike`; dismounting must perform the inverse transition without a
+stale bike slot. At rest, rotate the bike while looking elsewhere and confirm
+the fan follows bike heading while pan remains relative to the camera. Drive
+forward, backward, and sideways and confirm `forward` follows logged
+`vehicle_travel`, not camera look or stale bike heading. Every vehicle sample
+must use the native bike radius/Y bounds, identify both rider and vehicle as
+temporarily excluded, and never return either as its obstacle. Confirm the
+effective reach equals the larger of 900 units or one second of current speed
+plus radius, capped at 2,700 with default configuration; maximum-range hits
+must remain faintly audible. Test a wall, doorway, solid prop, railing, and
+large drop. Walls and refined drops remain available, while ordinary stairs,
+ramps, crouch openings, and ladders must not use their walking semantic
+patterns. Hold movement into a wall and verify a distinct spatial 220-to-140
+Hz falling cue lasts 90 ms and repeats no faster than once per 30 logical
+ticks; releasing or steering clear must stop it. Pause, enter a menu, die,
+dismount, change stage, disable the cane, and disable accessibility; the tenth
+vehicle slot and all nine sweep slots must clear. Compare walking and mounted
+query time under performance diagnostics and investigate any sustained frame
+regression or collision side effect before acceptance.
 
 Use controlled geometry for the first pass. Face a flat wall, an angled wall, an inside and outside corner, a doorway, a narrow opening, a pillar/crate, a closed/partly open/open door, a small traversable step, a low obstruction while standing and crouching, a pickup/non-solid decoration, and open space. Verify each ray reaches 900 world units and the audible sequence always travels left to right through -60, -45, -30, -15, 0, 15, 30, 45, and 60 degrees; a miss is silent; characters are not cane targets; door/object collision follows whether the player can currently move through it; and open space produces a silent cycle rather than a confirmation cue. Check near, 450-unit, and 900-unit obstacles to confirm pitch rises smoothly from approximately 300 Hz at maximum reach through 424 Hz at half reach to 600 Hz at contact while the scaled 112.5/750/975 attenuation thresholds independently change volume. Repeat at all nine angles, in both sweep speeds, and while moving continuously. Correlate each observation with the aggregate `cane/sweep` sample fields, especially raw collision point, normal, obstacle/type, bbox, distance, `frequency_hz`, pan, and result. Validate that the returned collision point sounds like the barrier surface rather than the stopped center of the player cylinder.
 
