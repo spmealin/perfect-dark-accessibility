@@ -174,6 +174,7 @@ NonHostileBeacons=1
 TargetingFeedback=1
 TargetingVolume=0.15
 WeaponFunctionCues=1
+StanceCues=1
 XRayScannerAudio=1
 VirtualCaneMode=1
 VirtualCaneNearFrequency=600
@@ -471,6 +472,10 @@ Acceptance session `1784764601` exposed the initial mismatch. The target for cri
 With `Accessibility.WeaponFunctionCues=1`, `Accessibility.HudMessages=1`, and the native Show Gun Function option enabled, equip a weapon with two persistent functions and press R1/right bumper. Switching to the secondary function must produce exactly two centered 1000 Hz beeps and speak the localized function label drawn beside the ammo display once at normal, non-interrupting priority; returning to primary must produce exactly one beep and speak its visible label once. Each beep should be brief (35 ms), the two-beep gap should be clearly countable at 30 ms, and output should begin only after the same semantic value that drives the visual indicator changes. Repeat using the active-menu function selector and any configured keyboard binding: input path must not affect either output.
 
 Disable `Accessibility.HudMessages` while leaving `Accessibility.WeaponFunctionCues` enabled and confirm the earcons remain but function-name speech stops. Re-enable HUD speech, disable Show Gun Function, and confirm the direct-rendered label and its speech are both absent. Try initial stage entry, equipping a weapon whose stored secondary function is already active, unavailable alternate functions, temporary alternate functions, and rapid toggles. Initial state and weapon changes must remain silent baselines. Correlate each spoken transition with `weapon_function/announced` and `announcement/output_result group=weapon_function`; no generic `hud/message_accepted` event is expected for this direct-rendered text.
+
+#### Player-stance cues
+
+With `Accessibility.StanceCues=1`, enter ordinary single-player gameplay and move through standing, crouching, and double-crouching. Confirm that the settled states produce one, two, and three centered cane-style beeps respectively, using 880 Hz for the first beep and 1320 Hz for subsequent beeps. Attempt to stand beneath an obstruction and confirm no standing cue occurs when the game rejects the stance. Equip the Sniper Rifle and activate its Crouch function; confirm the cue follows the resulting effective stance rather than the input command, including the return to standing. If Show Gun Function is enabled, verify that its separate spoken label matches the native visible text even when that text is the same on both directions. Stage entry and returning from pause or a menu without a stance change must remain silent. Correlate accepted changes with `stance/state_change`, including manual and automatic crouch positions.
 
 In a one-local-player Combat Simulator match, die and wait for the native respawn overlay. When it first appears, speech must announce the localized `Press START` prompt followed by the same integer displayed beneath it. Each subsequent displayed positive integer must be spoken exactly once, without per-frame repeats. Pause and resume during the countdown, respawn early, allow the timer to expire, die again, and end or restart the match; each newly displayed overlay must announce its prompt and current number, with no stale suppression from the previous death. Disable `Accessibility.HudMessages` and confirm both generic HUD narration and this direct-rendered countdown stop. Correlate `respawn_countdown/announced`, `hidden`, and `reset` with `announcement/output_result group=respawn_countdown`. Record multi-local-player speech arbitration as unvalidated.
 

@@ -27,6 +27,7 @@ s32 accessibilityIsTargetingFeedbackEnabled(void);
 f32 accessibilityGetTargetingVolume(void);
 s32 accessibilityIsWeaponChangeAnnouncementsEnabled(void);
 s32 accessibilityIsWeaponFunctionCuesEnabled(void);
+s32 accessibilityIsStanceCuesEnabled(void);
 s32 accessibilityIsXrayScannerAudioEnabled(void);
 s32 accessibilityIsAudibleMarkersEnabled(void);
 s32 accessibilityIsAuthoredLandmarksEnabled(void);

@@ -296,6 +296,7 @@ set(SRC_ACCESSIBILITY
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_performance.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_relationship.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_speech.c"
+  "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_stance.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_status.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_targeting.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_targeting_game.c"

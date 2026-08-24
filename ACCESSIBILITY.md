@@ -126,6 +126,12 @@ Characters retain the game's finalized character-target selection. A two-frame r
 
 The pattern has a dedicated fixed oscillator lane and does not consume a game sound channel, allocate at runtime, or interrupt door/object chirps. Any input path that changes the same semantic state receives the cue, including the dedicated controller command and active-menu selection. Temporary alternate functions are reported when their visual state actually changes. Multiplayer arbitration and usefulness remain to be acceptance-tested.
 
+### Player-stance cues
+
+`Accessibility.StanceCues` defaults to `1` and is subordinate to `Accessibility.Enabled`. During ordinary single-player walking gameplay, the accessibility layer observes the engine's effective crouch position after movement processing. This is the minimum of the player's requested crouch position and automatic crouch position, so collision-rejected commands do not produce a false cue and weapon-driven changes such as the Sniper Rifle's Crouch function are included. A transition to standing plays one centered 880 Hz beep; crouching plays 880 Hz then 1320 Hz; double-crouching plays 880 Hz followed by two 1320 Hz beeps. Beeps use the cane-mode timing of 35 ms with 25 ms gaps. Stage entry establishes a silent baseline, and menus, pause, cutscenes, death, remote views, vehicles, and grabbed-object movement do not emit stance cues.
+
+Stance and scanner/cane confirmations deliberately share the short fixed toggle-confirmation lane, so a newer confirmation replaces an unfinished one. The Sniper Rifle's native secondary function is localized as `Crouch`; the HUD derives its speech from the same effective function label and is intentionally not rewritten by the stance adapter.
+
 ### Weapon-change announcements
 
 `Accessibility.WeaponChangeAnnouncements` defaults to `1` and is subordinate to

@@ -80,6 +80,7 @@
 #include "accessibility/accessibility_hazard.h"
 #include "accessibility/accessibility_hill.h"
 #include "accessibility/accessibility_status.h"
+#include "accessibility/accessibility_stance.h"
 #include "accessibility/accessibility_hud.h"
 #include "accessibility/accessibility_incident.h"
 #include "accessibility/accessibility_landmark.h"
@@ -533,6 +534,7 @@ void mainLoop(void)
 		accessibilityLandmarkReset("stage_stop");
 		accessibilityMarkerReset("stage_stop");
 		accessibilityStatusReset("stage_stop");
+		accessibilityStanceReset("stage_stop");
 		accessibilityTargetingReset("stage_stop");
 		accessibilityTrackerReset("stage_stop");
 		lvStop();
@@ -577,6 +579,7 @@ void mainTick(void)
 			accessibilityLandmarkTick();
 			accessibilityMarkerTick();
 			accessibilityStatusTick();
+			accessibilityStanceTick();
 			accessibilityTrackerTick();
 			accessibilityIncidentTick();
 			playermgrShuffle();

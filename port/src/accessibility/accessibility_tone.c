@@ -1,6 +1,7 @@
 #include <math.h>
 #include <string.h>
 #include <SDL.h>
+#include "constants.h"
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_tone.h"
 
@@ -128,6 +129,7 @@ static SDL_atomic_t g_AccessibilityThreatAlertVolumeMillionths;
 static SDL_atomic_t g_AccessibilityThreatAlertPanMillionths;
 static SDL_atomic_t g_AccessibilityToggleSequence;
 static SDL_atomic_t g_AccessibilityTogglePattern;
+static SDL_atomic_t g_AccessibilityTogglePulses;
 static SDL_atomic_t g_AccessibilityWeaponFunctionSequence;
 static SDL_atomic_t g_AccessibilityWeaponFunctionPulses;
 static SDL_atomic_t g_AccessibilityHazardEnabled;
@@ -483,6 +485,7 @@ void accessibilityTonePlayToggleConfirmation(s32 enabled)
 	SDL_AtomicSet(&g_AccessibilityTogglePattern,
 			enabled ? ACCESSIBILITY_TOGGLE_PATTERN_ON
 					: ACCESSIBILITY_TOGGLE_PATTERN_OFF);
+	SDL_AtomicSet(&g_AccessibilityTogglePulses, 2);
 	SDL_AtomicAdd(&g_AccessibilityToggleSequence, 1);
 }
 
@@ -497,6 +500,24 @@ void accessibilityTonePlayCaneModeConfirmation(s32 mode)
 	}
 
 	SDL_AtomicSet(&g_AccessibilityTogglePattern, pattern);
+	SDL_AtomicSet(&g_AccessibilityTogglePulses,
+			pattern == ACCESSIBILITY_TOGGLE_PATTERN_FAST ? 3 : 2);
+	SDL_AtomicAdd(&g_AccessibilityToggleSequence, 1);
+}
+
+void accessibilityTonePlayStanceConfirmation(s32 crouchpos)
+{
+	s32 pulses = CROUCHPOS_STAND - crouchpos + 1;
+
+	if (pulses < 1) {
+		pulses = 1;
+	} else if (pulses > 3) {
+		pulses = 3;
+	}
+
+	SDL_AtomicSet(&g_AccessibilityTogglePattern,
+			ACCESSIBILITY_TOGGLE_PATTERN_ON);
+	SDL_AtomicSet(&g_AccessibilityTogglePulses, pulses);
 	SDL_AtomicAdd(&g_AccessibilityToggleSequence, 1);
 }
 
@@ -1546,13 +1567,14 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 	}
 
 	if (togglesequence != g_AccessibilityToggleObservedSequence) {
-		s32 pulses;
+		s32 pulses = SDL_AtomicGet(&g_AccessibilityTogglePulses);
 
 		g_AccessibilityToggleObservedSequence = togglesequence;
 		g_AccessibilityToggleCurrentPattern = SDL_AtomicGet(
 				&g_AccessibilityTogglePattern);
-		pulses = g_AccessibilityToggleCurrentPattern
-						== ACCESSIBILITY_TOGGLE_PATTERN_FAST ? 3 : 2;
+		if (pulses < 1 || pulses > 3) {
+			pulses = 2;
+		}
 		g_AccessibilityToggleSample = 0;
 		g_AccessibilityTogglePhase = 0.0f;
 		g_AccessibilityToggleSamplesRemaining
