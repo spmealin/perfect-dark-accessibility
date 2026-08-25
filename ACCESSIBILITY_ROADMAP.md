@@ -165,16 +165,16 @@ Engineering extension: King of the Hill now uses the scenario's exact floor-adju
 - **Risks:** `PROPFLAG_ONANYSCREENPREVTICK` intentionally introduces one rendered-frame latency; dense scenes can exceed ten highlighted objects; the special-highlight flag contract may cover linked scenery whose visible state changes during destruction.
 - **Explicit non-goals:** No sound for the scanner's general red palette, ordinary characters, off-screen objects, names, line-of-sight inference, hidden route guidance, or additional mixer allocation.
 
-### Prioritized X-Ray Scanner object slice
+### Prioritized X-Ray semantic-visibility slice
 
-- **Status:** Engineering implementation added alongside the IR Scanner slice. A positioning/cadence correction passed project-owner runtime testing; broader mission coverage and long-session acceptance remain pending.
-- **Goal:** Sonify the object/door/weapon props recolored by the native X-Ray Scanner while preserving its viewport and eraser-radius limits.
-- **Systems:** Shared renderer eraser-distance query, previous-frame onscreen state, native device versus Farsight distinction, nearest-ten bounded selection, R-Tracker fixed voices, independent default-on configuration, lifecycle suppression, and logging.
-- **Initial behavior:** The nearest ten X-Ray-rendered object/door/weapon props use the 700 Hz R-Tracker pattern and update automatically as the player turns or moves. Characters are excluded from this generic lane. The Farsight's use of X-Ray vision does not activate the scanner feature.
-- **Acceptance:** In CI training, use cues to locate both hidden switches while confirming ordinary rendered props can also sound; verify viewport/radius entry and exit, nearest-ten overflow, stable direction, device/menu/pause/stage cleanup, configuration disable, repeated sessions, and a later non-CI scanner context.
-- **Evidence:** Correlate X-Ray device/vision state, eraser origin/radius, native source distance, candidate/slot/overflow records, active voice counts, frame cadence, and memory over repeated tests.
-- **Risks:** The native view highlights all in-range objects rather than a semantic target subset, so dense audio and ten-slot omission need blind-user evaluation. Nearest-first selection may still mask a desired switch behind closer furniture, and one-frame viewport evidence adds deliberate latency.
-- **Explicit non-goals:** No exercise-tag special case, target/actionability claim, character duplication, Farsight support, names, off-screen awareness, automated interaction, or extra allocation.
+- **Status:** Generic X-Ray object audio was replaced by semantic routing after the project owner found the undifferentiated cue redundant. Runtime acceptance of the new routing remains pending.
+- **Goal:** Let the active X-Ray Scanner reveal additional candidates to the existing semantic scanners without creating a separate sound vocabulary or announcing irrelevant scenery.
+- **Systems:** Shared renderer eraser-distance query, previous-frame onscreen state, native device versus Farsight distinction, normal interactable/door/pickup/people/combat classifiers and voices, independent default-on configuration, lifecycle suppression, and logging.
+- **Initial behavior:** An X-Ray-rendered semantic candidate uses its normal category cue and normal F5/F6/F7/F8 or combat state. Native X-Ray evidence substitutes for ordinary room and physical-LOS checks; all other category gates remain unchanged. Unclassified scenery is silent, and the Farsight does not activate the feature.
+- **Acceptance:** In scanner training and Attack Ship, locate hidden switches with the standard interactable cue; verify exposed doors, pickups, hostile characters, and non-hostile characters use only their normal category sounds; confirm ordinary scenery is silent and no prop receives both a generic and semantic cue. Verify viewport/radius entry and exit, device/menu/pause/stage cleanup, configuration disable, repeated sessions, and normal visibility restoration when X-Ray ends.
+- **Evidence:** Correlate X-Ray device/vision state, `xray_semantic_visibility`, `xray_exposed`, normal category candidate/slot records, active voice counts, frame cadence, and memory over repeated tests.
+- **Risks:** One-frame native render evidence adds deliberate latency. Dense X-Ray views remain bounded by each normal scanner's capacity, so a useful candidate can still be omitted according to that category's established selection policy.
+- **Explicit non-goals:** No exercise-tag special case, sound for unclassified scenery, Farsight support, names, off-screen awareness, automated interaction, or extra mixer allocation.
 
 ### Prioritized environmental-hazard slice
 

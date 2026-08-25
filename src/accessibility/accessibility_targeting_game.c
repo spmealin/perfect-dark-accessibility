@@ -1999,6 +1999,7 @@ static void accessibilityTargetingObserveCombat(
 				|| prop != aimedprop);
 		s32 aimed = prop && (aimedbyraw || aimedbytolerance
 				|| (!objecttarget && prop == aimedprop));
+		s32 xrayexposed = accessibilityVisibilityIsXrayExposed(prop);
 		const char *aimsource = aimed
 				? rawoverride ? g_AccessibilityTargetingGameRawAimObstruction
 						== ACCESSIBILITY_TARGETING_OBSTRUCTION_PENETRABLE_GLASS
@@ -2097,7 +2098,7 @@ static void accessibilityTargetingObserveCombat(
 				|| projection->y2 < viewtop || projection->y1 > viewbottom) {
 			eligible = false;
 			reason = "outside_viewport";
-		} else if (!projection->lineofsight && !aimed) {
+		} else if (!projection->lineofsight && !aimed && !xrayexposed) {
 			eligible = false;
 			reason = "line_of_sight_blocked";
 		} else {
@@ -2166,7 +2167,7 @@ static void accessibilityTargetingObserveCombat(
 
 		if (detailed) {
 			accessibilityLogEvent("targeting", "combat_candidate",
-					"frame=%d slot=%d accepted=%d reason=%s aimed=%d aim_source=%s category=%d relationship=%d aimonly=%d prop=%p propnum=%d chr=%p obj=%p obj_type=%d model=%d prop_type=%d prop_flags=0x%02x obj_flags=0x%08x obj_flags2=0x%08x chr_flags=0x%08x chr_hidden=0x%08x action=%d capture_valid=%d projected=%d finite=%d line_of_sight=%d visibility_sample=%s visibility_queries=%d screen=%.3f,%.3f,%.3f,%.3f precision_anchor_source=%s precision_anchor_hitpart=%d precision_anchor_node=%p precision_anchor_nodes_examined=%d precision_anchor_score=%.4f precision_fine_attempted=%d precision_fine_queries=%d precision_fine_budget_exhausted=%d precision_fine_elapsed_us=%llu target_screen=%.3f,%.3f aim_screen=%.3f,%.3f vertical_aim_error_available=%d raw_elevation_degrees=%.3f normalized_screen_error=%.4f,%.4f",
+					"frame=%d slot=%d accepted=%d reason=%s aimed=%d aim_source=%s category=%d relationship=%d aimonly=%d prop=%p propnum=%d chr=%p obj=%p obj_type=%d model=%d prop_type=%d prop_flags=0x%02x obj_flags=0x%08x obj_flags2=0x%08x chr_flags=0x%08x chr_hidden=0x%08x action=%d capture_valid=%d projected=%d finite=%d line_of_sight=%d xray_exposed=%d visibility_sample=%s visibility_queries=%d screen=%.3f,%.3f,%.3f,%.3f precision_anchor_source=%s precision_anchor_hitpart=%d precision_anchor_node=%p precision_anchor_nodes_examined=%d precision_anchor_score=%.4f precision_fine_attempted=%d precision_fine_queries=%d precision_fine_budget_exhausted=%d precision_fine_elapsed_us=%llu target_screen=%.3f,%.3f aim_screen=%.3f,%.3f vertical_aim_error_available=%d raw_elevation_degrees=%.3f normalized_screen_error=%.4f,%.4f",
 					g_Vars.lvframe60, i, eligible, reason, aimed,
 					aimsource,
 					projection->category,
@@ -2186,7 +2187,7 @@ static void accessibilityTargetingObserveCombat(
 						&& g_AccessibilityTargetingGameProjectionPlayer
 								== g_Vars.currentplayernum,
 					projection->projected, projection->finite,
-					projection->lineofsight,
+					projection->lineofsight, xrayexposed,
 					accessibilityTargetingGameVisibilitySampleName(
 						projection->visibilitysample),
 					projection->visibilityqueries,

@@ -1,9 +1,34 @@
 #include <ultra64.h>
 #include "constants.h"
+#include "bss.h"
+#include "data.h"
 #include "types.h"
 #include "game/prop.h"
+#include "game/propobj.h"
 #include "lib/collision.h"
+#include "accessibility/accessibility.h"
 #include "accessibility/accessibility_visibility.h"
+
+bool accessibilityVisibilityIsXrayExposed(struct prop *prop)
+{
+	f32 distance;
+
+	/*
+	 * The Farsight also enters VISIONMODE_XRAY. Require the native scanner's
+	 * uninhibited device bit so its weapon sight cannot broaden the semantic
+	 * scanners. The retained screen flag is the same preceding-frame render
+	 * evidence formerly used by the generic X-Ray audio lane.
+	 */
+	return prop
+			&& accessibilityIsXrayScannerAudioEnabled()
+			&& PLAYERCOUNT() == 1
+			&& g_Vars.currentplayer
+			&& (g_Vars.currentplayer->devicesactive
+					& ~g_Vars.currentplayer->devicesinhibit
+					& DEVICE_XRAYSCANNER)
+			&& (prop->flags & PROPFLAG_ONANYSCREENPREVTICK)
+			&& objGetXrayHighlightDistance(prop, &distance);
+}
 
 bool accessibilityVisibilityHasVisualLineOfSight(
 		struct coord *viewpos, RoomNum *viewrooms,

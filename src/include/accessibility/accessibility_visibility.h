@@ -7,5 +7,6 @@ bool accessibilityVisibilityHasVisualLineOfSight(
 		struct coord *viewpos, RoomNum *viewrooms,
 		struct coord *targetpos, RoomNum *targetrooms,
 		struct prop *targetprop);
+bool accessibilityVisibilityIsXrayExposed(struct prop *prop);
 
 #endif

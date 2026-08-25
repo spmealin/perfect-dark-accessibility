@@ -37,11 +37,9 @@ enum accessibilitytrackersource {
 	ACCESSIBILITY_TRACKER_SOURCE_NONE,
 	ACCESSIBILITY_TRACKER_SOURCE_RTRACKER,
 	ACCESSIBILITY_TRACKER_SOURCE_INFRARED,
-	ACCESSIBILITY_TRACKER_SOURCE_XRAY,
 };
 
 #define ACCESSIBILITY_TRACKER_CATEGORY_INFRARED 4
-#define ACCESSIBILITY_TRACKER_CATEGORY_XRAY 5
 
 struct accessibilitytrackercandidate {
 	uintptr_t identity;
@@ -122,8 +120,6 @@ static const char *accessibilityTrackerCategoryName(s32 category)
 		return "red_character";
 	case ACCESSIBILITY_TRACKER_CATEGORY_INFRARED:
 		return "infrared_highlight";
-	case ACCESSIBILITY_TRACKER_CATEGORY_XRAY:
-		return "xray_highlight";
 	}
 
 	return "none";
@@ -138,7 +134,6 @@ static f32 accessibilityTrackerCategoryFrequency(s32 category)
 		return 1000.0f;
 	case RADAR_TRACKED_YELLOW:
 	case ACCESSIBILITY_TRACKER_CATEGORY_INFRARED:
-	case ACCESSIBILITY_TRACKER_CATEGORY_XRAY:
 	default:
 		return 700.0f;
 	}
@@ -151,8 +146,6 @@ static const char *accessibilityTrackerSourceName(s32 source)
 		return "rtracker";
 	case ACCESSIBILITY_TRACKER_SOURCE_INFRARED:
 		return "ir_scanner";
-	case ACCESSIBILITY_TRACKER_SOURCE_XRAY:
-		return "xray_scanner";
 	}
 
 	return "none";
@@ -252,11 +245,6 @@ static const char *accessibilityTrackerScopeReason(s32 source)
 
 	if (source == ACCESSIBILITY_TRACKER_SOURCE_INFRARED
 			&& !accessibilityIsIrScannerAudioEnabled()) {
-		return "feature_disabled";
-	}
-
-	if (source == ACCESSIBILITY_TRACKER_SOURCE_XRAY
-			&& !accessibilityIsXrayScannerAudioEnabled()) {
 		return "feature_disabled";
 	}
 
@@ -382,13 +370,6 @@ static void accessibilityTrackerScan(s32 source)
 					|| prop->type == PROPTYPE_WEAPON)
 				&& objIsHighlightedByInfrared(prop->obj)) {
 			category = ACCESSIBILITY_TRACKER_CATEGORY_INFRARED;
-		} else if (source == ACCESSIBILITY_TRACKER_SOURCE_XRAY
-				&& (prop->flags & PROPFLAG_ONANYSCREENPREVTICK)
-				&& (prop->type == PROPTYPE_OBJ
-					|| prop->type == PROPTYPE_DOOR
-					|| prop->type == PROPTYPE_WEAPON)
-				&& objGetXrayHighlightDistance(prop, &sourcedistance)) {
-			category = ACCESSIBILITY_TRACKER_CATEGORY_XRAY;
 		}
 
 		if (category != RADAR_TRACKED_NONE) {
@@ -404,25 +385,6 @@ static void accessibilityTrackerScan(s32 source)
 			} else {
 				overflow++;
 
-				if (source == ACCESSIBILITY_TRACKER_SOURCE_XRAY) {
-					s32 i;
-					s32 farthest = 0;
-
-					for (i = 1; i < ACCESSIBILITY_TRACKER_SLOT_COUNT; i++) {
-						if (g_AccessibilityTrackerCandidates[i].sourcedistance
-								> g_AccessibilityTrackerCandidates[
-										farthest].sourcedistance) {
-							farthest = i;
-						}
-					}
-
-					if (sourcedistance
-							< g_AccessibilityTrackerCandidates[
-									farthest].sourcedistance) {
-						candidate = &g_AccessibilityTrackerCandidates[
-								farthest];
-					}
-				}
 			}
 
 			if (candidate) {
@@ -646,7 +608,6 @@ void accessibilityTrackerTick(void)
 
 	source = nativeactive ? ACCESSIBILITY_TRACKER_SOURCE_RTRACKER
 			: infraredactive ? ACCESSIBILITY_TRACKER_SOURCE_INFRARED
-			: xrayactive ? ACCESSIBILITY_TRACKER_SOURCE_XRAY
 			: ACCESSIBILITY_TRACKER_SOURCE_NONE;
 
 	if (source != g_AccessibilityTrackerSource) {

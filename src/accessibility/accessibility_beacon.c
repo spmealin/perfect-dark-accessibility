@@ -1183,10 +1183,16 @@ static struct prop *accessibilityBeaconVisibleDoor(struct prop *prop,
 	do {
 		struct prop *siblingprop = sibling->base.prop;
 		s32 siblingnum = accessibilityBeaconPropNum(siblingprop);
-
-		if (siblingprop
+		s32 visible = siblingprop
 				&& accessibilityBeaconDoorIsOnScreen(
-					siblingprop, &siblingreason)
+					siblingprop, &siblingreason);
+
+		if (!visible && accessibilityVisibilityIsXrayExposed(siblingprop)) {
+			visible = true;
+			siblingreason = "door_exposed_by_xray";
+		}
+
+		if (siblingprop && visible
 				&& siblingnum >= 0
 				&& (bestnum < 0 || siblingnum < bestnum)) {
 			bestprop = siblingprop;
@@ -1435,6 +1441,7 @@ static s32 accessibilityBeaconScan(s32 detailed)
 		f32 distance = -1.0f;
 		f32 bearing = 0.0f;
 		f32 vertical = 0.0f;
+		s32 xrayexposed = false;
 
 		traversed++;
 		memset(&result, 0, sizeof(result));
@@ -1500,7 +1507,11 @@ static s32 accessibilityBeaconScan(s32 detailed)
 					= accessibilityRelationshipClassifyCharacter(prop);
 		}
 
+		xrayexposed = eligible
+				&& accessibilityVisibilityIsXrayExposed(candidate);
+
 		if (eligible && result.category == ACCESSIBILITY_BEACON_CATEGORY_OBJECT
+				&& !xrayexposed
 				&& !accessibilityBeaconObjectIsOnScreen(candidate, &reason)) {
 			eligible = false;
 		}
@@ -1523,14 +1534,19 @@ static s32 accessibilityBeaconScan(s32 detailed)
 			if (distance > scandistance) {
 				eligible = false;
 				reason = "outside_scan_radius";
-			} else if (!accessibilityBeaconRoomsRelated(playerprop->rooms, candidate->rooms)) {
+			} else if (!xrayexposed
+					&& !accessibilityBeaconRoomsRelated(
+						playerprop->rooms, candidate->rooms)) {
 				eligible = false;
 				reason = "outside_room_boundary";
-			} else if (accessibilityBeaconRequiresLineOfSight(result.category)
+			} else if (!xrayexposed
+					&& accessibilityBeaconRequiresLineOfSight(result.category)
 					&& !accessibilityBeaconHasLineOfSight(
 						&result, &observer, candidate)) {
 				eligible = false;
 				reason = "line_of_sight_blocked";
+			} else if (xrayexposed) {
+				reason = "xray_semantic_visibility";
 			}
 		}
 
@@ -1619,6 +1635,7 @@ static struct prop *accessibilityBeaconValidateResult(struct accessibilitybeacon
 	f32 bearing;
 	f32 vertical;
 	f32 distance;
+	s32 xrayexposed;
 
 	if (!accessibilityObserverGet(&observer)) {
 		*reason = "observer_unavailable";
@@ -1632,6 +1649,7 @@ static struct prop *accessibilityBeaconValidateResult(struct accessibilitybeacon
 	}
 
 	prop = &g_Vars.props[result->propnum];
+	xrayexposed = accessibilityVisibilityIsXrayExposed(prop);
 
 	if ((result->entityischr && prop->chr != result->entity)
 			|| (!result->entityischr && prop->obj != result->entity)) {
@@ -1652,7 +1670,7 @@ static struct prop *accessibilityBeaconValidateResult(struct accessibilitybeacon
 		if (!accessibilityBeaconObjectEligible(prop, &citag, reason)) {
 			return NULL;
 		}
-		if (!accessibilityBeaconObjectIsOnScreen(prop, reason)) {
+		if (!xrayexposed && !accessibilityBeaconObjectIsOnScreen(prop, reason)) {
 			return NULL;
 		}
 	} else if (result->category == ACCESSIBILITY_BEACON_CATEGORY_DOOR) {
@@ -1685,6 +1703,8 @@ static struct prop *accessibilityBeaconValidateResult(struct accessibilitybeacon
 		return NULL;
 	}
 
+	xrayexposed = accessibilityVisibilityIsXrayExposed(prop);
+
 	if (result->category == ACCESSIBILITY_BEACON_CATEGORY_DOOR) {
 		struct coord doorwayposition;
 
@@ -1701,12 +1721,14 @@ static struct prop *accessibilityBeaconValidateResult(struct accessibilitybeacon
 		return NULL;
 	}
 
-	if (!accessibilityBeaconRoomsRelated(playerprop->rooms, prop->rooms)) {
+	if (!xrayexposed
+			&& !accessibilityBeaconRoomsRelated(playerprop->rooms, prop->rooms)) {
 		*reason = "moved_outside_room_boundary";
 		return NULL;
 	}
 
-	if (accessibilityBeaconRequiresLineOfSight(result->category)
+	if (!xrayexposed
+			&& accessibilityBeaconRequiresLineOfSight(result->category)
 			&& !accessibilityBeaconHasLineOfSight(result, &observer, prop)) {
 		*reason = "line_of_sight_became_blocked";
 		return NULL;
@@ -3023,6 +3045,7 @@ static void accessibilityBeaconDumpDiagnosticCandidate(u64 captureid,
 	s32 roomsrelated = false;
 	s32 withinrange = false;
 	s32 losclear = false;
+	s32 xrayexposed = false;
 	s32 canonicalpropnum = accessibilityBeaconPropNum(prop);
 	s32 siblingcount = 0;
 	u32 citag = 0;
@@ -3113,9 +3136,11 @@ static void accessibilityBeaconDumpDiagnosticCandidate(u64 captureid,
 	}
 
 	projection = accessibilityBeaconFindProjection(candidate);
+	xrayexposed = accessibilityVisibilityIsXrayExposed(candidate);
 
 	if (semanticeligible && categoryactive && contexteligible
 			&& result.category == ACCESSIBILITY_BEACON_CATEGORY_OBJECT
+			&& !xrayexposed
 			&& !accessibilityBeaconObjectIsOnScreen(candidate, &finalreason)) {
 		contexteligible = false;
 	}
@@ -3131,10 +3156,11 @@ static void accessibilityBeaconDumpDiagnosticCandidate(u64 captureid,
 
 		if (!withinrange) {
 			finalreason = "outside_scan_radius";
-		} else if (!roomsrelated) {
+		} else if (!xrayexposed && !roomsrelated) {
 			finalreason = "outside_room_boundary";
 		} else {
-			losclear = !accessibilityBeaconRequiresLineOfSight(
+			losclear = xrayexposed
+					|| !accessibilityBeaconRequiresLineOfSight(
 					result.category)
 					|| accessibilityBeaconHasLineOfSight(
 						&result, observer, candidate);
@@ -3143,13 +3169,14 @@ static void accessibilityBeaconDumpDiagnosticCandidate(u64 captureid,
 				finalreason = "line_of_sight_blocked";
 			} else {
 				finaleligible = true;
-				finalreason = semanticreason;
+				finalreason = xrayexposed
+						? "xray_semantic_visibility" : semanticreason;
 			}
 		}
 	}
 
 	accessibilityLogEvent("incident", "beacon_candidate",
-			"capture=%llu focus_index=%d focus_dot=%.6f focus_distance=%.3f decision=%s reason=%s semantic_eligible=%d semantic_reason=%s pickup_reason=%s category=%s category_active=%d context_eligible=%d kind=%s prop=%p propnum=%d prop_type=%d candidate=%p candidate_propnum=%d canonical_propnum=%d siblings=%d active=%d onscreen=%d position=%.3f,%.3f,%.3f rooms=%d,%d object=%p object_type=%d model=%d tag=%d ci_tag=0x%02x object_flags=0x%08x object_flags2=0x%08x object_flags3=0x%08x projection_cache_current=%d projection_frame=%d projection_age=%d projection_entries=%d projection_truncated=%d projection_found=%d projection_onscreen=%d projected=%d projection_finite=%d intersects_viewport=%d screen=%.3f,%.3f,%.3f,%.3f distance=%.3f bearing=%.3f vertical=%.3f within_range=%d rooms_related=%d los_clear=%d los_sample=%d los_queries=%d",
+			"capture=%llu focus_index=%d focus_dot=%.6f focus_distance=%.3f decision=%s reason=%s semantic_eligible=%d semantic_reason=%s pickup_reason=%s category=%s category_active=%d context_eligible=%d kind=%s prop=%p propnum=%d prop_type=%d candidate=%p candidate_propnum=%d canonical_propnum=%d siblings=%d active=%d onscreen=%d xray_exposed=%d position=%.3f,%.3f,%.3f rooms=%d,%d object=%p object_type=%d model=%d tag=%d ci_tag=0x%02x object_flags=0x%08x object_flags2=0x%08x object_flags3=0x%08x projection_cache_current=%d projection_frame=%d projection_age=%d projection_entries=%d projection_truncated=%d projection_found=%d projection_onscreen=%d projected=%d projection_finite=%d intersects_viewport=%d screen=%.3f,%.3f,%.3f,%.3f distance=%.3f bearing=%.3f vertical=%.3f within_range=%d rooms_related=%d los_clear=%d los_sample=%d los_queries=%d",
 			(unsigned long long)captureid, index, focus->dot,
 			focus->distance, finaleligible ? "included" : "excluded",
 			finalreason, semanticeligible, semanticreason, pickupreason,
@@ -3160,6 +3187,7 @@ static void accessibilityBeaconDumpDiagnosticCandidate(u64 captureid,
 			accessibilityBeaconPropNum(candidate), canonicalpropnum,
 			siblingcount, prop->active,
 			(prop->flags & PROPFLAG_ONTHISSCREENTHISTICK) != 0,
+			xrayexposed,
 			prop->pos.x, prop->pos.y, prop->pos.z,
 			prop->rooms[0], prop->rooms[1], (void *)obj,
 			obj ? obj->type : -1, obj ? obj->modelnum : -1,
