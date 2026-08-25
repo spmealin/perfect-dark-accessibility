@@ -54,6 +54,32 @@ u32 var8009cdbc;
 
 f32 g_AutoAimScale = 1;
 
+static bool shotHitIsPenetrableGlass(const struct hit *hit)
+{
+	struct defaultobj *obj;
+
+	if (!hit || !hit->prop || hit->slowsbullet || hit->bulletproof
+			|| (hit->prop->type != PROPTYPE_OBJ
+				&& hit->prop->type != PROPTYPE_DOOR)) {
+		return false;
+	}
+
+	obj = hit->prop->obj;
+
+	if (!obj || (obj->flags & OBJFLAG_INVINCIBLE)) {
+		return false;
+	}
+
+	if (obj->type == OBJTYPE_GLASS || obj->type == OBJTYPE_TINTEDGLASS) {
+		return true;
+	}
+
+	return obj->model && obj->model->definition
+			&& obj->model->definition->skel == &g_SkelWindowedDoor
+			&& hit->dlnode == modelGetPart(obj->model->definition,
+				MODELPART_WINDOWEDDOOR_0003);
+}
+
 /**
  * Populate g_Vars.onscreenprops. This is an array of prop pointers, filtered by
  * props that are on screen and sorted by distance descending (furthest first).
@@ -568,7 +594,8 @@ static struct prop *shotCalculateHitsInternal(s32 handnum, bool isshooting,
 		struct coord *gunpos2d, struct coord *gundir2d,
 		struct coord *gunpos3d, struct coord *gundir3d, u32 arg6,
 		f32 distance, bool cheap, struct coord *queryhitpos,
-		s32 *queryhitpart)
+		s32 *queryhitpart, struct prop **penetratedprop,
+		struct coord *penetratedhitpos, s32 *penetratedhitpart)
 {
 	u32 index;
 	struct prop **propptr;
@@ -616,6 +643,12 @@ static struct prop *shotCalculateHitsInternal(s32 handnum, bool isshooting,
 
 	if (queryhitpart) {
 		*queryhitpart = 0;
+	}
+	if (penetratedprop) {
+		*penetratedprop = NULL;
+	}
+	if (penetratedhitpart) {
+		*penetratedhitpart = 0;
 	}
 
 	bgun0f0a9494(arg6);
@@ -951,17 +984,37 @@ static struct prop *shotCalculateHitsInternal(s32 handnum, bool isshooting,
 		for (i = 0; i < ARRAYCOUNT(shotdata.hits); i++) {
 			hitprop = shotdata.hits[i].prop;
 
-			if (hitprop && !done) {
+			if (hitprop) {
+				s32 aimable = hitprop->type == PROPTYPE_CHR
+						|| hitprop->type == PROPTYPE_PLAYER
+						|| hitprop->type == PROPTYPE_OBJ
+						|| hitprop->type == PROPTYPE_WEAPON
+						|| hitprop->type == PROPTYPE_DOOR;
+
+				if (done && penetratedprop && !*penetratedprop
+						&& shotHitIsPenetrableGlass(&shotdata.hits[i])) {
+					continue;
+				}
+
+				if (done && penetratedprop && !*penetratedprop && aimable) {
+					*penetratedprop = hitprop;
+					if (penetratedhitpos) {
+						*penetratedhitpos = shotdata.hits[i].pos;
+					}
+					if (penetratedhitpart) {
+						*penetratedhitpart = shotdata.hits[i].hitpart;
+					}
+					break;
+				}
+
+				if (done) {
+					continue;
+				}
+
 				if (laserstream && shotdata.hits[i].distance > 300) {
 					done = true;
 				} else {
-					if (hitprop->type == PROPTYPE_CHR
-							|| hitprop->type == PROPTYPE_PLAYER) {
-						result = hitprop;
-						done = true;
-					} else if (hitprop->type == PROPTYPE_OBJ
-							|| hitprop->type == PROPTYPE_WEAPON
-							|| hitprop->type == PROPTYPE_DOOR) {
+					if (aimable) {
 						result = hitprop;
 						done = true;
 					}
@@ -971,6 +1024,19 @@ static struct prop *shotCalculateHitsInternal(s32 handnum, bool isshooting,
 					}
 					if (result == hitprop && queryhitpart) {
 						*queryhitpart = shotdata.hits[i].hitpart;
+					}
+
+					/*
+					 * Only continue the accessibility query when the native hit
+					 * explicitly says this surface does not slow the bullet. This
+					 * preserves ordinary query behavior while exposing the next
+					 * actual hit behind penetrable glass.
+					 */
+					if (shotHitIsPenetrableGlass(&shotdata.hits[i])
+							&& penetratedprop) {
+						done = true;
+					} else {
+						penetratedprop = NULL;
 					}
 
 					if (shotdata.hits[i].slowsbullet) {
@@ -994,7 +1060,8 @@ struct prop *shotCalculateHits(s32 handnum, bool isshooting,
 		f32 distance, bool cheap)
 {
 	return shotCalculateHitsInternal(handnum, isshooting, gunpos2d, gundir2d,
-			gunpos3d, gundir3d, arg6, distance, cheap, NULL, NULL);
+			gunpos3d, gundir3d, arg6, distance, cheap, NULL, NULL,
+			NULL, NULL, NULL);
 }
 
 #ifndef PLATFORM_N64
@@ -1116,7 +1183,9 @@ bool shotTestLos(struct coord *gunpos2d, struct coord *gundir2d, struct coord *g
 #endif
 
 static struct prop *propFindAimingAtInternal(s32 handnum, bool isshooting,
-		u32 context, struct coord *queryhitpos, s32 *queryhitpart)
+		u32 context, struct coord *queryhitpos, s32 *queryhitpart,
+		struct prop **penetratedprop, struct coord *penetratedhitpos,
+		s32 *penetratedhitpart)
 {
 	struct coord gundir2d;
 	struct coord gunpos2d;
@@ -1134,19 +1203,31 @@ static struct prop *propFindAimingAtInternal(s32 handnum, bool isshooting,
 
 	return shotCalculateHitsInternal(handnum, isshooting, &gunpos2d, &gundir2d,
 			&gunpos3d, &gundir3d, 0, 4294836224, PLAYERCOUNT() >= 2,
-			queryhitpos, queryhitpart);
+			queryhitpos, queryhitpart, penetratedprop, penetratedhitpos,
+			penetratedhitpart);
 }
 
 struct prop *propFindAimingAt(s32 handnum, bool isshooting, u32 context)
 {
-	return propFindAimingAtInternal(handnum, isshooting, context, NULL, NULL);
+	return propFindAimingAtInternal(handnum, isshooting, context, NULL, NULL,
+			NULL, NULL, NULL);
 }
 
 struct prop *propFindAimingAtWithHit(s32 handnum, bool isshooting, u32 context,
 		struct coord *queryhitpos, s32 *queryhitpart)
 {
 	return propFindAimingAtInternal(handnum, isshooting, context, queryhitpos,
-			queryhitpart);
+			queryhitpart, NULL, NULL, NULL);
+}
+
+struct prop *propFindAimingAtWithPenetrableHit(s32 handnum, bool isshooting,
+		u32 context, struct coord *queryhitpos, s32 *queryhitpart,
+		struct prop **penetratedprop, struct coord *penetratedhitpos,
+		s32 *penetratedhitpart)
+{
+	return propFindAimingAtInternal(handnum, isshooting, context, queryhitpos,
+			queryhitpart, penetratedprop, penetratedhitpos,
+			penetratedhitpart);
 }
 
 void shotCreate(s32 handnum, bool isshooting, bool dorandom, s32 numshots, bool cheap)

@@ -16,6 +16,12 @@ enum accessibilitytonecombatcontour {
 	ACCESSIBILITY_TONE_COMBAT_CONTOUR_BASE_THEN_END,
 };
 
+enum accessibilitytonealignmentpattern {
+	ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_CONTINUOUS = 0,
+	ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_INTERRUPTED = 1 << 0,
+	ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_PENETRABLE = 1 << 1,
+};
+
 enum accessibilitytonecanepattern {
 	ACCESSIBILITY_TONE_CANE_PATTERN_CONTOUR,
 	ACCESSIBILITY_TONE_CANE_PATTERN_CROUCH_DOUBLE,
@@ -66,7 +72,7 @@ struct accessibilitytonediagnostics {
 
 void accessibilityToneSet(s32 enabled, f32 frequencyhz);
 void accessibilityToneSetAlignment(s32 enabled, f32 frequencyhz,
-		s32 interrupted);
+		s32 patternflags);
 void accessibilityTonePlayChirp(f32 frequencyhz, f32 volume, f32 pan);
 void accessibilityTonePlayChirpPattern(f32 frequencyhz, f32 volume, f32 pan,
 		s32 pulses, f32 gain);

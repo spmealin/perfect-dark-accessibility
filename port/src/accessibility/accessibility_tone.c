@@ -11,6 +11,8 @@
 #define ACCESSIBILITY_ALIGNMENT_GAP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.010f))
 #define ACCESSIBILITY_ALIGNMENT_ON_SAMPLES (ACCESSIBILITY_ALIGNMENT_CYCLE_SAMPLES - ACCESSIBILITY_ALIGNMENT_GAP_SAMPLES)
 #define ACCESSIBILITY_ALIGNMENT_EDGE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.002f))
+#define ACCESSIBILITY_ALIGNMENT_PENETRABLE_MODULATION_HZ 12.0f
+#define ACCESSIBILITY_ALIGNMENT_PENETRABLE_MIN_GAIN 0.55f
 #define ACCESSIBILITY_CHIRP_VOLUME 0.16f
 #define ACCESSIBILITY_CHIRP_DURATION_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.10f))
 #define ACCESSIBILITY_CHIRP_ATTACK_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.005f))
@@ -109,7 +111,7 @@
 
 static SDL_atomic_t g_AccessibilityToneEnabled;
 static SDL_atomic_t g_AccessibilityToneFrequencyMilliHz;
-static SDL_atomic_t g_AccessibilityToneInterrupted;
+static SDL_atomic_t g_AccessibilityTonePatternFlags;
 static SDL_atomic_t g_AccessibilityTonePatternSequence;
 static SDL_atomic_t g_AccessibilityChirpSequence;
 static SDL_atomic_t g_AccessibilityChirpEnabled;
@@ -209,6 +211,7 @@ static f32 g_AccessibilityToneFrequencyHz;
 static f32 g_AccessibilityToneGain;
 static s32 g_AccessibilityToneObservedPatternSequence;
 static s32 g_AccessibilityTonePatternSample;
+static f32 g_AccessibilityTonePenetrablePhase;
 static s32 g_AccessibilityChirpObservedSequence;
 static s32 g_AccessibilityChirpSamplesRemaining;
 static s32 g_AccessibilityChirpSample;
@@ -339,11 +342,11 @@ void accessibilityToneSet(s32 enabled, f32 frequencyhz)
 }
 
 void accessibilityToneSetAlignment(s32 enabled, f32 frequencyhz,
-		s32 interrupted)
+		s32 patternflags)
 {
 	s32 previousenabled = SDL_AtomicGet(&g_AccessibilityToneEnabled);
-	s32 previousinterrupted = SDL_AtomicGet(
-			&g_AccessibilityToneInterrupted);
+	s32 previouspatternflags = SDL_AtomicGet(
+			&g_AccessibilityTonePatternFlags);
 
 	if (enabled) {
 		if (frequencyhz < 1.0f) {
@@ -354,12 +357,12 @@ void accessibilityToneSetAlignment(s32 enabled, f32 frequencyhz,
 				(s32)(frequencyhz * 1000.0f));
 	}
 
-	interrupted = enabled && interrupted;
-	SDL_AtomicSet(&g_AccessibilityToneInterrupted, interrupted);
+	patternflags = enabled ? patternflags : 0;
+	SDL_AtomicSet(&g_AccessibilityTonePatternFlags, patternflags);
 	SDL_AtomicSet(&g_AccessibilityToneEnabled, enabled != 0);
 
 	if (previousenabled != (enabled != 0)
-			|| previousinterrupted != interrupted) {
+			|| previouspatternflags != patternflags) {
 		SDL_AtomicAdd(&g_AccessibilityTonePatternSequence, 1);
 	}
 }
@@ -1072,7 +1075,7 @@ void accessibilityToneGetDiagnostics(struct accessibilitytonediagnostics *diagno
 const s16 *accessibilityToneMix(const s16 *input, u32 len)
 {
 	s32 enabled = SDL_AtomicGet(&g_AccessibilityToneEnabled);
-	s32 toneinterrupted = SDL_AtomicGet(&g_AccessibilityToneInterrupted);
+	s32 tonepatternflags = SDL_AtomicGet(&g_AccessibilityTonePatternFlags);
 	s32 tonepatternsequence = SDL_AtomicGet(
 			&g_AccessibilityTonePatternSequence);
 	s32 chirpsequence = SDL_AtomicGet(&g_AccessibilityChirpSequence);
@@ -1160,6 +1163,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			!= g_AccessibilityToneObservedPatternSequence) {
 		g_AccessibilityToneObservedPatternSequence = tonepatternsequence;
 		g_AccessibilityTonePatternSample = 0;
+		g_AccessibilityTonePenetrablePhase = 0.0f;
 	}
 
 	accessibilityGetEnemyTuning(NULL, NULL, NULL, &combatmastervolume);
@@ -1674,16 +1678,22 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			}
 		}
 
-		if (enabled && toneinterrupted) {
-			if (g_AccessibilityTonePatternSample
+		if (enabled && tonepatternflags) {
+			if ((tonepatternflags
+					& ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_INTERRUPTED)
+					&& g_AccessibilityTonePatternSample
 					>= ACCESSIBILITY_ALIGNMENT_ON_SAMPLES) {
 				alignmentenvelope = 0.0f;
-			} else if (g_AccessibilityTonePatternSample
+			} else if ((tonepatternflags
+					& ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_INTERRUPTED)
+					&& g_AccessibilityTonePatternSample
 					< ACCESSIBILITY_ALIGNMENT_EDGE_SAMPLES) {
 				alignmentenvelope
 						= (f32)g_AccessibilityTonePatternSample
 							/ (f32)ACCESSIBILITY_ALIGNMENT_EDGE_SAMPLES;
-			} else if (ACCESSIBILITY_ALIGNMENT_ON_SAMPLES
+			} else if ((tonepatternflags
+					& ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_INTERRUPTED)
+					&& ACCESSIBILITY_ALIGNMENT_ON_SAMPLES
 					- g_AccessibilityTonePatternSample
 						<= ACCESSIBILITY_ALIGNMENT_EDGE_SAMPLES) {
 				alignmentenvelope
@@ -1692,9 +1702,29 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 							/ (f32)ACCESSIBILITY_ALIGNMENT_EDGE_SAMPLES;
 			}
 
+			if (tonepatternflags
+					& ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_PENETRABLE) {
+				f32 modulation = 0.5f
+						+ 0.5f * sinf(g_AccessibilityTonePenetrablePhase);
+				alignmentenvelope *= ACCESSIBILITY_ALIGNMENT_PENETRABLE_MIN_GAIN
+						+ (1.0f - ACCESSIBILITY_ALIGNMENT_PENETRABLE_MIN_GAIN)
+							* modulation;
+				g_AccessibilityTonePenetrablePhase += TWO_PI
+						* ACCESSIBILITY_ALIGNMENT_PENETRABLE_MODULATION_HZ
+						/ ACCESSIBILITY_TONE_SAMPLE_RATE;
+				if (g_AccessibilityTonePenetrablePhase >= TWO_PI) {
+					g_AccessibilityTonePenetrablePhase -= TWO_PI;
+				}
+			}
+
 			g_AccessibilityTonePatternSample++;
-			if (g_AccessibilityTonePatternSample
+			if ((tonepatternflags
+					& ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_INTERRUPTED)
+					&& g_AccessibilityTonePatternSample
 					>= ACCESSIBILITY_ALIGNMENT_CYCLE_SAMPLES) {
+				g_AccessibilityTonePatternSample = 0;
+			} else if (g_AccessibilityTonePatternSample
+					>= (s32)ACCESSIBILITY_TONE_SAMPLE_RATE) {
 				g_AccessibilityTonePatternSample = 0;
 			}
 		}

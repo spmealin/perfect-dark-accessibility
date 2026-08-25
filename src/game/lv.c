@@ -1250,17 +1250,22 @@ Gfx *lvRender(Gfx *gdl)
 				bgCalculateGlaresForVisibleRooms();
 #endif
 				struct coord accessibilityaimhitpos;
+				struct coord accessibilitypenetratedhitpos;
 				struct prop *accessibilityaimhitprop = NULL;
+				struct prop *accessibilitypenetratedprop = NULL;
 				s32 accessibilityaimhitpart = 0;
+				s32 accessibilitypenetratedhitpart = 0;
 
 				// Calculate lookingatprop
 				if (PLAYERCOUNT() == 1
 						|| g_Vars.coopplayernum >= 0
 						|| g_Vars.antiplayernum >= 0
 						|| (weaponHasFlag(bgunGetWeaponNum(HAND_RIGHT), WEAPONFLAG_AIMTRACK) && bmoveIsInSightAimMode())) {
-					accessibilityaimhitprop = propFindAimingAtWithHit(HAND_RIGHT,
+					accessibilityaimhitprop = propFindAimingAtWithPenetrableHit(HAND_RIGHT,
 							false, FINDPROPCONTEXT_QUERY, &accessibilityaimhitpos,
-							&accessibilityaimhitpart);
+							&accessibilityaimhitpart, &accessibilitypenetratedprop,
+							&accessibilitypenetratedhitpos,
+							&accessibilitypenetratedhitpart);
 					g_Vars.currentplayer->lookingatprop.prop = accessibilityaimhitprop;
 
 					if (g_Vars.currentplayer->lookingatprop.prop) {
@@ -1316,7 +1321,10 @@ Gfx *lvRender(Gfx *gdl)
 				/* Capture projections before prop rendering converts model matrices in place. */
 				accessibilityBeaconCaptureGame();
 				accessibilityTargetingCaptureGame(accessibilityaimhitprop,
-						&accessibilityaimhitpos, accessibilityaimhitpart);
+						&accessibilityaimhitpos, accessibilityaimhitpart,
+						accessibilitypenetratedprop,
+						&accessibilitypenetratedhitpos,
+						accessibilitypenetratedhitpart);
 
 				// Handle eyespy Z presses
 				if (g_Vars.currentplayer->eyespy

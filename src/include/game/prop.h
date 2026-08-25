@@ -28,6 +28,10 @@ struct prop *shotCalculateHits(s32 handnum, bool isshooting, struct coord *gunpo
 struct prop *propFindAimingAt(s32 handnum, bool isshooting, u32 context);
 struct prop *propFindAimingAtWithHit(s32 handnum, bool isshooting, u32 context,
 		struct coord *queryhitpos, s32 *queryhitpart);
+struct prop *propFindAimingAtWithPenetrableHit(s32 handnum, bool isshooting,
+		u32 context, struct coord *queryhitpos, s32 *queryhitpart,
+		struct prop **penetratedprop, struct coord *penetratedhitpos,
+		s32 *penetratedhitpart);
 void shotCreate(s32 handnum, bool arg1, bool dorandom, s32 numshots, bool arg4);
 void hitCreate(struct shotdata *shotdata, struct prop *prop, f32 hitdistance, s32 hitpart, struct modelnode *bboxnode, struct hitthing *hitthing, s32 arg6, struct modelnode *dlnode, struct model *model, bool slowsbullet, bool bulletproof, struct coord *arg11, struct coord *arg12);
 void handInflictMeleeDamage(s32 handnum, struct gset *gset, bool arg2);

@@ -229,6 +229,7 @@ static struct coord g_AccessibilityTargetingGameRawAimHitPos;
 static s32 g_AccessibilityTargetingGameRawAimHitValid;
 static s32 g_AccessibilityTargetingGameRawAimHitPart;
 static s32 g_AccessibilityTargetingGameRawAimHitPartValid;
+static s32 g_AccessibilityTargetingGameRawAimObstruction;
 static struct accessibilitytargetingcombatprojection
 		g_AccessibilityTargetingCombatProjections[
 			ACCESSIBILITY_TARGETING_COMBAT_PROJECTION_CAPACITY];
@@ -1344,6 +1345,8 @@ static void accessibilityTargetingGameClearProjections(void)
 	g_AccessibilityTargetingGameRawAimHitValid = false;
 	g_AccessibilityTargetingGameRawAimHitPart = 0;
 	g_AccessibilityTargetingGameRawAimHitPartValid = false;
+	g_AccessibilityTargetingGameRawAimObstruction
+			= ACCESSIBILITY_TARGETING_OBSTRUCTION_NONE;
 	memset(g_AccessibilityTargetingCombatProjections, 0,
 			sizeof(g_AccessibilityTargetingCombatProjections));
 	g_AccessibilityTargetingCombatProjectionCount = 0;
@@ -1687,9 +1690,14 @@ static void accessibilityTargetingCaptureCamSpy(void)
 }
 
 void accessibilityTargetingCaptureGame(struct prop *queryaimedprop,
-		const struct coord *queryhitpos, s32 queryhitpart)
+		const struct coord *queryhitpos, s32 queryhitpart,
+		struct prop *penetratedprop, const struct coord *penetratedhitpos,
+		s32 penetratedhitpart)
 {
 	struct frdata *frdata;
+	struct prop *accessibilityaimedprop = queryaimedprop;
+	const struct coord *accessibilityhitpos = queryhitpos;
+	s32 accessibilityhitpart = queryhitpart;
 	s32 i;
 
 	accessibilityTargetingGameClearProjections();
@@ -1700,17 +1708,35 @@ void accessibilityTargetingCaptureGame(struct prop *queryaimedprop,
 		return;
 	}
 
-	if (queryaimedprop && queryhitpos
-			&& accessibilityTargetingGamePropNum(queryaimedprop) >= 0
-			&& isfinite(queryhitpos->x) && isfinite(queryhitpos->y)
-			&& isfinite(queryhitpos->z)) {
-		g_AccessibilityTargetingGameRawAimProp = (uintptr_t)queryaimedprop;
-		g_AccessibilityTargetingGameRawAimHitPos = *queryhitpos;
+	/*
+	 * Gunfire can continue through glass even though the native looking-at
+	 * query deliberately returns the pane itself. For ordinary combat only,
+	 * retain the next hit from that same native shot calculation as the
+	 * accessibility aim target. Device and firing-range contracts continue to
+	 * use the direct hit because glass penetration does not imply interaction.
+	 */
+	if (penetratedprop && penetratedhitpos
+			&& !accessibilityTargetingGameHasDeviceTargets()
+			&& !accessibilityTargetingGameIsFiringRange()) {
+		accessibilityaimedprop = penetratedprop;
+		accessibilityhitpos = penetratedhitpos;
+		accessibilityhitpart = penetratedhitpart;
+		g_AccessibilityTargetingGameRawAimObstruction
+				= ACCESSIBILITY_TARGETING_OBSTRUCTION_PENETRABLE_GLASS;
+	}
+
+	if (accessibilityaimedprop && accessibilityhitpos
+			&& accessibilityTargetingGamePropNum(accessibilityaimedprop) >= 0
+			&& isfinite(accessibilityhitpos->x)
+			&& isfinite(accessibilityhitpos->y)
+			&& isfinite(accessibilityhitpos->z)) {
+		g_AccessibilityTargetingGameRawAimProp = (uintptr_t)accessibilityaimedprop;
+		g_AccessibilityTargetingGameRawAimHitPos = *accessibilityhitpos;
 		g_AccessibilityTargetingGameRawAimHitValid = true;
-		if ((queryaimedprop->type == PROPTYPE_CHR
-				|| queryaimedprop->type == PROPTYPE_PLAYER)
-				&& queryhitpart > 0) {
-			g_AccessibilityTargetingGameRawAimHitPart = queryhitpart;
+		if ((accessibilityaimedprop->type == PROPTYPE_CHR
+				|| accessibilityaimedprop->type == PROPTYPE_PLAYER)
+				&& accessibilityhitpart > 0) {
+			g_AccessibilityTargetingGameRawAimHitPart = accessibilityhitpart;
 			g_AccessibilityTargetingGameRawAimHitPartValid = true;
 		}
 	}
@@ -1931,6 +1957,9 @@ static void accessibilityTargetingObserveCombat(
 		*candidate = *threat;
 
 		if (aimed) {
+			candidate->obstruction = aimedbyraw
+					? g_AccessibilityTargetingGameRawAimObstruction
+					: ACCESSIBILITY_TARGETING_OBSTRUCTION_NONE;
 			observation->hasaimedtarget = true;
 			observation->aimedidentity = candidate->identity;
 			aimedshootability = candidate->shootability;
@@ -1961,15 +1990,20 @@ static void accessibilityTargetingObserveCombat(
 				== ACCESSIBILITY_TARGETING_CATEGORY_SECURITY_CAMERA;
 		s32 objecttarget = turret || camera;
 		s32 eligible = true;
-		s32 aimedbyraw = prop && objecttarget && prop == rawaimedprop;
+		s32 aimedbyraw = prop && prop == rawaimedprop;
 		s32 aimedbytolerance = prop && turret
 				&& prop == tolerantaimedturret;
-		s32 aimed = prop && (objecttarget
-				? aimedbyraw || aimedbytolerance : prop == aimedprop);
+		s32 rawoverride = aimedbyraw && (objecttarget
+				|| g_AccessibilityTargetingGameRawAimObstruction
+					!= ACCESSIBILITY_TARGETING_OBSTRUCTION_NONE
+				|| prop != aimedprop);
+		s32 aimed = prop && (aimedbyraw || aimedbytolerance
+				|| (!objecttarget && prop == aimedprop));
 		const char *aimsource = aimed
-				? objecttarget
-					? aimedbyraw ? "raw_query" : "turret_tolerance"
-					: "native_filtered"
+				? rawoverride ? g_AccessibilityTargetingGameRawAimObstruction
+						== ACCESSIBILITY_TARGETING_OBSTRUCTION_PENETRABLE_GLASS
+							? "raw_query_through_glass" : "raw_query"
+					: aimedbytolerance ? "turret_tolerance" : "native_filtered"
 				: "none";
 		f32 dx;
 		f32 dy;
@@ -2201,6 +2235,9 @@ static void accessibilityTargetingObserveCombat(
 		candidate->aimonly = relationship
 				== ACCESSIBILITY_TARGETING_RELATIONSHIP_PROTECTED;
 		candidate->shootability = ACCESSIBILITY_TARGETING_SHOOTABILITY_SHOOTABLE;
+		candidate->obstruction = aimedbyraw
+				? g_AccessibilityTargetingGameRawAimObstruction
+				: ACCESSIBILITY_TARGETING_OBSTRUCTION_NONE;
 		candidate->position = prop->pos;
 		if (chr) {
 			candidate->position.y = chr->manground + chr->height * 0.5f;
@@ -2266,7 +2303,7 @@ static void accessibilityTargetingObserveCombat(
 			observation->hasaimedtarget = true;
 			observation->aimedidentity = candidate->identity;
 			aimedshootability = candidate->shootability;
-			alignmentusesraw = objecttarget;
+			alignmentusesraw = rawoverride || objecttarget;
 			alignmentsource = aimsource;
 
 			if (objecttarget) {
@@ -2482,7 +2519,7 @@ static void accessibilityTargetingObserveCombat(
 
 	if (detailed || scopechanged) {
 		accessibilityLogEvent("targeting", "scope_gate",
-				"frame=%d stage=%d player=%d accepted=1 reason=in_scope mode=combat weapon=%d function=%d threat_detector=%d autoaim_x_enabled=%d autoaim_y_enabled=%d autoaim_x_prop=%p autoaim_y_prop=%p candidates=%d captured=%d aimed=%d aimed_prop=%p raw_aim_prop=%p raw_aim_valid=%d raw_aim_hitpart=%d raw_aim_region=%d tolerant_turret_prop=%p tolerant_distance_px=%.3f tolerance_px=%.3f alignment_source=%s aimed_shootability=%d native_alignment_expected=%d viewport=%.3f,%.3f,%.3f,%.3f",
+				"frame=%d stage=%d player=%d accepted=1 reason=in_scope mode=combat weapon=%d function=%d threat_detector=%d autoaim_x_enabled=%d autoaim_y_enabled=%d autoaim_x_prop=%p autoaim_y_prop=%p candidates=%d captured=%d aimed=%d aimed_prop=%p raw_aim_prop=%p raw_aim_valid=%d raw_aim_hitpart=%d raw_aim_region=%d raw_aim_obstruction=%d tolerant_turret_prop=%p tolerant_distance_px=%.3f tolerance_px=%.3f alignment_source=%s aimed_shootability=%d native_alignment_expected=%d viewport=%.3f,%.3f,%.3f,%.3f",
 				g_Vars.lvframe60, g_Vars.stagenum, g_Vars.currentplayernum,
 				bgunGetWeaponNum(HAND_RIGHT),
 				g_Vars.currentplayer->hands[HAND_RIGHT].gset.weaponfunc,
@@ -2502,6 +2539,7 @@ static void accessibilityTargetingObserveCombat(
 						? accessibilityTargetingGameAimRegion(
 								g_AccessibilityTargetingGameRawAimHitPart)
 						: ACCESSIBILITY_TARGETING_AIM_REGION_NONE,
+				g_AccessibilityTargetingGameRawAimObstruction,
 				(void *)tolerantaimedturret, tolerantturretdistance,
 				ACCESSIBILITY_TARGETING_TURRET_AIM_TOLERANCE,
 				alignmentsource,

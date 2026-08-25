@@ -115,6 +115,7 @@ struct accessibilitytargetingstate {
 	s32 proceduralpresenceactive;
 	s32 alignmentactive;
 	s32 alignmentinterrupted;
+	s32 alignmentobstruction;
 	s32 aimlossframes;
 	f32 alignmentfrequencyhz;
 	f32 alignmentquality;
@@ -201,6 +202,7 @@ static const struct accessibilitytargetingpolicy *g_AccessibilityTargetingCurren
 #define g_AccessibilityTargetingProceduralPresenceActive (g_AccessibilityTargetingCurrentState->proceduralpresenceactive)
 #define g_AccessibilityTargetingAlignmentActive (g_AccessibilityTargetingCurrentState->alignmentactive)
 #define g_AccessibilityTargetingAlignmentInterrupted (g_AccessibilityTargetingCurrentState->alignmentinterrupted)
+#define g_AccessibilityTargetingAlignmentObstruction (g_AccessibilityTargetingCurrentState->alignmentobstruction)
 #define g_AccessibilityTargetingAimLossFrames (g_AccessibilityTargetingCurrentState->aimlossframes)
 #define g_AccessibilityTargetingAlignmentFrequencyHz (g_AccessibilityTargetingCurrentState->alignmentfrequencyhz)
 #define g_AccessibilityTargetingAlignmentQuality (g_AccessibilityTargetingCurrentState->alignmentquality)
@@ -753,16 +755,19 @@ static void accessibilityTargetingStopAlignment(const char *reason)
 	if (g_AccessibilityTargetingAlignmentActive) {
 		accessibilityToneSetAlignment(0, 0.0f, false);
 		accessibilityLogEvent("targeting", "alignment_stop",
-				"reason=%s frequency_hz=%.2f quality=%.4f distance=%.3f interrupted=%d updates=%llu",
+				"reason=%s frequency_hz=%.2f quality=%.4f distance=%.3f interrupted=%d obstruction=%d updates=%llu",
 				reason, g_AccessibilityTargetingAlignmentFrequencyHz,
 				g_AccessibilityTargetingAlignmentQuality,
 				g_AccessibilityTargetingAlignmentDistance,
 				g_AccessibilityTargetingAlignmentInterrupted,
+				g_AccessibilityTargetingAlignmentObstruction,
 				(unsigned long long)g_AccessibilityTargetingAlignmentUpdateCount);
 	}
 
 	g_AccessibilityTargetingAlignmentActive = false;
 	g_AccessibilityTargetingAlignmentInterrupted = false;
+	g_AccessibilityTargetingAlignmentObstruction
+			= ACCESSIBILITY_TARGETING_OBSTRUCTION_NONE;
 	g_AccessibilityTargetingAlignmentFrequencyHz = 0.0f;
 	g_AccessibilityTargetingAlignmentQuality = 0.0f;
 	g_AccessibilityTargetingAlignmentDistance = 0.0f;
@@ -1595,6 +1600,8 @@ static void accessibilityTargetingUpdateAlignment(s32 frame60,
 {
 	f32 quality = candidate->hasaimquality ? candidate->aimquality : 0.0f;
 	f32 frequencyhz;
+	s32 patternflags = ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_CONTINUOUS;
+	s32 starting = !g_AccessibilityTargetingAlignmentActive;
 	s32 interrupted = candidate->relationship
 				== ACCESSIBILITY_TARGETING_RELATIONSHIP_PROTECTED
 			|| candidate->category
@@ -1603,8 +1610,13 @@ static void accessibilityTargetingUpdateAlignment(s32 frame60,
 				== ACCESSIBILITY_TARGETING_CATEGORY_LOOT_CONTAINER;
 	interrupted = interrupted || candidate->category
 			== ACCESSIBILITY_TARGETING_CATEGORY_REACTIVE_OBJECT;
-	s32 starting = !g_AccessibilityTargetingAlignmentActive;
-
+	if (interrupted) {
+		patternflags |= ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_INTERRUPTED;
+	}
+	if (candidate->obstruction
+			== ACCESSIBILITY_TARGETING_OBSTRUCTION_PENETRABLE_GLASS) {
+		patternflags |= ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_PENETRABLE;
+	}
 	if (quality < 0.0f) {
 		quality = 0.0f;
 	} else if (quality > 1.0f) {
@@ -1623,9 +1635,10 @@ static void accessibilityTargetingUpdateAlignment(s32 frame60,
 			frequencyhz *= ACCESSIBILITY_TARGETING_ARM_LOCK_MULTIPLIER;
 		}
 	}
-	accessibilityToneSetAlignment(1, frequencyhz, interrupted);
+	accessibilityToneSetAlignment(1, frequencyhz, patternflags);
 	g_AccessibilityTargetingAlignmentActive = true;
 	g_AccessibilityTargetingAlignmentInterrupted = interrupted;
+	g_AccessibilityTargetingAlignmentObstruction = candidate->obstruction;
 	g_AccessibilityTargetingAlignmentFrequencyHz = frequencyhz;
 	g_AccessibilityTargetingAlignmentQuality = quality;
 	g_AccessibilityTargetingAlignmentDistance = candidate->aimdistance;
@@ -1634,7 +1647,7 @@ static void accessibilityTargetingUpdateAlignment(s32 frame60,
 	if (starting || frame60 >= g_AccessibilityTargetingNextAlignmentLog60) {
 		accessibilityLogEvent("targeting",
 				starting ? "alignment_start" : "alignment_update",
-				"update=%llu frame=%d reason=%s source=%d slot=%d propnum=%d category=%d relationship=%d interrupted=%d pattern=%s aim_region=%d quality_available=%d quality=%.4f distance=%.3f frequency_hz=%.2f volume=%.4f",
+				"update=%llu frame=%d reason=%s source=%d slot=%d propnum=%d category=%d relationship=%d interrupted=%d obstruction=%d pattern_flags=0x%x pattern=%s aim_region=%d quality_available=%d quality=%.4f distance=%.3f frequency_hz=%.2f volume=%.4f",
 				(unsigned long long)g_AccessibilityTargetingAlignmentUpdateCount,
 				frame60, reason,
 				g_AccessibilityTargetingAimedIdentity.source,
@@ -1642,7 +1655,12 @@ static void accessibilityTargetingUpdateAlignment(s32 frame60,
 				g_AccessibilityTargetingAimedIdentity.propnum,
 				candidate->category, candidate->relationship,
 				interrupted,
-				interrupted ? "90ms_on_10ms_off" : "continuous",
+				candidate->obstruction, patternflags,
+				candidate->obstruction
+						== ACCESSIBILITY_TARGETING_OBSTRUCTION_PENETRABLE_GLASS
+					? interrupted ? "interrupted_penetrable_tremolo"
+						: "penetrable_tremolo"
+					: interrupted ? "90ms_on_10ms_off" : "continuous",
 				candidate->aimregion,
 				candidate->hasaimquality, quality, candidate->aimdistance,
 				frequencyhz, accessibilityGetTargetingVolume());
