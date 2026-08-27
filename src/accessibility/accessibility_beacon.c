@@ -23,6 +23,7 @@
 #include "lib/vi.h"
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_beacon.h"
+#include "accessibility/accessibility_landmark.h"
 #include "accessibility/accessibility_log.h"
 #include "accessibility/accessibility_observer.h"
 #include "accessibility/accessibility_relationship.h"
@@ -610,6 +611,16 @@ static s32 accessibilityBeaconObjectEligible(struct prop *prop, u32 *citag, cons
 
 	if (obj->flags2 & OBJFLAG2_INVISIBLE) {
 		*reason = "object_invisible";
+		return false;
+	}
+
+	/*
+	 * A registry-owned mission landmark has dedicated navigation semantics.
+	 * Keep it out of F5 even while authored-landmark output is disabled or
+	 * temporarily suppressed, rather than describing it as normally usable.
+	 */
+	if (accessibilityLandmarkOwnsProp(prop)) {
+		*reason = "authored_landmark_owned";
 		return false;
 	}
 

@@ -326,16 +326,19 @@ objects and from the four F9–F12 player markers. Each uses the same continuous
 opposed 300–600 Hz sweeps as a player marker but never plays an 800 Hz identity
 chirp: no chirps consistently means a level-authored landmark.
 
-The initial registry entry is Area 51: Rescue's intact wall marked by the
-silver X, where the hovercrate is intended to be positioned. It follows the
-shared active observer, uses `Accessibility.MarkerRange` and
-`Accessibility.MarkerVolume`, requires a direct visual line of sight, and
-stops when the tagged wall is destroyed or unavailable. It does not require
-F5, consume an interactable-scanner result, imply that the wall can be
-activated, or create a targeting lock. Four dedicated mixer voices are
-preallocated for future stage-authored landmarks; adding one requires a stage,
-setup tag, expected prop type, and stable semantic name in the registry rather
-than new playback logic.
+Registry entries currently cover Area 51: Rescue's intact silver-X wall, where
+the hovercrate is intended to be positioned, and Air Base's baggage conveyor,
+where the equipped suitcase is deposited. They follow the shared active
+observer, use `Accessibility.MarkerRange` and `Accessibility.MarkerVolume`,
+and require a direct visual line of sight. The wall stops when destroyed; the
+conveyor sounds only while the difficulty includes the "Check in equipment"
+objective and that objective remains incomplete. Registry ownership also
+excludes the conveyor from F5, so its native activation flag cannot misleadingly
+describe it as an ordinary interactable. Authored landmarks do not require F5,
+consume interactable-scanner results, imply normal activation, or create a
+targeting lock. Four dedicated mixer voices are preallocated; adding a landmark
+requires a stage, setup tag, expected prop type, optional objective gate, and
+stable semantic name in the registry rather than new playback logic.
 
 ### View orientation recovery
 

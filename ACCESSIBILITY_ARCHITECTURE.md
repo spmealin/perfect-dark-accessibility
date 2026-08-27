@@ -493,15 +493,19 @@ temporary presentation states mute voices but retain core slots; stage-stop,
 disable, and shutdown reset them.
 
 The authored-landmark module is a separate fixed registry of stage, setup tag,
-expected prop type, and semantic name. Up to four entries in the current stage
+expected prop type, optional objective index, and semantic name. Up to four entries in the current stage
 receive their own preallocated versions of the same opposed 300–600 Hz base
 voice, but authored slots never enter the player-marker identity scheduler and
 therefore never chirp. Each tick validates the tagged object's identity, active
 and healthy state, configured marker range, and the shared visual line-of-sight
 ray from the active Joanna/CamSpy observer. Menus and other temporary scope
 loss mute voices; destruction, stage change, feature disable, and shutdown
-discard them. The first registry entry is Rescue's tagged intact silver-X
-wall. It does not enter F5, consume scanner capacity, or create a target lock.
+discard them. Registry entries cover Rescue's tagged intact silver-X wall and
+Air Base's suitcase-deposit conveyor. The conveyor is gated to its applicable,
+incomplete objective. Registry ownership excludes it from F5 independently of
+landmark output state, preventing one prop from communicating conflicting
+mission-landmark and ordinary-interaction semantics. Authored landmarks do not
+consume scanner capacity or create a target lock.
 
 This landmark slice remains an experiment. Route guidance, automatic
 breadcrumbs, objective selection, and route-deviation policy are separate and

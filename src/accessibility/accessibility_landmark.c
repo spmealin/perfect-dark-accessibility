@@ -25,6 +25,7 @@ struct accessibilitylandmarkspec {
 	s32 stage;
 	s32 tag;
 	s32 proptype;
+	s32 objective;
 	const char *name;
 };
 
@@ -44,7 +45,8 @@ struct accessibilitylandmarkstate {
  * entries in the current stage receive independent preallocated voices.
  */
 static const struct accessibilitylandmarkspec g_AccessibilityLandmarkSpecs[] = {
-	{ STAGE_RESCUE, 0x18, PROPTYPE_DOOR, "crate_placement_marker" },
+	{ STAGE_RESCUE, 0x18, PROPTYPE_DOOR, -1, "crate_placement_marker" },
+	{ STAGE_AIRBASE, 0x04, PROPTYPE_OBJ, 1, "suitcase_deposit_conveyor" },
 };
 
 static struct accessibilitylandmarkstate
@@ -52,6 +54,37 @@ static struct accessibilitylandmarkstate
 static s32 g_AccessibilityLandmarkSuppressed;
 static s32 g_AccessibilityLandmarkNextLogTick;
 static s32 g_AccessibilityLandmarkStage = -1;
+
+static const struct accessibilitylandmarkspec *accessibilityLandmarkFindSpec(
+		struct prop *prop)
+{
+	s32 tag;
+	s32 i;
+
+	if (!prop || !prop->obj || prop->obj->prop != prop) {
+		return NULL;
+	}
+
+	tag = objGetTagNum(prop->obj);
+
+	for (i = 0; i < ARRAYCOUNT(g_AccessibilityLandmarkSpecs); i++) {
+		const struct accessibilitylandmarkspec *spec
+				= &g_AccessibilityLandmarkSpecs[i];
+
+		if (spec->stage == g_Vars.stagenum
+				&& spec->tag == tag
+				&& spec->proptype == prop->type) {
+			return spec;
+		}
+	}
+
+	return NULL;
+}
+
+s32 accessibilityLandmarkOwnsProp(struct prop *prop)
+{
+	return accessibilityLandmarkFindSpec(prop) != NULL;
+}
 
 static const char *accessibilityLandmarkScopeReason(void)
 {
@@ -121,6 +154,20 @@ static s32 accessibilityLandmarkObjectEligible(
 		const struct accessibilitylandmarkspec *spec,
 		struct defaultobj *obj, const char **reason)
 {
+	if (spec->objective >= 0) {
+		if (spec->objective >= objectiveGetCount()
+				|| !(objectiveGetDifficultyBits(spec->objective)
+						& (1 << lvGetDifficulty()))) {
+			*reason = "objective_not_available";
+			return false;
+		}
+
+		if (objectiveCheck(spec->objective) != OBJECTIVE_INCOMPLETE) {
+			*reason = "objective_not_incomplete";
+			return false;
+		}
+	}
+
 	if (!obj || !obj->prop || objGetTagNum(obj) != spec->tag) {
 		*reason = "tagged_object_unavailable";
 		return false;
