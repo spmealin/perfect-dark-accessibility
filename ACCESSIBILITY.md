@@ -198,9 +198,14 @@ while it is an active, non-hidden, healthy, mortal `OBJFLAG_PATHBLOCKER` and the
 equipped attack type can affect its gunfire or explosion resistance. These
 objects are aim-only candidates: they never consume an enemy-presence voice or
 sound merely because they are nearby. Their valid alignment uses the interrupted
-90 ms sound/10 ms gap pattern rather than the solid hostile lock. Invincible,
-destroyed, hidden, ordinary decorative glass, and incompatible attacks remain
-silent.
+90 ms sound/10 ms gap pattern rather than the solid hostile lock. The exact
+weapon query also admits ordinary destroyable cover and scenery when the prop
+is active, enabled, visible, healthy, mortal, and the equipped attack can
+damage it. This includes the destructible A51 crates used as cover in Pelagic
+II without relying on that level or model identifier. Generic destroyable
+objects remain aim-only and use the same interrupted lock; they do not gain a
+nearby or off-screen presence sound. Invincible, destroyed, hidden, inactive,
+ordinary decorative glass, and incompatible attacks remain silent.
 
 The firing-range behavior remains a bounded proof. The separate hostile-combat slice covers basic single-player character relationship, occlusion, cloak/IR, elimination, automated-gun state/team semantics, and the native threat-detector sight list. A shared accessibility relationship adapter preserves the engine's special `TEAM_NONCOMBAT` semantics: those characters cannot become hostile merely because their team mask is disjoint from Joanna's, and eligible living, perceptible examples use the F7 friendly/neutral-character drone instead. Broader vehicle/non-character discovery outside the threat-detector sight, target speech/repeat, multiplayer output, and full Milestone 9 blind-user acceptance remain pending.
 

@@ -310,6 +310,21 @@ Regression-test session `1786059687`, capture 1, or equivalent close-range geome
 
 For native reactive-object locks, reproduce Air Base diagnostic session `1786399911`, capture 2. Aim at the intact robot interceptor (prop 146, `OBJTYPE_HOVERPROP`, model 296), whose `OBJFLAG3_REACTTOSIGHT` makes the native reticle blue/red. The exact crosshair hit must now produce the interrupted 660 Hz lock (`category=10`, `alignment_source=native_reactive_reticle`, `pattern=90ms_on_10ms_off`) without adding an object-presence voice or forgiving target margin. Destroy it and confirm the native sight rejection and accessibility lock both stop. Repeat with reactive breakable glass and representative destructible scenery, then aim at ordinary scenery whose reticle does not change and confirm it remains silent. An object already classified as a path blocker, loot container, turret, camera, threat, or device target must retain its more specific category rather than being duplicated.
 
+For generic destroyable-cover locks, reproduce the final crate rooms of Pelagic
+II from session `1787771352`. Aim an ordinary firearm directly at several
+healthy mortal A51 crates, including examples with and without collectable
+children. Each exact attack-query hit must produce the interrupted 660 Hz lock
+with `category=11` and
+`alignment_source=destroyable_object_raw_query`; moving off the crate must stop
+the tone without adding an enemy-presence or object-scanner cue. A crate with a
+collectable child must retain the more-specific loot-container category. Break
+or destroy a crate and confirm it immediately becomes silent. Repeat with an
+invincible prop, inactive/hidden prop, non-damaging device function, gunfire-
+immune object, and ordinary background geometry; each must remain silent.
+Correlate `targeting/destroyable_object_aim`, `scope_gate`, acquisition/loss,
+and alignment records with exact prop identity, health/mortality, attack type,
+immunity flags, and the 90 ms on/10 ms off pattern.
+
 Reproduce Air Base session `1786484131`, capture 1 with autogun prop 137 partly exposed above cover. Its center-origin ray was blocked while exact weapon queries could still hit it. Confirm the enemy-presence voice now remains available from that position and detailed `combat_candidate` output reports `line_of_sight=1`, a non-`none` geometry `visibility_sample`, and between one and five `visibility_queries`. Move until only empty portions of its coarse projected rectangle or a fully opaque barrier are visible and confirm the voice stops. Repeat with upper, lower, left, and right partial exposure and a security camera. Verify the five-sample bound and advanced frame diagnostics show no material targeting-cost regression with several fixed targets on screen.
 
 Regression-test the paired Investigation doorway recorded in session `1785259338`, capture 3, as props 29 and 30 in rooms 18/19. Both leaves were active, usable, on-screen, and approximately 190 units away, but their embedded model origins failed LOS and produced an empty schedule. Confirm the corrected query accepts one bounded surface sample (`los_sample=1` through `5`), emits exactly one 440 Hz doorway chirp, and restores both collision perimeters after every scan and pre-pulse validation. Close another opaque door or interpose opaque scenery between the camera and this pair and confirm it still blocks the cue. Repeat with a single-leaf door to cover the non-sibling path.

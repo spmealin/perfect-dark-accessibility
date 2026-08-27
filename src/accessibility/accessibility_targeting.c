@@ -1610,6 +1610,8 @@ static void accessibilityTargetingUpdateAlignment(s32 frame60,
 				== ACCESSIBILITY_TARGETING_CATEGORY_LOOT_CONTAINER;
 	interrupted = interrupted || candidate->category
 			== ACCESSIBILITY_TARGETING_CATEGORY_REACTIVE_OBJECT;
+	interrupted = interrupted || candidate->category
+			== ACCESSIBILITY_TARGETING_CATEGORY_DESTROYABLE_OBJECT;
 	if (interrupted) {
 		patternflags |= ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_INTERRUPTED;
 	}

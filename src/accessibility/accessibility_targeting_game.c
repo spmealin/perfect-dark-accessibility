@@ -890,6 +890,26 @@ static s32 accessibilityTargetingGameCurrentAttackCanDamageObject(
 			&& (prop->obj->flags2 & OBJFLAG2_IMMUNETOGUNFIRE) == 0;
 }
 
+static s32 accessibilityTargetingGameIsDestroyableObject(
+		const struct prop *prop)
+{
+	struct defaultobj *obj;
+
+	if (!prop || prop->type != PROPTYPE_OBJ || !prop->obj
+			|| !prop->active || (prop->flags & PROPFLAG_ENABLED) == 0) {
+		return false;
+	}
+
+	obj = prop->obj;
+
+	return obj->prop == prop
+			&& (obj->flags & OBJFLAG_DEACTIVATED) == 0
+			&& (obj->flags2 & OBJFLAG2_INVISIBLE) == 0
+			&& (obj->hidden & (OBJHFLAG_DELETING | OBJHFLAG_GONE)) == 0
+			&& objIsHealthy(obj)
+			&& objIsMortal(obj);
+}
+
 static s32 accessibilityTargetingGameLootContainerChildType(
 		const struct prop *prop, s32 *childpropnum)
 {
@@ -2331,8 +2351,12 @@ static void accessibilityTargetingObserveCombat(
 		s32 attackcompatible
 				= accessibilityTargetingGameCurrentAttackCanDamageObject(
 					rawaimedprop);
+		s32 destroyable = !breakable && !lootcontainer
+				&& accessibilityTargetingGameIsDestroyableObject(
+					rawaimedprop);
 
-		if (propnum >= 0 && (breakable || lootcontainer) && attackcompatible
+		if (propnum >= 0 && (breakable || lootcontainer || destroyable)
+				&& attackcompatible
 				&& !accessibilityTargetingGameObservationHasProp(
 					observation, rawaimedprop)) {
 			struct accessibilitytargetingcandidate *candidate;
@@ -2353,10 +2377,11 @@ static void accessibilityTargetingObserveCombat(
 			candidate->identity.proptype = rawaimedprop->type;
 			candidate->identity.objectidentity = (uintptr_t)obj;
 			candidate->prop = rawaimedprop;
-			candidate->category
-					= lootcontainer
-						? ACCESSIBILITY_TARGETING_CATEGORY_LOOT_CONTAINER
-						: ACCESSIBILITY_TARGETING_CATEGORY_BREAKABLE_PATH_BLOCKER;
+			candidate->category = lootcontainer
+					? ACCESSIBILITY_TARGETING_CATEGORY_LOOT_CONTAINER
+					: breakable
+						? ACCESSIBILITY_TARGETING_CATEGORY_BREAKABLE_PATH_BLOCKER
+						: ACCESSIBILITY_TARGETING_CATEGORY_DESTROYABLE_OBJECT;
 			candidate->relationship
 					= ACCESSIBILITY_TARGETING_RELATIONSHIP_NEUTRAL;
 			candidate->shootability
@@ -2377,7 +2402,9 @@ static void accessibilityTargetingObserveCombat(
 			alignmentusesraw = true;
 			alignmentsource = lootcontainer
 					? "loot_container_raw_query"
-					: "path_blocker_raw_query";
+					: breakable
+						? "path_blocker_raw_query"
+						: "destroyable_object_raw_query";
 		}
 
 		if (detailed || (breakable
@@ -2421,6 +2448,28 @@ static void accessibilityTargetingObserveCombat(
 					obj ? objIsHealthy(obj) : false,
 					obj ? objIsMortal(obj) : false,
 					lootchildpropnum, lootchildtype,
+					func ? func->type : INVENTORYFUNCTYPE_NONE,
+					g_AccessibilityTargetingGameRawAimHitPos.x,
+					g_AccessibilityTargetingGameRawAimHitPos.y,
+					g_AccessibilityTargetingGameRawAimHitPos.z);
+		}
+
+		if (detailed) {
+			accessibilityLogEvent("targeting", "destroyable_object_aim",
+					"frame=%d stage=%d player=%d accepted=%d reason=%s prop=%p propnum=%d obj=%p obj_type=%d model=%d obj_flags=0x%08x obj_flags2=0x%08x obj_hidden=0x%08x healthy=%d mortal=%d attack_type=%d hit=%.3f,%.3f,%.3f",
+					g_Vars.lvframe60, g_Vars.stagenum,
+					g_Vars.currentplayernum,
+					propnum >= 0 && destroyable && attackcompatible,
+					propnum < 0 ? "invalid_prop"
+						: !destroyable ? "more_specific_or_not_destroyable"
+						: !attackcompatible ? "current_attack_incompatible"
+						: "eligible",
+					(void *)rawaimedprop, propnum, (void *)obj,
+					obj ? obj->type : -1, obj ? obj->modelnum : -1,
+					obj ? obj->flags : 0, obj ? obj->flags2 : 0,
+					obj ? obj->hidden : 0,
+					obj ? objIsHealthy(obj) : false,
+					obj ? objIsMortal(obj) : false,
 					func ? func->type : INVENTORYFUNCTYPE_NONE,
 					g_AccessibilityTargetingGameRawAimHitPos.x,
 					g_AccessibilityTargetingGameRawAimHitPos.y,
