@@ -2908,10 +2908,19 @@ void accessibilityTargetingObserveGame(void)
 
 	observation.inscope = true;
 	observation.sighton = g_Vars.currentplayer->lastsighton;
-	observation.targetindicatorvisible
-			= accessibilityTargetingGameTargetIndicatorVisible();
 	frdata = frGetData();
 	aimedprop = g_Vars.currentplayer->lookingatprop.prop;
+	observation.targetindicatorvisible
+			= accessibilityTargetingGameTargetIndicatorVisible()
+				|| accessibilityVisibilityIsFarsightExposed(aimedprop);
+	if (bgunGetWeaponNum(HAND_RIGHT) == WEAPON_FARSIGHT
+			&& g_Vars.currentplayer->gunsightoff == 0
+			&& g_Vars.currentplayer->visionmode == VISIONMODE_XRAY) {
+		/* FarSight range targets use the configured long-range presence curve. */
+		observation.viewfovy = g_Vars.currentplayer->zoominfovy;
+		observation.defaultfovy = PLAYER_DEFAULT_FOV;
+		observation.zoomblend = 1.0f;
+	}
 
 	viewleft = (f32)viGetViewLeft() / g_ScaleX;
 	viewtop = viGetViewTop();
@@ -3132,10 +3141,26 @@ void accessibilityTargetingObserveGame(void)
 
 	if (detailed || scopechanged) {
 		accessibilityLogEvent("targeting", "scope_gate",
-			"frame=%d stage=%d player=%d accepted=1 reason=in_scope candidates=%d aimed=%d aimed_prop=%p aimed_shootability=%d native_alignment_expected=%d viewport=%.3f,%.3f,%.3f,%.3f",
+			"frame=%d stage=%d player=%d accepted=1 reason=in_scope mode=firing_range weapon=%d function=%d vision_mode=%d gunsight_off=%d farsight_active=%d eraser_pos=%.3f,%.3f,%.3f eraser_prop_distance=%.3f autoeraser_target=%p autoeraser_target_propnum=%d autoeraser_distance=%.3f candidates=%d aimed=%d aimed_prop=%p aimed_shootability=%d target_indicator_visible=%d native_alignment_expected=%d viewport=%.3f,%.3f,%.3f,%.3f",
 			g_Vars.lvframe60, g_Vars.stagenum, g_Vars.currentplayernum,
+			bgunGetWeaponNum(HAND_RIGHT),
+			g_Vars.currentplayer->hands[HAND_RIGHT].gset.weaponfunc,
+			g_Vars.currentplayer->visionmode,
+			g_Vars.currentplayer->gunsightoff,
+			bgunGetWeaponNum(HAND_RIGHT) == WEAPON_FARSIGHT
+					&& g_Vars.currentplayer->gunsightoff == 0
+					&& g_Vars.currentplayer->visionmode == VISIONMODE_XRAY,
+			g_Vars.currentplayer->eraserpos.x,
+			g_Vars.currentplayer->eraserpos.y,
+			g_Vars.currentplayer->eraserpos.z,
+			g_Vars.currentplayer->eraserpropdist,
+			(void *)g_Vars.currentplayer->autoerasertarget,
+			accessibilityTargetingGamePropNum(
+					g_Vars.currentplayer->autoerasertarget),
+			g_Vars.currentplayer->autoeraserdist,
 			observation.candidatecount, observation.hasaimedtarget,
 			(void *)aimedprop, aimedshootability,
+			observation.targetindicatorvisible,
 			observation.nativealignmentexpected,
 			viewleft, viewtop, viewright, viewbottom);
 	}

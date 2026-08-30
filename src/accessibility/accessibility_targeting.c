@@ -159,7 +159,7 @@ struct accessibilitytargetingstate {
 			combatslots[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 };
 
-static const struct accessibilitytargetingpolicy g_AccessibilityTargetingRangePolicy = {
+static struct accessibilitytargetingpolicy g_AccessibilityTargetingRangePolicy = {
 	ACCESSIBILITY_TARGETING_BASE_CYCLE_TICKS,
 	ACCESSIBILITY_TARGETING_MIN_SLOT_TICKS,
 	ACCESSIBILITY_TARGETING_VISIBLE_FRAMES,
@@ -296,6 +296,19 @@ static const struct accessibilitytargetingpolicy *accessibilityTargetingGetPolic
 		s32 profile, const struct accessibilitytargetingobservation *observation)
 {
 	if (profile == ACCESSIBILITY_TARGETING_PROFILE_FIRING_RANGE) {
+		if (observation && observation->zoomblend > 0.0f) {
+			accessibilityGetEnemyScopedTuning(
+					&g_AccessibilityTargetingRangePolicy.fulldistance,
+					&g_AccessibilityTargetingRangePolicy.fadedistance,
+					&g_AccessibilityTargetingRangePolicy.silentdistance);
+		} else {
+			g_AccessibilityTargetingRangePolicy.fulldistance
+					= ACCESSIBILITY_TARGETING_FULL_DISTANCE;
+			g_AccessibilityTargetingRangePolicy.fadedistance
+					= ACCESSIBILITY_TARGETING_FADE_DISTANCE;
+			g_AccessibilityTargetingRangePolicy.silentdistance
+					= ACCESSIBILITY_TARGETING_SILENT_DISTANCE;
+		}
 		return &g_AccessibilityTargetingRangePolicy;
 	}
 
