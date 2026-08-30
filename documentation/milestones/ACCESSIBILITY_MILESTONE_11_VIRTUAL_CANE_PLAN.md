@@ -13,7 +13,16 @@ identify crouch-passable openings. Those extensions await project-owner
 runtime acceptance. Follow-up diagnostics showed rising stairs could mask a
 co-located under-stair opening; the current implementation tests squat
 clearance within one player radius of that terrain and uses a distinct
-descending double chirp. See the root `ACCESSIBILITY.md`, `ACCESSIBILITY_ROADMAP.md`,
+descending double chirp. A 2026-08-30 Deep Sea diagnostic also showed an
+untraversable rise immediately before a wall incorrectly winning terrain-cue
+precedence. Positive terrain now keeps the rising contour only after the live
+player-envelope traversal check succeeds; otherwise the cane reports the rise
+as an ordinary barrier. Follow-up captures showed the same ambiguity for short
+declines ending at walls. Non-drop terrain in either direction now requires at
+least two live player diameters of usable runway before a detected barrier;
+shorter pockets report the terminal barrier instead. These refinements await
+project-owner runtime acceptance.
+See the root `ACCESSIBILITY.md`, `ACCESSIBILITY_ROADMAP.md`,
 and `ACCESSIBILITY_TESTING.md` for current behavior and status.
 
 Planning baseline: `accessibility` branch at `2ca16241f`
