@@ -729,6 +729,14 @@ Where available, repeat with X-Ray-rendered doors, pickups, hostile characters, 
 
 Open a menu, pause, complete or abort the exercise, leave the stage, and repeat with `XRayScannerAudio=0`; no X-Ray-only semantic admission may remain. Equip and aim a Farsight and confirm its X-Ray vision mode does not activate this feature. Correlate `rtracker/xray_state`, beacon reasons `xray_semantic_visibility`, incident `xray_exposed`, targeting `xray_exposed`, and the normal category slot records with the native rendered view. Repeat in a non-CI scanner context and monitor category capacity, active voices, frame cadence, and memory over repeated sessions.
 
+### FarSight combat-targeting acceptance
+
+Equip the FarSight XR-20 in a mission containing hostile characters both in direct view and behind opaque level geometry. Hold aim in the primary manual-depth mode and move the rendered X-Ray volume nearer and farther. A hostile must use the established enemy presence tone only while the native FarSight renderer shows some part of it within the viewport and eraser volume. Ordinary walls must not suppress that tone, while leaving the viewport or native volume must. Put the crosshairs on the rendered hostile and confirm the existing solid locked-on tone starts from the native non-random FarSight query; move off it and confirm immediate loss.
+
+Switch to secondary Target Locator mode and repeat. Confirm the native selected target is admitted when rendered, the presence tone tracks it as the sight turns and changes depth, and exact crosshair intersection produces the same lock tone. Test several simultaneous hostiles, dead/knocked-out/friendly/cloaked characters, autoguns and cameras where available, target changes, primary/secondary transitions, leaving aim, weapon changes, pause, menus, death, and stage exit. FarSight must not make interactable, door, pickup, or non-hostile scanners work through walls and must not alter native aim movement, target selection, firing, damage, or penetration.
+
+Correlate `targeting/combat_candidate` fields `line_of_sight`, `xray_exposed`, and `farsight_exposed` with `scope_gate` fields `function`, `vision_mode`, `gunsight_off`, `eraser_pos`, `eraser_prop_distance`, `autoeraser_target`, and `autoeraser_distance`. Shift+F2 incident state must preserve the same FarSight values. Compare candidate count, visibility-query count, targeting timing, frame cadence, and mixer slot use with ordinary scoped aiming; no additional ray queries, allocation, or unbounded state are permitted.
+
 A reproducible report includes the commit/patch, config values relevant to accessibility, start state, steps, expected/actual result, timestamps/session ID, and whether the result reproduces after a clean restart. Do not require another developer to possess the tester's save; provide a lawful setup route when possible.
 
 ## Report template

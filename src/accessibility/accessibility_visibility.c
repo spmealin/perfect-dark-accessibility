@@ -3,6 +3,7 @@
 #include "bss.h"
 #include "data.h"
 #include "types.h"
+#include "game/bondgun.h"
 #include "game/prop.h"
 #include "game/propobj.h"
 #include "lib/collision.h"
@@ -27,6 +28,25 @@ bool accessibilityVisibilityIsXrayExposed(struct prop *prop)
 					& ~g_Vars.currentplayer->devicesinhibit
 					& DEVICE_XRAYSCANNER)
 			&& (prop->flags & PROPFLAG_ONANYSCREENPREVTICK)
+			&& objGetXrayHighlightDistance(prop, &distance);
+}
+
+bool accessibilityVisibilityIsFarsightExposed(struct prop *prop)
+{
+	f32 distance;
+
+	/*
+	 * FarSight aiming uses the native X-Ray renderer in both manual-depth and
+	 * Target Locator modes. Keep this separate from X-Ray Scanner semantic
+	 * visibility: only combat targeting should use this evidence.
+	 */
+	return prop
+			&& PLAYERCOUNT() == 1
+			&& g_Vars.currentplayer
+			&& bgunGetWeaponNum(HAND_RIGHT) == WEAPON_FARSIGHT
+			&& g_Vars.currentplayer->gunsightoff == 0
+			&& g_Vars.currentplayer->visionmode == VISIONMODE_XRAY
+			&& (prop->flags & PROPFLAG_ONTHISSCREENTHISTICK)
 			&& objGetXrayHighlightDistance(prop, &distance);
 }
 

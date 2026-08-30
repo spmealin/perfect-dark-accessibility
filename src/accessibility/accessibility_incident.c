@@ -7,6 +7,7 @@
 #include "bss.h"
 #include "data.h"
 #include "system.h"
+#include "game/bondgun.h"
 #include "game/inv.h"
 #include "game/game_0b0fd0.h"
 #include "game/lang.h"
@@ -394,7 +395,7 @@ static void accessibilityIncidentDumpPlayer(u64 captureid)
 	s32 i;
 
 	accessibilityLogEvent("incident", "state",
-			"capture=%llu stage=%d difficulty=%d tick=%d frame=%d update60=%d player=%d player_count=%d tickmode=%d menus=%d paused=%d cutscene=%d mplayer=%d normal_mplayer=%d observer_valid=%d observer_remote=%d observer_prop=%p observer_propnum=%d origin=%.3f,%.3f,%.3f camera=%.3f,%.3f,%.3f look=%.6f,%.6f,%.6f observer_room=%d player_prop=%p player_propnum=%d player_rooms=%d,%d,%d,%d,%d,%d,%d,%d camera_mode=%d dead=%d health=%.5f shield=%.5f devices_active=0x%08x devices_inhibit=0x%08x weapon=%d weapon_previous=%d weapon_pending=%d weapon_function_inverted=%d inventory_count=%d current_inventory_index=%u cane_mode=%d radar_contact_alerts=%d",
+			"capture=%llu stage=%d difficulty=%d tick=%d frame=%d update60=%d player=%d player_count=%d tickmode=%d menus=%d paused=%d cutscene=%d mplayer=%d normal_mplayer=%d observer_valid=%d observer_remote=%d observer_prop=%p observer_propnum=%d origin=%.3f,%.3f,%.3f camera=%.3f,%.3f,%.3f look=%.6f,%.6f,%.6f observer_room=%d player_prop=%p player_propnum=%d player_rooms=%d,%d,%d,%d,%d,%d,%d,%d camera_mode=%d dead=%d health=%.5f shield=%.5f devices_active=0x%08x devices_inhibit=0x%08x weapon=%d weapon_previous=%d weapon_pending=%d weapon_function=%d weapon_function_inverted=%d vision_mode=%d gunsight_off=%d eraser_pos=%.3f,%.3f,%.3f eraser_prop_distance=%.3f autoeraser_target=%p autoeraser_target_propnum=%d autoeraser_distance=%.3f inventory_count=%d current_inventory_index=%u cane_mode=%d radar_contact_alerts=%d",
 			(unsigned long long)captureid,
 			g_Vars.stagenum, lvGetDifficulty(), g_Vars.lvframe60,
 			g_Vars.lvframenum, g_Vars.lvupdate60,
@@ -433,7 +434,17 @@ static void accessibilityIncidentDumpPlayer(u64 captureid)
 			player ? player->gunctrl.weaponnum : -1,
 			player ? player->gunctrl.prevweaponnum : -1,
 			player ? player->gunctrl.switchtoweaponnum : -1,
+			player ? player->hands[HAND_RIGHT].gset.weaponfunc : -1,
 			player ? player->gunctrl.invertgunfunc : 0,
+			player ? player->visionmode : -1,
+			player ? player->gunsightoff : -1,
+			player ? player->eraserpos.x : 0.0f,
+			player ? player->eraserpos.y : 0.0f,
+			player ? player->eraserpos.z : 0.0f,
+			player ? player->eraserpropdist : 0.0f,
+			player ? (void *)player->autoerasertarget : NULL,
+			player ? accessibilityIncidentPropNum(player->autoerasertarget) : -1,
+			player ? player->autoeraserdist : -1.0f,
 			player ? invGetCount() : 0,
 			player ? invGetCurrentIndex() : 0,
 			accessibilityGetVirtualCaneMode(),

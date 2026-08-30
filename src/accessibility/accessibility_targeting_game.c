@@ -1587,7 +1587,13 @@ static void accessibilityTargetingCaptureCombat(void)
 					|| (obj->type == OBJTYPE_CCTV
 						&& accessibilityTargetingGameCctvCombatCapable(
 							(struct cctvobj *)obj)))))) {
-			if (chr) {
+			if (accessibilityVisibilityIsFarsightExposed(prop)) {
+				/* Native FarSight rendering is the visibility authority here. */
+				projection->lineofsight = false;
+				projection->visibilitysample
+						= ACCESSIBILITY_TARGETING_VISIBILITY_SAMPLE_NONE;
+				projection->visibilityqueries = 0;
+			} else if (chr) {
 				projection->lineofsight
 						= accessibilityTargetingGameCharacterLineOfSight(
 							prop, chr, camrooms,
@@ -2020,6 +2026,7 @@ static void accessibilityTargetingObserveCombat(
 		s32 aimed = prop && (aimedbyraw || aimedbytolerance
 				|| (!objecttarget && prop == aimedprop));
 		s32 xrayexposed = accessibilityVisibilityIsXrayExposed(prop);
+		s32 farsightexposed = accessibilityVisibilityIsFarsightExposed(prop);
 		const char *aimsource = aimed
 				? rawoverride ? g_AccessibilityTargetingGameRawAimObstruction
 						== ACCESSIBILITY_TARGETING_OBSTRUCTION_PENETRABLE_GLASS
@@ -2118,7 +2125,8 @@ static void accessibilityTargetingObserveCombat(
 				|| projection->y2 < viewtop || projection->y1 > viewbottom) {
 			eligible = false;
 			reason = "outside_viewport";
-		} else if (!projection->lineofsight && !aimed && !xrayexposed) {
+		} else if (!projection->lineofsight && !aimed && !xrayexposed
+				&& !farsightexposed) {
 			eligible = false;
 			reason = "line_of_sight_blocked";
 		} else {
@@ -2187,7 +2195,7 @@ static void accessibilityTargetingObserveCombat(
 
 		if (detailed) {
 			accessibilityLogEvent("targeting", "combat_candidate",
-					"frame=%d slot=%d accepted=%d reason=%s aimed=%d aim_source=%s category=%d relationship=%d aimonly=%d prop=%p propnum=%d chr=%p obj=%p obj_type=%d model=%d prop_type=%d prop_flags=0x%02x obj_flags=0x%08x obj_flags2=0x%08x chr_flags=0x%08x chr_hidden=0x%08x action=%d capture_valid=%d projected=%d finite=%d line_of_sight=%d xray_exposed=%d visibility_sample=%s visibility_queries=%d screen=%.3f,%.3f,%.3f,%.3f precision_anchor_source=%s precision_anchor_hitpart=%d precision_anchor_node=%p precision_anchor_nodes_examined=%d precision_anchor_score=%.4f precision_fine_attempted=%d precision_fine_queries=%d precision_fine_budget_exhausted=%d precision_fine_elapsed_us=%llu target_screen=%.3f,%.3f aim_screen=%.3f,%.3f vertical_aim_error_available=%d raw_elevation_degrees=%.3f normalized_screen_error=%.4f,%.4f",
+					"frame=%d slot=%d accepted=%d reason=%s aimed=%d aim_source=%s category=%d relationship=%d aimonly=%d prop=%p propnum=%d chr=%p obj=%p obj_type=%d model=%d prop_type=%d prop_flags=0x%02x obj_flags=0x%08x obj_flags2=0x%08x chr_flags=0x%08x chr_hidden=0x%08x action=%d capture_valid=%d projected=%d finite=%d line_of_sight=%d xray_exposed=%d farsight_exposed=%d visibility_sample=%s visibility_queries=%d screen=%.3f,%.3f,%.3f,%.3f precision_anchor_source=%s precision_anchor_hitpart=%d precision_anchor_node=%p precision_anchor_nodes_examined=%d precision_anchor_score=%.4f precision_fine_attempted=%d precision_fine_queries=%d precision_fine_budget_exhausted=%d precision_fine_elapsed_us=%llu target_screen=%.3f,%.3f aim_screen=%.3f,%.3f vertical_aim_error_available=%d raw_elevation_degrees=%.3f normalized_screen_error=%.4f,%.4f",
 					g_Vars.lvframe60, i, eligible, reason, aimed,
 					aimsource,
 					projection->category,
@@ -2207,7 +2215,7 @@ static void accessibilityTargetingObserveCombat(
 						&& g_AccessibilityTargetingGameProjectionPlayer
 								== g_Vars.currentplayernum,
 					projection->projected, projection->finite,
-					projection->lineofsight, xrayexposed,
+					projection->lineofsight, xrayexposed, farsightexposed,
 					accessibilityTargetingGameVisibilitySampleName(
 						projection->visibilitysample),
 					projection->visibilityqueries,
@@ -2569,10 +2577,23 @@ static void accessibilityTargetingObserveCombat(
 
 	if (detailed || scopechanged) {
 		accessibilityLogEvent("targeting", "scope_gate",
-				"frame=%d stage=%d player=%d accepted=1 reason=in_scope mode=combat weapon=%d function=%d threat_detector=%d autoaim_x_enabled=%d autoaim_y_enabled=%d autoaim_x_prop=%p autoaim_y_prop=%p candidates=%d captured=%d aimed=%d aimed_prop=%p raw_aim_prop=%p raw_aim_valid=%d raw_aim_hitpart=%d raw_aim_region=%d raw_aim_obstruction=%d tolerant_turret_prop=%p tolerant_distance_px=%.3f tolerance_px=%.3f alignment_source=%s aimed_shootability=%d native_alignment_expected=%d viewport=%.3f,%.3f,%.3f,%.3f",
+				"frame=%d stage=%d player=%d accepted=1 reason=in_scope mode=combat weapon=%d function=%d vision_mode=%d gunsight_off=%d farsight_active=%d eraser_pos=%.3f,%.3f,%.3f eraser_prop_distance=%.3f autoeraser_target=%p autoeraser_target_propnum=%d autoeraser_distance=%.3f threat_detector=%d autoaim_x_enabled=%d autoaim_y_enabled=%d autoaim_x_prop=%p autoaim_y_prop=%p candidates=%d captured=%d aimed=%d aimed_prop=%p raw_aim_prop=%p raw_aim_valid=%d raw_aim_hitpart=%d raw_aim_region=%d raw_aim_obstruction=%d tolerant_turret_prop=%p tolerant_distance_px=%.3f tolerance_px=%.3f alignment_source=%s aimed_shootability=%d native_alignment_expected=%d viewport=%.3f,%.3f,%.3f,%.3f",
 				g_Vars.lvframe60, g_Vars.stagenum, g_Vars.currentplayernum,
 				bgunGetWeaponNum(HAND_RIGHT),
 				g_Vars.currentplayer->hands[HAND_RIGHT].gset.weaponfunc,
+				g_Vars.currentplayer->visionmode,
+				g_Vars.currentplayer->gunsightoff,
+				bgunGetWeaponNum(HAND_RIGHT) == WEAPON_FARSIGHT
+						&& g_Vars.currentplayer->gunsightoff == 0
+						&& g_Vars.currentplayer->visionmode == VISIONMODE_XRAY,
+				g_Vars.currentplayer->eraserpos.x,
+				g_Vars.currentplayer->eraserpos.y,
+				g_Vars.currentplayer->eraserpos.z,
+				g_Vars.currentplayer->eraserpropdist,
+				(void *)g_Vars.currentplayer->autoerasertarget,
+				accessibilityTargetingGamePropNum(
+						g_Vars.currentplayer->autoerasertarget),
+				g_Vars.currentplayer->autoeraserdist,
 				accessibilityTargetingGameThreatDetectorActive(),
 				bmoveIsAutoAimXEnabledForCurrentWeapon(),
 				bmoveIsAutoAimYEnabledForCurrentWeapon(),
