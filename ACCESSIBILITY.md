@@ -18,6 +18,8 @@ Mission-completion and mission-failure screens announce the full visible results
 
 Combat Simulator challenge confirmation and details dialogs announce the complete localized challenge description rendered in their non-focusable scrolling panel before the focused `Accept`, `Cancel`, `Start`, or `Abort` control. This applies to the normal confirmation flow, the challenge list/details flow, the current-challenge details screen, and the 4 MB confirmation variant. Moving focus does not repeat the description; F5 reconstructs the title, description, and current control.
 
+Carrington Institute Hangar Information pages announce the localized subtitle rendered beneath each location or vehicle name, such as `Base of operations`, before the page's scrollable description. The subtitle comes from the same custom title renderer and embedded localized string used by the visual page; it is not inferred from the selected entry.
+
 Combat Simulator Advanced Setup controls use the same semantic values as their visual widgets. The Limits sliders announce minutes, score, team score, or `No Limit`; Player Handicaps announce the displayed damage-scale percentage rather than the slider's internal position; and Simulant slot buttons include the generated simulant name rendered beside the slot number. Other sliders still fall back to a rounded position percentage when their handler does not provide a display label.
 
 After a Combat Simulator session, the Save Player confirmation announces its visible localized question, `Save new player and statistics?`, before the initially focused `Save Now` control. Moving between `Save Now` and `No Thanks!` reads only the new control; F5 reconstructs the title, question, and current control.

@@ -2888,7 +2888,14 @@ MenuItemHandlerResult ciHangarInformationMenuHandler(s32 operation, struct menui
 
 MenuItemHandlerResult ciHangarTitleMenuHandler(s32 operation, struct menuitem *item, union handlerdata *data)
 {
-	if (operation == MENUOP_RENDER) {
+	if (operation == MENUOP_GETACCESSIBILITYTEXT) {
+		if (data->accessibility.part == MENUACCESSIBILITYPART_SUMMARY
+				&& data->accessibility.buffer && data->accessibility.bufferlen > 0) {
+			snprintf(data->accessibility.buffer, data->accessibility.bufferlen,
+					"%s", ciMenuTextHangarBioSubheading(NULL));
+			return data->accessibility.buffer[0] != '\0';
+		}
+	} else if (operation == MENUOP_RENDER) {
 		Gfx *gdl = data->type19.gdl;
 		struct menuitemrenderdata *renderdata = data->type19.renderdata2;
 		s32 textwidth;
@@ -3078,7 +3085,8 @@ struct menuitem g_HangarDetailsMenuItems[] = {
 	{
 		MENUITEMTYPE_MODEL,
 		0,
-		MENUITEMFLAG_00000002 | MENUITEMFLAG_LIST_CUSTOMRENDER,
+		MENUITEMFLAG_00000002 | MENUITEMFLAG_LIST_CUSTOMRENDER
+				| MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		0x00000104,
 		0x0000002c,
 		ciHangarTitleMenuHandler,
