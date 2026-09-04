@@ -56,7 +56,9 @@ struct accessibilityactivemenusnapshot {
 	s32 valid;
 	s32 screenindex;
 	s32 slotnum;
+	char title[ACCESSIBILITY_MENU_FIELD_MAX];
 	char label[ACCESSIBILITY_MENU_FIELD_MAX];
+	char utterance[ACCESSIBILITY_ANNOUNCEMENT_TEXT_MAX];
 };
 
 static struct accessibilitymenusnapshot g_AccessibilityMenuSnapshots[MAX_PLAYERS];
@@ -718,8 +720,11 @@ void accessibilityMenuObserveActive(s32 playernum)
 	struct accessibilityactivemenusnapshot *previous;
 	struct accessibilityactivemenusnapshot next;
 	struct activemenu *menu;
+	char title[ACCESSIBILITY_MENU_FIELD_MAX];
 	char label[ACCESSIBILITY_MENU_FIELD_MAX];
 	u32 flags = 0;
+	u32 titleflags = 0;
+	s32 screenchanged;
 
 	if (playernum < 0 || playernum >= MAX_PLAYERS) {
 		return;
@@ -775,18 +780,16 @@ void accessibilityMenuObserveActive(s32 playernum)
 
 	menu = &g_AmMenus[playernum];
 
-	if (menu->screenindex != 0 || menu->slotnum == 4) {
-		memset(previous, 0, sizeof(*previous));
-		return;
-	}
-
+	memset(title, 0, sizeof(title));
 	memset(label, 0, sizeof(label));
+	amGetSlotDetails(4, &titleflags, title);
 	amGetSlotDetails(menu->slotnum, &flags, label);
 
 	memset(&next, 0, sizeof(next));
 	next.valid = true;
 	next.screenindex = menu->screenindex;
 	next.slotnum = menu->slotnum;
+	accessibilityMenuCopyNormalized(next.title, sizeof(next.title), title);
 	accessibilityMenuCopyNormalized(next.label, sizeof(next.label), label);
 
 	if (!next.label[0]) {
@@ -800,12 +803,26 @@ void accessibilityMenuObserveActive(s32 playernum)
 		return;
 	}
 
+	screenchanged = !previous->valid
+			|| previous->screenindex != next.screenindex;
+
+	if (screenchanged) {
+		accessibilityMenuAppendPart(next.utterance, sizeof(next.utterance),
+				next.title, NULL);
+	}
+
+	if (!screenchanged || strcmp(next.label, next.title) != 0) {
+		accessibilityMenuAppendPart(next.utterance, sizeof(next.utterance),
+				next.label, ". ");
+	}
+
 	accessibilityLogEvent("active_menu", "focus",
-			"player=%d screen=%d slot=%d flags=0x%08x label=%s",
-			playernum, next.screenindex, next.slotnum, flags, next.label);
+			"player=%d screen=%d slot=%d flags=0x%08x title=%s label=%s text=%s",
+			playernum, next.screenindex, next.slotnum, flags, next.title,
+			next.label, next.utterance);
 	g_AccessibilityActiveMenuChanges++;
 	*previous = next;
-	accessibilityAnnouncementReplaceMenu(previous->label,
+	accessibilityAnnouncementReplaceMenu(previous->utterance,
 			ACCESSIBILITY_ANNOUNCEMENT_FOCUS);
 }
 

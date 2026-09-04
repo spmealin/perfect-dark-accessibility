@@ -30,9 +30,9 @@ Mission Select list options announce the complete localized mission name rendere
 
 ### Active weapon menu narration
 
-With `Accessibility.MenuNarration=1`, holding the active-menu control and selecting a weapon or device announces the exact localized short label rendered in the highlighted radial slot. This includes `Unarmed`. Speech occurs only when a non-center slot becomes selected; returning to the center, holding a selection, or renderer animation does not repeat it. Returning to center and deliberately selecting the same item again announces it again. Closing the radial menu resets selection state without cancelling an already-started short item announcement.
+With `Accessibility.MenuNarration=1`, holding the active-menu control announces the localized title and focused label of every active-menu radial: Weapon, Function, cooperative Perfect Buddies, and Combat Simulator Orders. The title is included on entry to each radial screen and subsequent focus movement speaks only the new label. Weapon labels include `Unarmed`; stable focus and renderer animation do not repeat speech. Closing the radial resets selection state without cancelling an already-started short announcement. Only the primary local player publishes speech; selection, weapon-function, and bot-command behavior are unchanged.
 
-This initial slice observes only active-menu screen `0`, the weapon/device screen. Function choices and bot-order screens are not yet narrated. Only the primary local player publishes speech; the underlying item selection and application behavior are unchanged.
+While holding the active-menu control (L1/LB in the default controller layout), press the right trigger to cycle from Weapon to Function and then to an available buddy/order radial. Perfect Buddies is available in cooperative missions with an AI buddy. Orders is available in team Combat Simulator games with friendly simulants; each buddy can have an individual command screen, and holding the right trigger while on an order screen addresses all friendly bots.
 
 ### HUD message narration
 

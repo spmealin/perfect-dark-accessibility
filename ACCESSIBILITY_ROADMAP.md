@@ -93,7 +93,7 @@ the implemented weapon-change flow in runtime testing.
 
 ## Milestone 8 — Player status and inventory queries
 
-Implementation status: the active weapon/device radial announces localized highlighted-item labels, including Unarmed. Releasing the radial announces total ammunition, quick weapon changes announce the localized HUD weapon name plus ammunition, and primary/secondary function changes have distinct earcons. These bounded slices passed project-owner runtime testing. Health, shield, deliberate status/inventory queries, broader threshold policy, and the rest of this milestone remain open.
+Implementation status: every active-menu radial announces its localized screen title on entry and changed focus labels thereafter, covering Weapon, Function, cooperative Perfect Buddies, and Combat Simulator Orders. The weapon screen includes Unarmed. Releasing that radial announces total ammunition, quick weapon changes announce the localized HUD weapon name plus ammunition, and primary/secondary function changes have distinct earcons. The weapon slices passed project-owner runtime testing; the newly expanded radial narration awaits acceptance. Health, shield, deliberate status/inventory queries, broader threshold policy, and the rest of this milestone remain open.
 
 - **Goal:** Provide calm, accurate access to health, shield, equipped weapon/function, ammo, and inventory.
 - **User-visible result:** On-demand status is concise; important health/ammo thresholds are optional and non-repetitive; weapon changes are announced.
