@@ -482,9 +482,10 @@ static s32 accessibilityBeaconNonHostileEligible(struct prop *prop,
 		return false;
 	}
 
-	if (remoteobserver
-			&& (prop->flags & PROPFLAG_ONTHISSCREENTHISTICK) == 0) {
-		*reason = "character_not_rendered_in_remote_view";
+	if ((prop->flags & PROPFLAG_ONTHISSCREENTHISTICK) == 0) {
+		*reason = remoteobserver
+				? "character_not_rendered_in_remote_view"
+				: "character_not_rendered_on_screen";
 		return false;
 	}
 

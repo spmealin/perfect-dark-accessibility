@@ -480,6 +480,8 @@ Scanner selection and scanner output have separate lifetimes. Four registered co
 
 Pickup eligibility normally follows `objTestForPickup` object types and flags. The current player's visible, inactive, deployed CamSpy is the single character-prop exception because native retrieval is handled separately in `bondeyespy.c`. It is eligible only after control returns to Joanna; active, held, hidden, destroyed, and unrelated character props remain excluded. Each fixed result records whether its stable entity pointer belongs to a character or object so validation cannot reinterpret the CamSpy identity if a prop slot is reused.
 
+The current F7 viewport policy supersedes the earlier remote-only character rule: non-hostile people require the renderer's `PROPFLAG_ONTHISSCREENTHISTICK` state for both Joanna and remote observers. An off-screen character therefore cannot retain or start a friendly drone even when room and visual-ray tests pass.
+
 ### Navigation
 
 The player-authored marker module owns four fixed coordinate/room snapshots.
