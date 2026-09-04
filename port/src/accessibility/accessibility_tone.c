@@ -32,6 +32,12 @@
 #define ACCESSIBILITY_TOGGLE_PATTERN_OFF 0
 #define ACCESSIBILITY_TOGGLE_PATTERN_ON 1
 #define ACCESSIBILITY_TOGGLE_PATTERN_FAST 2
+#define ACCESSIBILITY_COMPASS_FREQUENCY_HZ 600.0f
+#define ACCESSIBILITY_COMPASS_VOLUME 0.11f
+#define ACCESSIBILITY_COMPASS_CLICK_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.030f))
+#define ACCESSIBILITY_COMPASS_GAP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.065f))
+#define ACCESSIBILITY_COMPASS_ATTACK_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.001f))
+#define ACCESSIBILITY_COMPASS_RELEASE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.010f))
 #define ACCESSIBILITY_WEAPON_FUNCTION_FREQUENCY_HZ 1000.0f
 #define ACCESSIBILITY_WEAPON_FUNCTION_VOLUME 0.10f
 #define ACCESSIBILITY_WEAPON_FUNCTION_BEEP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.035f))
@@ -132,6 +138,9 @@ static SDL_atomic_t g_AccessibilityThreatAlertPanMillionths;
 static SDL_atomic_t g_AccessibilityToggleSequence;
 static SDL_atomic_t g_AccessibilityTogglePattern;
 static SDL_atomic_t g_AccessibilityTogglePulses;
+static SDL_atomic_t g_AccessibilityCompassSequence;
+static SDL_atomic_t g_AccessibilityCompassEnabled;
+static SDL_atomic_t g_AccessibilityCompassPulses;
 static SDL_atomic_t g_AccessibilityWeaponFunctionSequence;
 static SDL_atomic_t g_AccessibilityWeaponFunctionPulses;
 static SDL_atomic_t g_AccessibilityHazardEnabled;
@@ -239,6 +248,10 @@ static s32 g_AccessibilityToggleSamplesRemaining;
 static s32 g_AccessibilityToggleSample;
 static s32 g_AccessibilityToggleCurrentPattern;
 static f32 g_AccessibilityTogglePhase;
+static s32 g_AccessibilityCompassObservedSequence;
+static s32 g_AccessibilityCompassSamplesRemaining;
+static s32 g_AccessibilityCompassSample;
+static f32 g_AccessibilityCompassPhase;
 static s32 g_AccessibilityWeaponFunctionObservedSequence;
 static s32 g_AccessibilityWeaponFunctionSamplesRemaining;
 static s32 g_AccessibilityWeaponFunctionSample;
@@ -506,6 +519,25 @@ void accessibilityTonePlayCaneModeConfirmation(s32 mode)
 	SDL_AtomicSet(&g_AccessibilityTogglePulses,
 			pattern == ACCESSIBILITY_TOGGLE_PATTERN_FAST ? 3 : 2);
 	SDL_AtomicAdd(&g_AccessibilityToggleSequence, 1);
+}
+
+void accessibilityTonePlayCompass(s32 pulses)
+{
+	if (pulses < 1) {
+		pulses = 1;
+	} else if (pulses > 4) {
+		pulses = 4;
+	}
+
+	SDL_AtomicSet(&g_AccessibilityCompassPulses, pulses);
+	SDL_AtomicSet(&g_AccessibilityCompassEnabled, 1);
+	SDL_AtomicAdd(&g_AccessibilityCompassSequence, 1);
+}
+
+void accessibilityToneStopCompass(void)
+{
+	SDL_AtomicSet(&g_AccessibilityCompassEnabled, 0);
+	SDL_AtomicAdd(&g_AccessibilityCompassSequence, 1);
 }
 
 void accessibilityTonePlayStanceConfirmation(s32 crouchpos)
@@ -1084,6 +1116,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 	s32 threatalertsequence = SDL_AtomicGet(
 			&g_AccessibilityThreatAlertSequence);
 	s32 togglesequence = SDL_AtomicGet(&g_AccessibilityToggleSequence);
+	s32 compassequence = SDL_AtomicGet(&g_AccessibilityCompassSequence);
 	s32 weaponfunctionsequence = SDL_AtomicGet(
 			&g_AccessibilityWeaponFunctionSequence);
 	s32 radarsequence = SDL_AtomicGet(&g_AccessibilityRadarSequence);
@@ -1586,12 +1619,26 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 					+ ACCESSIBILITY_TOGGLE_GAP_SAMPLES * (pulses - 1);
 	}
 
+	if (compassequence != g_AccessibilityCompassObservedSequence) {
+		s32 pulses = SDL_AtomicGet(&g_AccessibilityCompassPulses);
+
+		g_AccessibilityCompassObservedSequence = compassequence;
+		g_AccessibilityCompassSample = 0;
+		g_AccessibilityCompassPhase = 0.0f;
+		g_AccessibilityCompassSamplesRemaining
+				= SDL_AtomicGet(&g_AccessibilityCompassEnabled) && pulses > 0
+				? ACCESSIBILITY_COMPASS_CLICK_SAMPLES * pulses
+						+ ACCESSIBILITY_COMPASS_GAP_SAMPLES * (pulses - 1)
+				: 0;
+	}
+
 	if (!enabled && g_AccessibilityToneGain <= 0.0f
 			&& !hazardenabled && g_AccessibilityHazardGain <= 0.0f
 			&& g_AccessibilityChirpSamplesRemaining <= 0
 			&& g_AccessibilityTargetPresenceSamplesRemaining <= 0
 			&& g_AccessibilityThreatAlertSamplesRemaining <= 0
 			&& g_AccessibilityToggleSamplesRemaining <= 0
+			&& g_AccessibilityCompassSamplesRemaining <= 0
 			&& g_AccessibilityWeaponFunctionSamplesRemaining <= 0
 			&& g_AccessibilityRadarSamplesRemaining <= 0
 			&& !hillenabled && g_AccessibilityHillGain <= 0.0f
@@ -1641,6 +1688,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		s32 hazardleft = 0;
 		s32 hazardright = 0;
 		s32 toggletone = 0;
+		s32 compasstone = 0;
 		s32 weaponfunctiontone = 0;
 		s32 combatleft = 0;
 		s32 combatright = 0;
@@ -1920,6 +1968,46 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 			g_AccessibilityToggleSample++;
 			g_AccessibilityToggleSamplesRemaining--;
+		}
+
+		if (g_AccessibilityCompassSamplesRemaining > 0) {
+			s32 cyclelength = ACCESSIBILITY_COMPASS_CLICK_SAMPLES
+					+ ACCESSIBILITY_COMPASS_GAP_SAMPLES;
+			s32 clicksample = g_AccessibilityCompassSample % cyclelength;
+
+			if (clicksample < ACCESSIBILITY_COMPASS_CLICK_SAMPLES) {
+				f32 envelope = 1.0f;
+				f32 progress = (f32)clicksample
+						/ (f32)ACCESSIBILITY_COMPASS_CLICK_SAMPLES;
+				f32 wave;
+
+				if (clicksample < ACCESSIBILITY_COMPASS_ATTACK_SAMPLES) {
+					envelope = (f32)clicksample
+							/ (f32)ACCESSIBILITY_COMPASS_ATTACK_SAMPLES;
+				} else if (ACCESSIBILITY_COMPASS_CLICK_SAMPLES - clicksample
+						< ACCESSIBILITY_COMPASS_RELEASE_SAMPLES) {
+					envelope = (f32)(ACCESSIBILITY_COMPASS_CLICK_SAMPLES
+							- clicksample)
+							/ (f32)ACCESSIBILITY_COMPASS_RELEASE_SAMPLES;
+				}
+
+				wave = sinf(g_AccessibilityCompassPhase) * 0.78f
+						+ sinf(g_AccessibilityCompassPhase * 2.0f) * 0.22f;
+				compasstone = (s32)(wave * envelope
+						* (1.0f - progress * 0.35f)
+						* ACCESSIBILITY_COMPASS_VOLUME * 32767.0f);
+				g_AccessibilityCompassPhase += TWO_PI
+						* ACCESSIBILITY_COMPASS_FREQUENCY_HZ
+						/ ACCESSIBILITY_TONE_SAMPLE_RATE;
+				if (g_AccessibilityCompassPhase >= TWO_PI) {
+					g_AccessibilityCompassPhase -= TWO_PI;
+				}
+			} else {
+				g_AccessibilityCompassPhase = 0.0f;
+			}
+
+			g_AccessibilityCompassSample++;
+			g_AccessibilityCompassSamplesRemaining--;
 		}
 
 		if (g_AccessibilityWeaponFunctionSamplesRemaining > 0) {
@@ -2792,14 +2880,16 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 						+ hazardleft + combatleft
 						+ trackerleft + friendlyleft + doorleft + radarleft
 						+ hillleft + caneleft
-						+ markerleft + toggletone + weaponfunctiontone);
+						+ markerleft + toggletone + compasstone
+						+ weaponfunctiontone);
 		g_AccessibilityToneMixBuffer[index + 1] = accessibilityToneClamp(
 				(s32)g_AccessibilityToneMixBuffer[index + 1] + tone + chirpright
 						+ targetpresenceright + threatalertright
 						+ hazardright + combatright
 						+ trackerright + friendlyright + doorright + radarright
 						+ hillright + caneright
-						+ markerright + toggletone + weaponfunctiontone);
+						+ markerright + toggletone + compasstone
+						+ weaponfunctiontone);
 
 		g_AccessibilityTonePhase += TWO_PI
 				* g_AccessibilityToneFrequencyHz / ACCESSIBILITY_TONE_SAMPLE_RATE;

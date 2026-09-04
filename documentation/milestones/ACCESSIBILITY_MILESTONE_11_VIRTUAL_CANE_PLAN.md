@@ -28,6 +28,12 @@ radius of their edge, while open ledges and wider gaps retain drop priority.
 See the root `ACCESSIBILITY.md`, `ACCESSIBILITY_ROADMAP.md`,
 and `ACCESSIBILITY_TESTING.md` for current behavior and status.
 
+An independent 2026-09-04 compass extension uses Shift+F4 to cycle Off,
+speech-plus-sonification, and sonification-only modes. Exact cardinal crossings
+use one through four dedicated centered clicks clockwise from North, with
+optional simultaneous speech. This extension awaits project-owner runtime
+acceptance and does not change the cane sweep schedule.
+
 Planning baseline: `accessibility` branch at `2ca16241f`
 Prepared: 2026-07-21
 

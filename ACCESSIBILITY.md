@@ -253,10 +253,19 @@ While Joanna is already standing on a steady ramp or hill, one read-only floor-n
 
 A refined large-drop edge normally takes priority over a wall farther along the same ray. If the horizontal collision query finds that wall within one live player collision radius beyond the edge, however, the gap is too narrow for the player to reach as open space. The cane suppresses that inaccessible lower-floor result and reports the barrier instead. This prevents floor behind or beneath a wall from masquerading as a nearby ledge while retaining drop cues at open edges and across wider gaps.
 
+### Speaking and sonified compass
+
+`Accessibility.CompassMode` is a session-sticky bounded integer with `0=off`, `1=speech and sonification`, and `2=sonification only`; it defaults to `1` for blind-user acceptance testing. During supported one-local-player gameplay, Shift+F4 cycles those modes in that order. The mode change itself receives a short spoken confirmation, including when entering sound-only or Off, but ongoing cardinal speech occurs only in mode 1. Plain F4 remains reserved for the virtual cane, Ctrl+F4 is ignored, and either Alt key prevents both accessibility commands so Alt+F4 remains an operating-system command.
+
+The compass projects the active camera look vector onto the horizontal plane and follows the engine's native view-angle convention: world `+Z` is North, `-X` is East, `-Z` is South, and `+X` is West. Crossing a cardinal axis in either direction emits a centered 600 Hz click pattern: one 30 ms click for North, two for East, three for South, or four for West, with 65 ms gaps. Mode 1 requests the matching direction word at the same event as the first click; mode 2 emits only the clicks. A six-degree re-arm distance prevents small input jitter around an axis from repeating it. The active observer makes the reference follow the CamSpy perspective automatically. Menus, pause, cutscenes, death, unsupported player counts, stage transitions, feature disable, and shutdown stop pending clicks and discard the previous heading without changing the saved mode; gameplay resumes from a silent heading baseline.
+
+The cardinal and mode phrases are isolated in the accessibility compass module as prototype accessibility vocabulary. They currently use English because the port has no accessibility-string catalog; localization requires moving that table into such a catalog rather than adding literals to gameplay hooks.
+
 The following `pd.ini` values may be tuned without rebuilding; restart the game after editing them:
 
 ```ini
 [Accessibility]
+CompassMode=1
 VirtualCaneReach=900.000000
 VirtualCaneFullVolumeDistance=112.500000
 VirtualCaneFadeDistance=750.000000

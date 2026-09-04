@@ -84,6 +84,8 @@ void accessibilityTonePlayThreatAlert(f32 volume, f32 pan);
 void accessibilityToneStopThreatAlert(void);
 void accessibilityTonePlayToggleConfirmation(s32 enabled);
 void accessibilityTonePlayCaneModeConfirmation(s32 mode);
+void accessibilityTonePlayCompass(s32 pulses);
+void accessibilityToneStopCompass(void);
 void accessibilityTonePlayStanceConfirmation(s32 crouchpos);
 void accessibilityTonePlayWeaponFunction(s32 secondary);
 void accessibilityToneStopWeaponFunction(void);

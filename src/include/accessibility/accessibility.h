@@ -40,6 +40,8 @@ void accessibilityGetCombatRadarTuning(f32 *mediumdistance,
 		f32 *closedistance, f32 *volume);
 s32 accessibilityGetVirtualCaneMode(void);
 void accessibilitySetVirtualCaneMode(s32 mode);
+s32 accessibilityGetCompassMode(void);
+void accessibilitySetCompassMode(s32 mode);
 s32 accessibilityGetScannerActive(s32 scanner);
 void accessibilitySetScannerActive(s32 scanner, s32 active);
 void accessibilityGetVirtualCaneTuning(f32 *reach, f32 *fulldistance,

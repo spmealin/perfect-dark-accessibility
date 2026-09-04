@@ -244,6 +244,9 @@ static struct accessibilitycanesample
 		g_AccessibilityCaneSamples[ACCESSIBILITY_CANE_PROBE_COUNT];
 static char g_AccessibilityCaneLogBuffer[ACCESSIBILITY_CANE_LOG_BUFFER_SIZE];
 static s32 g_AccessibilityCaneScopeActive;
+#ifndef PLATFORM_N64
+static s32 g_AccessibilityCaneF4WasDown;
+#endif
 static s32 g_AccessibilityCaneSweepActive;
 static s32 g_AccessibilityCaneCycleStartTick;
 static s32 g_AccessibilityCaneCursor;
@@ -2017,7 +2020,14 @@ void accessibilityCaneTick(void)
 	s32 now;
 #ifndef PLATFORM_N64
 	u32 modifiers;
+	s32 f4down;
 	s32 f4pressed;
+
+	modifiers = inputGetKeyModState();
+	f4down = inputKeyPressed(VK_F4);
+	f4pressed = f4down
+			&& !g_AccessibilityCaneF4WasDown;
+	g_AccessibilityCaneF4WasDown = f4down;
 #endif
 
 	if (scopereason) {
@@ -2042,9 +2052,7 @@ void accessibilityCaneTick(void)
 	}
 
 #ifndef PLATFORM_N64
-	modifiers = inputGetKeyModState();
-	f4pressed = inputKeyJustPressed(VK_F4);
-	if (f4pressed && !(modifiers & KM_ALT)) {
+	if (f4pressed && !(modifiers & (KM_ALT | KM_CTRL | KM_SHIFT))) {
 		accessibilityCaneCycleMode();
 		g_AccessibilityCaneScopeActive = true;
 	}
