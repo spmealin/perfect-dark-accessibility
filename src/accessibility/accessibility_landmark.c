@@ -37,6 +37,8 @@ struct accessibilitylandmarkstate {
 	s32 lineofsight;
 	s32 startpending;
 	s32 starttick;
+	s32 lossample;
+	s32 losqueries;
 	f32 distance;
 	f32 gain;
 	f32 pan;
@@ -206,10 +208,9 @@ static s32 accessibilityLandmarkObjectEligible(
 
 static s32 accessibilityLandmarkHasLineOfSight(
 		const struct accessibilityobserver *observer,
-		struct defaultobj *obj)
+		struct defaultobj *obj, s32 *sample, s32 *queries)
 {
 	struct coord from = observer->camera;
-	struct coord to = obj->prop->pos;
 	RoomNum fromrooms[2];
 
 	if (observer->room <= 0 || obj->prop->rooms[0] <= 0) {
@@ -219,8 +220,8 @@ static s32 accessibilityLandmarkHasLineOfSight(
 	fromrooms[0] = observer->room;
 	fromrooms[1] = -1;
 
-	return accessibilityVisibilityHasVisualLineOfSight(
-			&from, fromrooms, &to, obj->prop->rooms, obj->prop);
+	return accessibilityVisibilityHasObjectSurfaceLineOfSight(
+			&from, fromrooms, obj->prop, true, sample, queries);
 }
 
 static void accessibilityLandmarkStopVoices(void)
@@ -294,8 +295,11 @@ static void accessibilityLandmarkUpdate(
 		limit = state->inrange ? range + ACCESSIBILITY_LANDMARK_HYSTERESIS
 				: range;
 		inrange = state->distance <= limit;
+		state->lossample = 0;
+		state->losqueries = 0;
 		lineofsight = inrange
-				&& accessibilityLandmarkHasLineOfSight(observer, obj);
+				&& accessibilityLandmarkHasLineOfSight(observer, obj,
+						&state->lossample, &state->losqueries);
 		waslineofsight = state->lineofsight;
 
 		if (lineofsight && !waslineofsight) {
@@ -324,10 +328,11 @@ static void accessibilityLandmarkUpdate(
 
 		if (state->inrange != inrange || state->lineofsight != lineofsight) {
 			accessibilityLogEvent("landmark", "visibility",
-					"slot=%d name=%s tick=%d stage=%d tag=%d prop=%p propnum=%d in_range=%d line_of_sight=%d start_pending=%d start_tick=%d distance=%.3f observer_remote=%d",
+					"slot=%d name=%s tick=%d stage=%d tag=%d prop=%p propnum=%d in_range=%d line_of_sight=%d los_sample=%d los_queries=%d start_pending=%d start_tick=%d distance=%.3f observer_remote=%d",
 					slot, spec->name, g_Vars.lvframe60, g_Vars.stagenum,
 					spec->tag, (void *)obj->prop,
 					(s32)(obj->prop - g_Vars.props), inrange, lineofsight,
+					state->lossample, state->losqueries,
 					state->startpending, state->starttick, state->distance,
 					observer->isremote);
 		}

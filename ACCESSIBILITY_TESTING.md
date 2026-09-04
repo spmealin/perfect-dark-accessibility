@@ -246,7 +246,7 @@ In Area 51: Rescue, approach the intact wall marked with the silver X with `Acce
 
 In Air Base on Special Agent or harder, approach the baggage conveyor before completing "Check in equipment" with authored landmarks and F5 enabled. Setup tag `0x04` must produce the same chirpless landmark drone as the Area 51 wall and must never produce the ordinary 880 Hz interactable chirp, including after toggling either feature or returning from a menu. Confirm direct line of sight, range, spatialization, and pause/menu suppression match the other authored landmark. Equip the suitcase and activate the conveyor; after the objective completes, the landmark must stop and F5 must remain silent for that registry-owned prop. On Agent, where objective 1 is not applicable, neither the mission landmark nor an F5 cue should disclose a nonexistent task.
 
-On Attack Ship, approach the three setup-tagged shield consoles while "Disable shield system" is incomplete. Tags `0x04`, `0x05`, and `0x06` must each produce an independently positioned chirpless landmark drone. When several first become visible together, verify their voices begin 250 ms apart rather than simultaneously. Destroy each console and confirm only its voice stops; after the objective completes, all three must remain silent. Confirm unrelated multimonitors do not gain landmark output.
+On Attack Ship, approach the three setup-tagged shield consoles while "Disable shield system" is incomplete. Tags `0x04`, `0x05`, and `0x06` must each produce an independently positioned chirpless landmark drone even though the multimonitor setup origin can be embedded in its mounting geometry. When several first become visible together, verify their voices begin 250 ms apart rather than simultaneously. Destroy each console and confirm only its voice stops; after the objective completes, all three must remain silent. Confirm unrelated multimonitors do not gain landmark output. Session `1788562366`, capture 1 records the regression: healthy, on-screen tag `0x06` was 696.809 units away with objective 0 incomplete, but the former origin-only landmark ray remained blocked.
 
 Start DataDyne Central: Defection and exercise F5/F6/F7/F8 separately and together through the lobby, offices, elevators, alarm panels, security systems, weapons/ammunition, key items, scripted doors, and mission transitions. Verify only healthy, active, visible, native-potentially-interactable objects enter F5; an object outside actual use range may sound, but a hidden or `OBJFLAG_CANNOT_ACTIVATE` object must not. Verify elevators and sibling doors produce one canonical cue, locked doors remain discoverable without being described as unlocked, collected items disappear, newly spawned/dropped items appear, and LOS/room/range rules do not disclose unseen mission props. Continue through Investigation and Extraction to record level-specific flags, models, scripted state changes, false positives, and missing semantic categories.
 
@@ -521,12 +521,14 @@ Repeat with the setting disabled and correlate `weapon_change/pending`,
 
 Collect or select a second copy of a dual-wield-capable weapon and confirm the
 announcement occurs when the left hand actually enters use, with the localized
-`Double` prefix and weapon name. A direct in-game transition should say only
-that phrase; a quick or radial switch to a dual pair should incorporate it into
-the one settled weapon/ammunition announcement. Stage initialization must remain
-silent, and a requested dual switch that never reaches two in-use hands must not
-announce. Correlate the transition with `weapon_change/dual_announced` or the
-`dual=1` field on the existing `weapon_change/announced` event.
+`Double` prefix and weapon name. Return to the single copy of that weapon and
+confirm its ordinary name is spoken without the prefix. A direct in-game
+transition should say only the resulting wield-state name; a quick or radial
+switch should incorporate it into the one settled weapon/ammunition
+announcement. Stage initialization must remain silent, and a requested switch
+that never changes the left hand's in-use state must not announce. Correlate
+direct transitions with `weapon_change/wield_state_announced` and requested
+ones with the `dual` field on `weapon_change/announced`.
 
 Try a weapon with no alternate function, temporary alternate-function weapons, an unavailable function, rapid repeated presses, weapon changes, dual wielding, firing/reloading, pause/menu transitions, death, and stage changes. Equipping a weapon or entering a stage must not announce its stored function as a new toggle. Confirm beacon chirps, hazard sweeps, aiming tones, and combat slots can overlap without interrupting the function pattern. Correlate every audible pattern with `weapon_function/state_change`; advanced `performance/frame_window` records should advance `weapon_function_sequence` without memory or channel growth. Record multiplayer behavior as unvalidated rather than accepted until independently tested.
 

@@ -519,6 +519,12 @@ landmark output state, preventing one prop from communicating conflicting
 mission-landmark and ordinary-interaction semantics. Authored landmarks do not
 consume scanner capacity or create a target lock.
 
+Object landmarks use the shared bounded object-surface visibility primitive:
+the prop origin is tried first, followed by the nearest model-box face center
+and four inset samples, with the same shallow on-screen embed allowance used
+for mounted semantic objects. This fixes setup origins embedded in supporting
+geometry without weakening the collision ray or accepting render state alone.
+
 This landmark slice remains an experiment. Route guidance, automatic
 breadcrumbs, objective selection, and route-deviation policy are separate and
 must not infer destinations from marker state. Do not generalize a future route

@@ -154,11 +154,12 @@ being announced later.
 
 The same settled observation also checks whether both weapon hands are actually
 in use. A transition into dual wielding speaks the existing localized `Double`
-prefix followed by the weapon name, such as `Double Falcon 2`; initial stage
-state is a silent baseline. If a radial or quick-change request equips the dual
-pair, that phrase is folded into the normal weapon-and-ammunition announcement
-rather than spoken twice. A requested dual state does not announce until the
-left hand has actually entered use.
+prefix followed by the weapon name, such as `Double Falcon 2`; returning to one
+hand speaks the ordinary weapon name, such as `Falcon 2`. Initial stage state is
+a silent baseline. If a radial or quick-change request causes the same settled
+transition, that phrase is folded into the normal weapon-and-ammunition
+announcement rather than spoken twice. A requested state does not announce
+until the left hand's actual in-use value changes.
 
 ### Single-player world scanners
 
@@ -357,7 +358,10 @@ conveyor sounds only while the difficulty includes the "Check in equipment"
 objective and that objective remains incomplete. The three shield consoles
 sound only while "Disable shield system" remains incomplete, stop individually
 when destroyed, and enter audibility 250 ms apart so colocated consoles remain
-spatially distinguishable. Registry ownership also excludes these props from
+spatially distinguishable. For a tagged object whose setup origin is embedded
+in its mounting geometry, the LOS query tests the nearest model-box face and
+four inset surface points; render state by itself is never sufficient.
+Registry ownership also excludes these props from
 F5, so their native activation flags cannot misleadingly describe them as
 ordinary interactables. Authored landmarks do not require F5,
 consume interactable-scanner results, imply normal activation, or create a

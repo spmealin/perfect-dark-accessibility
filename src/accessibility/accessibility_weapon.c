@@ -109,19 +109,20 @@ static void accessibilityWeaponFormatName(char *dst, size_t dstlen,
 	}
 }
 
-static void accessibilityWeaponAnnounceDual(s32 playernum, s32 weaponnum)
+static void accessibilityWeaponAnnounceWieldState(s32 playernum,
+		s32 weaponnum, s32 dual)
 {
 	char utterance[ACCESSIBILITY_WEAPON_TEXT_MAX];
 
 	accessibilityWeaponFormatName(utterance, sizeof(utterance), weaponnum,
-			true, bgunGetName(weaponnum));
+			dual, bgunGetName(weaponnum));
 
 	if (utterance[0]) {
-		accessibilityAnnouncementWeaponChange(utterance, "dual_wield",
+		accessibilityAnnouncementWeaponChange(utterance, "wield_state",
 				playernum, true);
-		accessibilityLogEvent("weapon_change", "dual_announced",
-				"player=%d stage=%d weapon=%d text=%s",
-				playernum, g_Vars.stagenum, weaponnum, utterance);
+		accessibilityLogEvent("weapon_change", "wield_state_announced",
+				"player=%d stage=%d weapon=%d dual=%d text=%s",
+				playernum, g_Vars.stagenum, weaponnum, dual, utterance);
 	}
 }
 
@@ -319,8 +320,9 @@ void accessibilityWeaponFunctionObserve(s32 playernum, s32 stagenum,
 
 	if (state->weaponnum != weaponnum) {
 		if (accessibilityIsWeaponChangeAnnouncementsEnabled()
-				&& dual && !state->dual && !weaponchangeannounced) {
-			accessibilityWeaponAnnounceDual(playernum, weaponnum);
+				&& dual != state->dual && !weaponchangeannounced) {
+			accessibilityWeaponAnnounceWieldState(
+					playernum, weaponnum, dual);
 		}
 
 		state->weaponnum = weaponnum;
@@ -330,8 +332,8 @@ void accessibilityWeaponFunctionObserve(s32 playernum, s32 stagenum,
 	}
 
 	if (accessibilityIsWeaponChangeAnnouncementsEnabled()
-			&& dual && !state->dual) {
-		accessibilityWeaponAnnounceDual(playernum, weaponnum);
+			&& dual != state->dual) {
+		accessibilityWeaponAnnounceWieldState(playernum, weaponnum, dual);
 	}
 
 	if (accessibilityIsWeaponFunctionCuesEnabled()
