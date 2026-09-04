@@ -340,14 +340,18 @@ opposed 300–600 Hz sweeps as a player marker but never plays an 800 Hz identit
 chirp: no chirps consistently means a level-authored landmark.
 
 Registry entries currently cover Area 51: Rescue's intact silver-X wall, where
-the hovercrate is intended to be positioned, and Air Base's baggage conveyor,
-where the equipped suitcase is deposited. They follow the shared active
+the hovercrate is intended to be positioned, Air Base's baggage conveyor,
+where the equipped suitcase is deposited, and the three shield-system consoles
+on the Attack Ship. They follow the shared active
 observer, use `Accessibility.MarkerRange` and `Accessibility.MarkerVolume`,
 and require a direct visual line of sight. The wall stops when destroyed; the
 conveyor sounds only while the difficulty includes the "Check in equipment"
-objective and that objective remains incomplete. Registry ownership also
-excludes the conveyor from F5, so its native activation flag cannot misleadingly
-describe it as an ordinary interactable. Authored landmarks do not require F5,
+objective and that objective remains incomplete. The three shield consoles
+sound only while "Disable shield system" remains incomplete, stop individually
+when destroyed, and enter audibility 250 ms apart so colocated consoles remain
+spatially distinguishable. Registry ownership also excludes these props from
+F5, so their native activation flags cannot misleadingly describe them as
+ordinary interactables. Authored landmarks do not require F5,
 consume interactable-scanner results, imply normal activation, or create a
 targeting lock. Four dedicated mixer voices are preallocated; adding a landmark
 requires a stage, setup tag, expected prop type, optional objective gate, and

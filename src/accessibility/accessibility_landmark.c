@@ -20,6 +20,7 @@
 #define ACCESSIBILITY_LANDMARK_INNER_DISTANCE 100.0f
 #define ACCESSIBILITY_LANDMARK_HYSTERESIS 75.0f
 #define ACCESSIBILITY_LANDMARK_LOG_TICKS TICKS(60)
+#define ACCESSIBILITY_LANDMARK_START_SPACING TICKS(15)
 
 struct accessibilitylandmarkspec {
 	s32 stage;
@@ -34,6 +35,8 @@ struct accessibilitylandmarkstate {
 	s32 audible;
 	s32 inrange;
 	s32 lineofsight;
+	s32 startpending;
+	s32 starttick;
 	f32 distance;
 	f32 gain;
 	f32 pan;
@@ -47,6 +50,9 @@ struct accessibilitylandmarkstate {
 static const struct accessibilitylandmarkspec g_AccessibilityLandmarkSpecs[] = {
 	{ STAGE_RESCUE, 0x18, PROPTYPE_DOOR, -1, "crate_placement_marker" },
 	{ STAGE_AIRBASE, 0x04, PROPTYPE_OBJ, 1, "suitcase_deposit_conveyor" },
+	{ STAGE_ATTACKSHIP, 0x04, PROPTYPE_OBJ, 0, "shield_console_1" },
+	{ STAGE_ATTACKSHIP, 0x05, PROPTYPE_OBJ, 0, "shield_console_2" },
+	{ STAGE_ATTACKSHIP, 0x06, PROPTYPE_OBJ, 0, "shield_console_3" },
 };
 
 static struct accessibilitylandmarkstate
@@ -252,6 +258,7 @@ static void accessibilityLandmarkUpdate(
 		f32 limit;
 		s32 inrange;
 		s32 lineofsight;
+		s32 waslineofsight;
 		s32 pan;
 		f32 normalizedpan;
 		s32 restart;
@@ -289,7 +296,22 @@ static void accessibilityLandmarkUpdate(
 		inrange = state->distance <= limit;
 		lineofsight = inrange
 				&& accessibilityLandmarkHasLineOfSight(observer, obj);
-		state->gain = lineofsight
+		waslineofsight = state->lineofsight;
+
+		if (lineofsight && !waslineofsight) {
+			state->startpending = slot > 0;
+			state->starttick = g_Vars.lvframe60
+					+ slot * ACCESSIBILITY_LANDMARK_START_SPACING;
+		} else if (!lineofsight) {
+			state->startpending = false;
+		}
+
+		if (state->startpending
+				&& g_Vars.lvframe60 >= state->starttick) {
+			state->startpending = false;
+		}
+
+		state->gain = lineofsight && !state->startpending
 				? accessibilityLandmarkDistanceGain(state->distance, range)
 						* mastervolume
 				: 0.0f;
@@ -302,11 +324,12 @@ static void accessibilityLandmarkUpdate(
 
 		if (state->inrange != inrange || state->lineofsight != lineofsight) {
 			accessibilityLogEvent("landmark", "visibility",
-					"slot=%d name=%s tick=%d stage=%d tag=%d prop=%p propnum=%d in_range=%d line_of_sight=%d distance=%.3f observer_remote=%d",
+					"slot=%d name=%s tick=%d stage=%d tag=%d prop=%p propnum=%d in_range=%d line_of_sight=%d start_pending=%d start_tick=%d distance=%.3f observer_remote=%d",
 					slot, spec->name, g_Vars.lvframe60, g_Vars.stagenum,
 					spec->tag, (void *)obj->prop,
 					(s32)(obj->prop - g_Vars.props), inrange, lineofsight,
-					state->distance, observer->isremote);
+					state->startpending, state->starttick, state->distance,
+					observer->isremote);
 		}
 
 		state->inrange = inrange;

@@ -507,9 +507,12 @@ therefore never chirp. Each tick validates the tagged object's identity, active
 and healthy state, configured marker range, and the shared visual line-of-sight
 ray from the active Joanna/CamSpy observer. Menus and other temporary scope
 loss mute voices; destruction, stage change, feature disable, and shutdown
-discard them. Registry entries cover Rescue's tagged intact silver-X wall and
-Air Base's suitcase-deposit conveyor. The conveyor is gated to its applicable,
-incomplete objective. Registry ownership excludes it from F5 independently of
+discard them. Registry entries cover Rescue's tagged intact silver-X wall,
+Air Base's suitcase-deposit conveyor, and Attack Ship's three shield consoles.
+The conveyor and shield consoles are gated to their applicable, incomplete
+objectives; multi-object objective entries start their independent voices at
+250 ms slot offsets rather than masking localization with simultaneous onset.
+Registry ownership excludes them from F5 independently of
 landmark output state, preventing one prop from communicating conflicting
 mission-landmark and ordinary-interaction semantics. Authored landmarks do not
 consume scanner capacity or create a target lock.
