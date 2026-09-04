@@ -152,6 +152,14 @@ adds no count after active-menu selection. Pending requests expire if the
 requested weapon does not equip, preventing a failed or superseded command from
 being announced later.
 
+The same settled observation also checks whether both weapon hands are actually
+in use. A transition into dual wielding speaks the existing localized `Double`
+prefix followed by the weapon name, such as `Double Falcon 2`; initial stage
+state is a silent baseline. If a radial or quick-change request equips the dual
+pair, that phrase is folded into the normal weapon-and-ammunition announcement
+rather than spoken twice. A requested dual state does not announce until the
+left hand has actually entered use.
+
 ### Single-player world scanners
 
 `Accessibility.InteractableBeacons` defaults to `1` for project-owner blind-user acceptance testing and remains the master backend setting in `pd.ini`. The independent F5, F6, and F8 selections are stored as `Accessibility.InteractableScannerActive`, `Accessibility.DoorScannerActive`, and `Accessibility.PickupScannerActive`; each defaults to `1`, changes immediately with its gameplay key, and is saved to `pd.ini` during an orderly exit. The saved selections automatically resume in any supported single-player mission or one-local-player Combat Simulator match.

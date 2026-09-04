@@ -519,6 +519,15 @@ Repeat with the setting disabled and correlate `weapon_change/pending`,
 `weapon_change/announced`, expiration/suppression, and
 `announcement/output_result group=weapon_change` records.
 
+Collect or select a second copy of a dual-wield-capable weapon and confirm the
+announcement occurs when the left hand actually enters use, with the localized
+`Double` prefix and weapon name. A direct in-game transition should say only
+that phrase; a quick or radial switch to a dual pair should incorporate it into
+the one settled weapon/ammunition announcement. Stage initialization must remain
+silent, and a requested dual switch that never reaches two in-use hands must not
+announce. Correlate the transition with `weapon_change/dual_announced` or the
+`dual=1` field on the existing `weapon_change/announced` event.
+
 Try a weapon with no alternate function, temporary alternate-function weapons, an unavailable function, rapid repeated presses, weapon changes, dual wielding, firing/reloading, pause/menu transitions, death, and stage changes. Equipping a weapon or entering a stage must not announce its stored function as a new toggle. Confirm beacon chirps, hazard sweeps, aiming tones, and combat slots can overlap without interrupting the function pattern. Correlate every audible pattern with `weapon_function/state_change`; advanced `performance/frame_window` records should advance `weapon_function_sequence` without memory or channel growth. Record multiplayer behavior as unvalidated rather than accepted until independently tested.
 
 Use a controlled room with known eligible and ineligible entities. Test friendly/hostile/neutral where applicable, occlusion/cloak rules, target loss, rapid crossings, empty scan, overlapping results, collected/opened/destroyed objects, and multiple local-player context. Explicitly audit for hidden-information leaks.

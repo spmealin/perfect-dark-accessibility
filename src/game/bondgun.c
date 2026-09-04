@@ -12058,6 +12058,9 @@ void bgunTickGameplay(bool triggeron)
 	{
 		s32 weaponnum = bgunGetWeaponNum(HAND_RIGHT);
 		s32 secondary = bgunIsUsingSecondaryFunction();
+		s32 dual = player->hands[HAND_RIGHT].inuse
+				&& player->hands[HAND_LEFT].inuse
+				&& weaponnum != WEAPON_REMOTEMINE;
 		struct weaponfunc *func = weaponGetFunctionById(weaponnum, secondary);
 		const char *visiblefunctionname = NULL;
 
@@ -12067,7 +12070,8 @@ void bgunTickGameplay(bool triggeron)
 		}
 
 		accessibilityWeaponFunctionObserve(g_Vars.currentplayernum,
-				g_Vars.stagenum, weaponnum, secondary, visiblefunctionname);
+				g_Vars.stagenum, weaponnum, secondary, dual,
+				visiblefunctionname);
 	}
 }
 

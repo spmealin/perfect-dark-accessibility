@@ -29,6 +29,7 @@ struct accessibilityweaponfunctionstate {
 	s32 stagenum;
 	s32 weaponnum;
 	s32 secondary;
+	s32 dual;
 	s32 activemenuopen;
 	s32 activemenuselection;
 	s32 pendingweaponnum;
@@ -94,8 +95,39 @@ static struct inventory_ammo *accessibilityWeaponGetDisplayedAmmo(
 	return ammo;
 }
 
+static void accessibilityWeaponFormatName(char *dst, size_t dstlen,
+		s32 weaponnum, s32 dual, const char *name)
+{
+	char normalized[ACCESSIBILITY_WEAPON_TEXT_MAX];
+
+	accessibilityWeaponCopyNormalized(normalized, sizeof(normalized), name);
+
+	if (dual && normalized[0]) {
+		snprintf(dst, dstlen, "%s%s", langGet(L_PROPOBJ_001), normalized);
+	} else {
+		snprintf(dst, dstlen, "%s", normalized);
+	}
+}
+
+static void accessibilityWeaponAnnounceDual(s32 playernum, s32 weaponnum)
+{
+	char utterance[ACCESSIBILITY_WEAPON_TEXT_MAX];
+
+	accessibilityWeaponFormatName(utterance, sizeof(utterance), weaponnum,
+			true, bgunGetName(weaponnum));
+
+	if (utterance[0]) {
+		accessibilityAnnouncementWeaponChange(utterance, "dual_wield",
+				playernum, true);
+		accessibilityLogEvent("weapon_change", "dual_announced",
+				"player=%d stage=%d weapon=%d text=%s",
+				playernum, g_Vars.stagenum, weaponnum, utterance);
+	}
+}
+
 static void accessibilityWeaponAnnounceChange(s32 playernum, s32 weaponnum,
-		s32 secondary, enum accessibilityweaponchangesource source)
+		s32 secondary, s32 dual,
+		enum accessibilityweaponchangesource source)
 {
 	struct inventory_ammo *ammo;
 	char weaponname[ACCESSIBILITY_WEAPON_TEXT_MAX];
@@ -117,12 +149,13 @@ static void accessibilityWeaponAnnounceChange(s32 playernum, s32 weaponnum,
 		hasammo = ammoname && ammoname[0];
 	}
 
-	if (source == ACCESSIBILITY_WEAPON_CHANGE_QUICK) {
+	if (source == ACCESSIBILITY_WEAPON_CHANGE_QUICK || dual) {
 		currentindex = invGetCurrentIndex();
-		name = currentindex >= 0 && currentindex < invGetCount()
+		name = !dual && currentindex >= 0 && currentindex < invGetCount()
 			? langGet(invGetNameIdByIndex(currentindex))
 			: bgunGetName(weaponnum);
-		accessibilityWeaponCopyNormalized(weaponname, sizeof(weaponname), name);
+		accessibilityWeaponFormatName(weaponname, sizeof(weaponname),
+				weaponnum, dual, name);
 		hasname = weaponname[0] != '\0';
 	}
 
@@ -141,10 +174,10 @@ static void accessibilityWeaponAnnounceChange(s32 playernum, s32 weaponnum,
 				accessibilityWeaponChangeSourceName(source), playernum,
 				source == ACCESSIBILITY_WEAPON_CHANGE_QUICK);
 		accessibilityLogEvent("weapon_change", "announced",
-				"player=%d stage=%d source=%s weapon=%d secondary=%d ammo_type=%d ammo_count=%d text=%s",
+				"player=%d stage=%d source=%s weapon=%d secondary=%d dual=%d ammo_type=%d ammo_count=%d text=%s",
 				playernum, g_Vars.stagenum,
 				accessibilityWeaponChangeSourceName(source), weaponnum,
-				secondary, ammo ? (s32)ammo->type : -1,
+				secondary, dual, ammo ? (s32)ammo->type : -1,
 				ammo ? ammocount : -1, utterance);
 	} else {
 		accessibilityLogEvent("weapon_change", "speech_suppressed",
@@ -230,9 +263,11 @@ void accessibilityWeaponQuickChangeRequested(s32 playernum,
 }
 
 void accessibilityWeaponFunctionObserve(s32 playernum, s32 stagenum,
-		s32 weaponnum, s32 secondary, const char *visiblefunctionname)
+		s32 weaponnum, s32 secondary, s32 dual,
+		const char *visiblefunctionname)
 {
 	struct accessibilityweaponfunctionstate *state;
+	s32 weaponchangeannounced = false;
 
 	if (playernum < 0 || playernum >= MAX_PLAYERS) {
 		return;
@@ -240,6 +275,7 @@ void accessibilityWeaponFunctionObserve(s32 playernum, s32 stagenum,
 
 	state = &g_AccessibilityWeaponFunctionStates[playernum];
 	secondary = secondary != 0;
+	dual = dual != 0;
 
 	if (!accessibilityIsWeaponFunctionCuesEnabled()
 			&& !accessibilityIsWeaponChangeAnnouncementsEnabled()
@@ -257,6 +293,7 @@ void accessibilityWeaponFunctionObserve(s32 playernum, s32 stagenum,
 		state->stagenum = stagenum;
 		state->weaponnum = weaponnum;
 		state->secondary = secondary;
+		state->dual = dual;
 		state->activemenuopen = activemenuopen;
 		state->activemenuselection = activemenuselection;
 		return;
@@ -265,7 +302,8 @@ void accessibilityWeaponFunctionObserve(s32 playernum, s32 stagenum,
 	if (state->pendingsource != ACCESSIBILITY_WEAPON_CHANGE_NONE) {
 		if (state->pendingweaponnum == weaponnum) {
 			accessibilityWeaponAnnounceChange(playernum, weaponnum, secondary,
-					state->pendingsource);
+					dual, state->pendingsource);
+			weaponchangeannounced = true;
 			state->pendingsource = ACCESSIBILITY_WEAPON_CHANGE_NONE;
 			state->pendingticks = 0;
 		} else if (++state->pendingticks > ACCESSIBILITY_WEAPON_PENDING_TICKS) {
@@ -280,9 +318,20 @@ void accessibilityWeaponFunctionObserve(s32 playernum, s32 stagenum,
 	}
 
 	if (state->weaponnum != weaponnum) {
+		if (accessibilityIsWeaponChangeAnnouncementsEnabled()
+				&& dual && !state->dual && !weaponchangeannounced) {
+			accessibilityWeaponAnnounceDual(playernum, weaponnum);
+		}
+
 		state->weaponnum = weaponnum;
 		state->secondary = secondary;
+		state->dual = dual;
 		return;
+	}
+
+	if (accessibilityIsWeaponChangeAnnouncementsEnabled()
+			&& dual && !state->dual) {
+		accessibilityWeaponAnnounceDual(playernum, weaponnum);
 	}
 
 	if (accessibilityIsWeaponFunctionCuesEnabled()
@@ -315,6 +364,7 @@ void accessibilityWeaponFunctionObserve(s32 playernum, s32 stagenum,
 	}
 
 	state->secondary = secondary;
+	state->dual = dual;
 }
 
 void accessibilityWeaponFunctionReset(const char *reason)
