@@ -32,6 +32,7 @@
 #define ACCESSIBILITY_CANE_TERRAIN_VERTICAL_RANGE 200.0f
 #define ACCESSIBILITY_CANE_TERRAIN_CONTOUR_RATIO 1.2f
 #define ACCESSIBILITY_CANE_DROP_CONTOUR_RATIO 1.5f
+#define ACCESSIBILITY_CANE_DROP_BARRIER_CLEARANCE_RADII 1.0f
 #define ACCESSIBILITY_CANE_CROUCH_CONTOUR_RATIO 1.5f
 #define ACCESSIBILITY_CANE_WALL_DURATION_MS 35
 #define ACCESSIBILITY_CANE_TERRAIN_DURATION_MS 140
@@ -135,6 +136,8 @@ struct accessibilitycanesample {
 	s32 terrainqueries;
 	s32 droprefinements;
 	f32 dropheightthreshold;
+	s32 dropbarriersuppressed;
+	f32 dropbarriergap;
 	s32 stancestate;
 	s32 terraintraversaltested;
 	s32 terraintraversable;
@@ -547,7 +550,7 @@ static void accessibilityCaneLogSweep(const char *reason)
 		struct accessibilitycanesample *sample = &g_AccessibilityCaneSamples[i];
 
 		accessibilityCaneAppendLog(
-				"%ss%d={angle:%d state:%s scheduled:%d actual:%d late:%d result:%d pass:%d observer:%p remote:%d vehicle:%d vehicle_speed:%.3f base_reach:%.2f effective_reach:%.2f ignored_grabbed_prop:%p ignored_vehicle_prop:%p origin:%.2f,%.2f,%.2f forward:%.5f,%.5f direction:%.5f,%.5f end:%.2f,%.2f,%.2f bbox:%.2f,%.2f,%.2f raw:%.2f,%.2f,%.2f audio:%.2f,%.2f,%.2f distance:%.2f frequency_hz:%.2f end_frequency_hz:%.2f duration_ms:%d tone_pattern:%d terrain:%d drop:%d crouch:%d ladder:%d crouch_terrain_merge:%d breakable:%d terrain_ground:%.2f terrain_height:%.2f terrain_distance:%.2f terrain_room:%d terrain_flags:0x%04x terrain_queries:%d drop_refinements:%d drop_threshold:%.2f stance:%s traversal_tested:%d traversable:%d blocked_rise:%d short_deadend:%d plateau:%d terrain_suppressed:%d surface_grade_ratio:%.5f grade_max_residual:%.3f grade_continuous:%d grade_safe:%d clearance_result:%d clearance_queries:%d clearance_distance:%.2f plateau_distance:%.2f runway:%.2f minimum_runway:%.2f crouch_result:%d crouch_pass:%d crouch_ymax:%.2f obstacle:%p type:%d geoflags:0x%08x normal:%.5f,%.5f,%.5f edge:%.2f,%.2f,%.2f,%.2f volume:%d pan:%d normalized:%.5f,%.5f master_volume:%.5f effective_volume:%.5f query_us:%" PRIu64 " probes=[",
+				"%ss%d={angle:%d state:%s scheduled:%d actual:%d late:%d result:%d pass:%d observer:%p remote:%d vehicle:%d vehicle_speed:%.3f base_reach:%.2f effective_reach:%.2f ignored_grabbed_prop:%p ignored_vehicle_prop:%p origin:%.2f,%.2f,%.2f forward:%.5f,%.5f direction:%.5f,%.5f end:%.2f,%.2f,%.2f bbox:%.2f,%.2f,%.2f raw:%.2f,%.2f,%.2f audio:%.2f,%.2f,%.2f distance:%.2f frequency_hz:%.2f end_frequency_hz:%.2f duration_ms:%d tone_pattern:%d terrain:%d drop:%d crouch:%d ladder:%d crouch_terrain_merge:%d breakable:%d terrain_ground:%.2f terrain_height:%.2f terrain_distance:%.2f terrain_room:%d terrain_flags:0x%04x terrain_queries:%d drop_refinements:%d drop_threshold:%.2f drop_barrier_suppressed:%d drop_barrier_gap:%.2f stance:%s traversal_tested:%d traversable:%d blocked_rise:%d short_deadend:%d plateau:%d terrain_suppressed:%d surface_grade_ratio:%.5f grade_max_residual:%.3f grade_continuous:%d grade_safe:%d clearance_result:%d clearance_queries:%d clearance_distance:%.2f plateau_distance:%.2f runway:%.2f minimum_runway:%.2f crouch_result:%d crouch_pass:%d crouch_ymax:%.2f obstacle:%p type:%d geoflags:0x%08x normal:%.5f,%.5f,%.5f edge:%.2f,%.2f,%.2f,%.2f volume:%d pan:%d normalized:%.5f,%.5f master_volume:%.5f effective_volume:%.5f query_us:%" PRIu64 " probes=[",
 				i ? " " : "", i, sample->angledegrees,
 				accessibilityCaneSampleStateName(sample->state),
 				sample->scheduledtick, sample->actualtick, sample->lateness,
@@ -576,6 +579,8 @@ static void accessibilityCaneLogSweep(const char *reason)
 				sample->terrainroom, sample->terrainflags,
 				sample->terrainqueries, sample->droprefinements,
 				sample->dropheightthreshold,
+				sample->dropbarriersuppressed,
+				sample->dropbarriergap,
 				accessibilityCaneStanceName(sample->stancestate),
 				sample->terraintraversaltested,
 				sample->terraintraversable, sample->terrainblockedrise,
@@ -1628,6 +1633,21 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 					|| (sample->terraintraversable
 							&& sample->terrainplateau)
 					|| sample->terrainshortdeadend;
+			/*
+			 * Floor probes can see a lower floor immediately behind a wall.
+			 * When the gap from the refined edge to the movement blocker is
+			 * narrower than the live collision radius, the player cannot reach
+			 * that edge as open space, so the barrier is the useful result.
+			 */
+			if (sample->drop && barrierdistance > sample->terraindistance) {
+				sample->dropbarriergap = barrierdistance
+						- sample->terraindistance;
+				sample->dropbarriersuppressed = sample->dropbarriergap
+						<= sample->radius
+							* ACCESSIBILITY_CANE_DROP_BARRIER_CLEARANCE_RADII;
+				terraincedes = terraincedes
+						|| sample->dropbarriersuppressed;
+			}
 			sample->terrainsuppressed = terraincedes;
 		}
 	}

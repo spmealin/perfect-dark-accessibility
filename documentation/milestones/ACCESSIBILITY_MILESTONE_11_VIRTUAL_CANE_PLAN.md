@@ -21,7 +21,10 @@ as an ordinary barrier. Follow-up captures showed the same ambiguity for short
 declines ending at walls. Non-drop terrain in either direction now requires at
 least two live player diameters of usable runway before a detected barrier;
 shorter pockets report the terminal barrier instead. These refinements await
-project-owner runtime acceptance.
+project-owner runtime acceptance. A 2026-09-04 capture found lower floor only
+two units beyond a wall collision, causing an inaccessible drop to win by
+distance. Refined drops now cede to a barrier within one live player collision
+radius of their edge, while open ledges and wider gaps retain drop priority.
 See the root `ACCESSIBILITY.md`, `ACCESSIBILITY_ROADMAP.md`,
 and `ACCESSIBILITY_TESTING.md` for current behavior and status.
 
