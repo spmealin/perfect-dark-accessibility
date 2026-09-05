@@ -15,6 +15,9 @@ void accessibilityInit(void);
 void accessibilityShutdown(void);
 void accessibilityPerformanceTick(void);
 void accessibilityPerformanceShutdown(void);
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+void accessibilityPerformanceRecordGameplayTime(u64 elapsed);
+#endif
 s32 accessibilityIsEnabled(void);
 s32 accessibilityIsEnvironmentalHazardsEnabled(void);
 s32 accessibilityIsHudMessagesEnabled(void);

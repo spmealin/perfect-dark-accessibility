@@ -19,6 +19,8 @@ its established path.
 
 Current feature-specific engineering records include:
 
+- `ACCESSIBILITY_CANE_QUERY_PROFILING.md` — structured cane observations,
+  evidence versus audible policy, replay verification, and timing scopes.
 - `ACCESSIBILITY_SPECIAL_DEVICE_TARGET_AUDIT.md` — campaign setup inventory,
   target-tag coverage, deliberate exclusions, and maintenance rules for
   special-device lock tones.

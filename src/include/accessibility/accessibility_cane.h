@@ -10,6 +10,25 @@ void accessibilityCaneObserveHoverbikeMove(struct coord *requestedvelocity,
 		s32 result);
 
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+/* Per-window counters; tick includes queries, scheduling, audio commands and logs. */
+struct accessibilitycaneprofile {
+	u64 tickcalls;
+	u64 tickus;
+	u64 tickmaxus;
+	u64 querycalls;
+	u64 observationus;
+	u64 evaluationus;
+	u64 publishus;
+	u64 logus;
+	u64 logmaxus;
+	u64 unknownrises;
+	u64 blockedrises;
+	u64 clearrises;
+	u64 queryerrors;
+};
+
+void accessibilityCaneTakeProfile(struct accessibilitycaneprofile *profile);
+
 struct accessibilitycanediagnostics {
 	u64 queries;
 	u64 hits;

@@ -540,6 +540,15 @@ For the current Carrington Institute firing-range proof, first verify that the p
 
 #### Virtual cane prototype
 
+The structured-result migration preserves existing sounds and sensor queries.
+Use `documentation/ACCESSIBILITY_CANE_QUERY_PROFILING.md` for standalone fixture
+and captured-log replay commands, reason/evidence fields, and per-window timing
+interpretation. Session `1788562366` replayed 14,718 decisions without mismatch;
+this proves decision compatibility on recorded inputs, not a connected-route
+model or blind-user acceptance. Next-run validation must inspect
+`performance/cane_window` and `performance/gameplay_accessibility_window` along
+with frame gaps, and distinguish unknown clearance from confirmed collisions.
+
 Confirm the effective session-start record contains `virtual_cane_mode=1`, `cane_volume=0.1840`, and the expected remaining cane and enemy tuning fields. During unobscured single-player walking gameplay, press F4 repeatedly and verify the order is Slow to Fast to Off to Slow. Slow must play 880 Hz then 1320 Hz, Fast must be 880 Hz followed by two 1320 Hz beeps, and Off must be 880 Hz then 440 Hz; each beep lasts 35 ms with a 25 ms gap, and there must be no speech. Correlate each change with one `cane/command` record containing the selected mode and earcon fields. Left Alt+F4 and Right Alt+F4 must not change cane state or play an earcon; if the operating system leaves the game running, releasing Alt while F4 remains held must not produce a delayed mode change. Grab and move a pushable crate and confirm the barrier sweep and F4 command continue without a `cane/scope` loss. Each completed sample must log the carried crate as `ignored_grabbed_prop` and must describe geometry beyond it rather than returning that prop as `obstacle`; a different nearby crate must remain detectable. Release it and confirm ordinary walking-only terrain and crouch classification resume. Menus, pause, cutscenes, death, movement modes other than walking, grabbed-object movement, hoverbike movement, or CamSpy, and multiplayer must suppress the command and stop all cane audio.
 
 Mount a hoverbike with the cane in Slow and Fast modes. The partial walking

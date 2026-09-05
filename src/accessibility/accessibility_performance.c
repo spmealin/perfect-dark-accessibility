@@ -84,6 +84,45 @@ static s32 g_AccessibilityGraphicsEpisodeId;
 static s32 g_AccessibilityGraphicsConsecutiveSlow;
 static s32 g_AccessibilityGraphicsRecoveryWindows;
 static s32 g_AccessibilityGraphicsMetadataLogged;
+static u64 g_AccessibilityGameplayCalls;
+static u64 g_AccessibilityGameplayUs;
+static u64 g_AccessibilityGameplayMaxUs;
+
+void accessibilityPerformanceRecordGameplayTime(u64 elapsed)
+{
+	g_AccessibilityGameplayCalls++;
+	g_AccessibilityGameplayUs += elapsed;
+	if (elapsed > g_AccessibilityGameplayMaxUs) {
+		g_AccessibilityGameplayMaxUs = elapsed;
+	}
+}
+
+static void accessibilityPerformanceLogCane(u64 elapsed, f64 renderfps)
+{
+	struct accessibilitycaneprofile profile;
+	accessibilityCaneTakeProfile(&profile);
+	accessibilityLogEvent("performance", "cane_window",
+			"version=1 window_us=%" PRIu64 " stage=%d menu_count=%d render_fps=%.3f mode=%d tick_calls=%" PRIu64 " tick_total_us=%" PRIu64 " tick_max_us=%" PRIu64 " query_calls=%" PRIu64 " observation_total_us=%" PRIu64 " evaluation_total_us=%" PRIu64 " publish_total_us=%" PRIu64 " sweep_log_total_us=%" PRIu64 " sweep_log_max_us=%" PRIu64 " rise_unknown=%" PRIu64 " rise_blocked=%" PRIu64 " rise_clear=%" PRIu64 " query_errors=%" PRIu64 " result_policy=legacy query_mode=existing_samples",
+			(uint64_t)elapsed, mainGetStageNum(), g_MenuData.count, renderfps,
+			accessibilityGetVirtualCaneMode(), (uint64_t)profile.tickcalls,
+			(uint64_t)profile.tickus, (uint64_t)profile.tickmaxus,
+			(uint64_t)profile.querycalls, (uint64_t)profile.observationus,
+			(uint64_t)profile.evaluationus, (uint64_t)profile.publishus,
+			(uint64_t)profile.logus, (uint64_t)profile.logmaxus,
+			(uint64_t)profile.unknownrises, (uint64_t)profile.blockedrises,
+			(uint64_t)profile.clearrises, (uint64_t)profile.queryerrors);
+	/* Inclusive of cane and synchronous logs, exclusive of lvTick/render/audio. */
+	accessibilityLogEvent("performance", "gameplay_accessibility_window",
+			"window_us=%" PRIu64 " stage=%d menu_count=%d render_fps=%.3f calls=%" PRIu64 " total_us=%" PRIu64 " max_us=%" PRIu64 " wall_time_percent=%.5f scope=post_lvTick_adapters",
+			(uint64_t)elapsed, mainGetStageNum(), g_MenuData.count, renderfps,
+			(uint64_t)g_AccessibilityGameplayCalls,
+			(uint64_t)g_AccessibilityGameplayUs,
+			(uint64_t)g_AccessibilityGameplayMaxUs,
+			elapsed ? (f64)g_AccessibilityGameplayUs * 100.0 / (f64)elapsed : 0.0);
+	g_AccessibilityGameplayCalls = 0;
+	g_AccessibilityGameplayUs = 0;
+	g_AccessibilityGameplayMaxUs = 0;
+}
 
 static void accessibilityGraphicsWindowAddPhase(u64 value, u64 *total,
 		u64 *maximum)
@@ -484,6 +523,11 @@ void accessibilityPerformanceTick(void)
 	now = sysGetMicroseconds();
 
 	if (g_AccessibilityPerformanceWindowStartUs == 0) {
+		struct accessibilitycaneprofile discarded;
+		accessibilityCaneTakeProfile(&discarded);
+		g_AccessibilityGameplayCalls = 0;
+		g_AccessibilityGameplayUs = 0;
+		g_AccessibilityGameplayMaxUs = 0;
 		g_AccessibilityPerformanceWindowStartUs = now;
 		g_AccessibilityPerformancePreviousFrameUs = now;
 		g_AccessibilityPerformanceStartLvFrame60 = g_Vars.lvframe60;
@@ -525,6 +569,7 @@ void accessibilityPerformanceTick(void)
 	accessibilityToneGetDiagnostics(&tone);
 	accessibilityCaneGetDiagnostics(&cane);
 	accessibilityTargetingGetDiagnostics(&targeting);
+	accessibilityPerformanceLogCane(elapsed, renderfps);
 	accessibilityLogEvent("performance", "frame_window",
 			"window_us=%" PRIu64 " render_frames=%d render_fps=%.3f max_frame_gap_us=%" PRIu64 " game_ticks=%d game_tick_rate=%.3f stage=%d lvframe60=%d diffframe60=%d lvupdate60=%d tickmode=%d menu_count=%d memory_available=%d working_set_bytes=%" PRIu64 " working_set_delta=%lld private_bytes=%" PRIu64 " private_delta=%lld tone_enabled=%d chirp_enabled=%d chirp_sequence=%d weapon_function_sequence=%d weapon_function_pulses=%d hazard_enabled=%d combat_enabled_slots=%d tracker_enabled_slots=%d friendly_enabled_slots=%d door_enabled_slots=%d radar_enabled=%d radar_sequence=%d hill_enabled=%d marker_enabled_slots=%d landmark_enabled_slots=%d cane_mode=%d cane_requested_mask=0x%x cane_active_mask=0x%x cane_commands_delta=%d cane_tones_started_delta=%d cane_stops_delta=%d cane_queries_delta=%" PRIu64 " cane_hits_delta=%" PRIu64 " cane_misses_delta=%" PRIu64 " cane_skipped_delta=%" PRIu64 " cane_sweeps_delta=%" PRIu64 " cane_missed_cycles_delta=%" PRIu64 " cane_query_us_delta=%" PRIu64 " cane_query_max_us=%" PRIu64 " hazard_frequency_millihz=%d hazard_volume_millionths=%d hazard_pan_millionths=%d mixer_calls_delta=%d mixer_passthrough_delta=%d mixer_active_delta=%d mixer_frames_delta=%d mixer_calls_total=%d mixer_active_total=%d",
 			(uint64_t)elapsed, g_AccessibilityPerformanceFrames, renderfps,

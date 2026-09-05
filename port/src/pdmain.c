@@ -567,12 +567,18 @@ void mainTick(void)
 		schedSetCrashEnable2(false);
 
 		if (g_MainGameLogicEnabled) {
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+			u64 accessibilitystart;
+#endif
 			gdl = gdlstart = gfxGetMasterDisplayList();
 
 			gDPSetTile(gdl++, G_IM_FMT_RGBA, G_IM_SIZ_16b, 0, 0x0000, G_TX_LOADTILE, 0, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOLOD);
 			gDPSetTile(gdl++, G_IM_FMT_RGBA, G_IM_SIZ_4b, 0, 0x0100, 6, 0, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOLOD);
 
 			lvTick();
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+			accessibilitystart = sysGetMicroseconds();
+#endif
 			accessibilityBeaconTick();
 			accessibilityCaneTick();
 			accessibilityCompassTick();
@@ -585,6 +591,10 @@ void mainTick(void)
 			accessibilityStanceTick();
 			accessibilityTrackerTick();
 			accessibilityIncidentTick();
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+			accessibilityPerformanceRecordGameplayTime(
+					sysGetMicroseconds() - accessibilitystart);
+#endif
 			playermgrShuffle();
 
 			if (g_StageNum < STAGE_TITLE) {
