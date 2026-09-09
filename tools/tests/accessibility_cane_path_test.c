@@ -49,14 +49,20 @@ int main(void)
 	accessibilityCaneTracePath(&input, &queries, &result);
 	assert(result.stop == ACCESSIBILITY_CANE_PATH_RANGE && result.count == 7);
 	assert(result.cue == ACCESSIBILITY_CANE_CUE_NONE);
-	assert(accessibilityCaneValidateDrop(&result, 90) == ACCESSIBILITY_CANE_DROP_FALLBACK);
+	assert(accessibilityCaneValidateDrop(&result, 90, 60)
+			== ACCESSIBILITY_CANE_DROP_FALLBACK);
+	assert(accessibilityCaneValidateTerrain(&result, 120)
+			== ACCESSIBILITY_CANE_TERRAIN_CONNECTED_FLAT);
 	f.stair = -17;
 	accessibilityCaneTracePath(&input, &queries, &result);
 	assert(result.stop == ACCESSIBILITY_CANE_PATH_RANGE);
 	assert(result.cue == ACCESSIBILITY_CANE_CUE_TERRAIN && result.direction == -1);
+	assert(result.cuedelta == -17);
 	assert(result.finaldelta == -102);
-	assert(accessibilityCaneValidateDrop(&result, 90)
+	assert(accessibilityCaneValidateDrop(&result, 90, 60)
 			== ACCESSIBILITY_CANE_DROP_CONNECTED_DESCENT);
+	assert(accessibilityCaneValidateTerrain(&result, 120)
+			== ACCESSIBILITY_CANE_TERRAIN_CONFIRMED);
 	f.stair = 17;
 	accessibilityCaneTracePath(&input, &queries, &result);
 	assert(result.stop == ACCESSIBILITY_CANE_PATH_RANGE && result.direction == 1);
@@ -65,22 +71,41 @@ int main(void)
 	accessibilityCaneTracePath(&input, &queries, &result);
 	assert(result.stop == ACCESSIBILITY_CANE_PATH_EDGE);
 	assert(fabsf(result.cuedistance - 77) < 1 && result.edgewidth < 1);
-	assert(accessibilityCaneValidateDrop(&result, 90)
+	assert(accessibilityCaneValidateDrop(&result, 90, 60)
 			== ACCESSIBILITY_CANE_DROP_CONFIRMED_EDGE);
+	assert(accessibilityCaneValidateTerrain(&result, 120)
+			== ACCESSIBILITY_CANE_TERRAIN_EDGE);
 	f.edge = 10000;
 	f.wall = 70;
 	accessibilityCaneTracePath(&input, &queries, &result);
 	assert(result.stop == ACCESSIBILITY_CANE_PATH_WALL);
-	assert(accessibilityCaneValidateDrop(&result, 100)
+	assert(accessibilityCaneValidateDrop(&result, 100, 60)
 			== ACCESSIBILITY_CANE_DROP_BARRIER_FIRST);
-	assert(accessibilityCaneValidateDrop(&result, 80)
+	assert(accessibilityCaneValidateDrop(&result, 80, 60)
 			== ACCESSIBILITY_CANE_DROP_FALLBACK); /* Same unresolved segment. */
+	assert(accessibilityCaneValidateTerrain(&result, 120)
+			== ACCESSIBILITY_CANE_TERRAIN_BARRIER_FIRST);
 	f.stair = -17;
 	f.wall = 150;
 	accessibilityCaneTracePath(&input, &queries, &result);
 	assert(result.stop == ACCESSIBILITY_CANE_PATH_WALL && result.reached == 120);
-	assert(accessibilityCaneValidateDrop(&result, 90)
+	assert(accessibilityCaneValidateTerrain(&result, 60)
+			== ACCESSIBILITY_CANE_TERRAIN_CONFIRMED);
+	assert(accessibilityCaneValidateDrop(&result, 200, 60)
 			== ACCESSIBILITY_CANE_DROP_CONNECTED_DESCENT);
+	assert(accessibilityCaneValidateDrop(&result, 90, 120)
+			== ACCESSIBILITY_CANE_DROP_FALLBACK);
+	assert(accessibilityCaneValidateTerrain(&result, 120)
+			== ACCESSIBILITY_CANE_TERRAIN_BARRIER_FIRST);
+	f.wall = 180;
+	accessibilityCaneTracePath(&input, &queries, &result);
+	assert(result.stop == ACCESSIBILITY_CANE_PATH_WALL && result.reached == 150);
+	/* Sustained connected descent wins even when a farther wall lies before
+	 * the legacy probe's reported drop position. */
+	assert(accessibilityCaneValidateDrop(&result, 200, 120)
+			== ACCESSIBILITY_CANE_DROP_CONNECTED_DESCENT);
+	assert(accessibilityCaneValidateTerrain(&result, 120)
+			== ACCESSIBILITY_CANE_TERRAIN_CONFIRMED);
 	f.wall = 10000;
 	f.edge = 10000;
 	f.stair = 17;
@@ -88,6 +113,8 @@ int main(void)
 	accessibilityCaneTracePath(&input, &queries, &result);
 	assert(result.stop == ACCESSIBILITY_CANE_PATH_RANGE);
 	assert(result.cue == ACCESSIBILITY_CANE_CUE_CROUCH && result.requiredheight == 80);
+	assert(accessibilityCaneValidateTerrain(&result, 120)
+			== ACCESSIBILITY_CANE_TERRAIN_FALLBACK);
 	input.height = 80;
 	accessibilityCaneTracePath(&input, &queries, &result);
 	assert(result.cue == ACCESSIBILITY_CANE_CUE_TERRAIN);
@@ -102,6 +129,8 @@ int main(void)
 	f.failafter = 4;
 	accessibilityCaneTracePath(&input, &queries, &result);
 	assert(result.stop == ACCESSIBILITY_CANE_PATH_UNCERTAIN);
+	assert(accessibilityCaneValidateTerrain(&result, 120)
+			== ACCESSIBILITY_CANE_TERRAIN_FALLBACK);
 	f.failafter = 10000;
 	input.reach = 5000;
 	accessibilityCaneTracePath(&input, &queries, &result);

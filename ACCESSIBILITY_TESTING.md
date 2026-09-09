@@ -543,12 +543,17 @@ For the current Carrington Institute firing-range proof, first verify that the p
 
 #### Virtual cane prototype
 
-The structured-result migration preserves production sensor queries and all
-non-drop sounds. A legacy drop now receives a bounded connected-floor check
-before output: confirmed edge remains a drop, an earlier barrier becomes a wall
-cue, connected descent becomes downward terrain, and uncertainty retains the
-drop. With performance diagnostics ON, the same query also runs for non-drop
-walking samples for comparison.
+The structured-result migration retains the legacy collision/floor evidence as
+a fallback and adds a bounded connected-floor check to every supported walking
+ray. For drops, a confirmed edge remains a drop, an earlier barrier becomes a
+wall cue, connected descent becomes downward terrain, and uncertainty retains
+the legacy drop. For ordinary terrain, a connected transition must reach full
+range or retain two player radii of verified continuation before a later wall.
+A nearer wall wins, a proven flat route suppresses the terrain cue, and an edge
+becomes a drop. A sustained descent must remain terrain when a legacy drop
+probe looked through it to a later wall; a transition with less than two radii
+of continuation must still yield to that wall. Uncertain, crouch, ladder,
+CamSpy, grabbed-object, and vehicle results retain established behavior.
 Inspect `cane/path_shadow` and `performance/cane_path_window`: staircases must
 not become drops merely from accumulated descent; walls must bound connected
 progress; lower passages must record the required stance; elevator support
@@ -557,7 +562,8 @@ interpreted as proof of a clear path. At the CI elevator false-positive site,
 the barrier must replace the former drop. A genuine edge must retain the drop;
 stairs down must use downward terrain; elevator motion must not become a drop.
 Capture ambiguous output with Shift+F2 and correlate `drop_validation`,
-`legacy_drop_distance`, `stop_distance`, `reached`, `budget`, and `blocker`.
+`terrain_validation`, `legacy_drop_distance`, `cue_distance`, `cue_delta`,
+`stop_distance`, `reached`, `budget`, and `blocker`.
 DataDyne Central: Defection session `1788970498` supplies post-adoption
 native-engine evidence for genuine large edges; broader blind-user validation
 of the revised drop policy remains pending.

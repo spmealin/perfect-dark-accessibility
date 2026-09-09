@@ -55,6 +55,7 @@
 #define ACCESSIBILITY_CANE_GRADE_VOLUME_RATIO 0.55f
 #define ACCESSIBILITY_CANE_GRADE_DURATION_MS 140
 #define ACCESSIBILITY_CANE_TERRAIN_MIN_RUNWAY_RADII 4.0f
+#define ACCESSIBILITY_CANE_PATH_TERRAIN_MIN_RUNWAY_RADII 2.0f
 #define ACCESSIBILITY_CANE_SLOW_CYCLE_TICKS TICKS(120)
 #define ACCESSIBILITY_CANE_FAST_CYCLE_TICKS TICKS(60)
 #define ACCESSIBILITY_CANE_LOG_BUFFER_SIZE 32768
@@ -177,7 +178,9 @@ struct accessibilitycanesample {
 	u64 queryus;
 	struct accessibilitycaneresult evaluation;
 	struct accessibilitycanepathdiagnostic pathdiagnostic;
+	s32 legacycue;
 	s32 dropvalidation;
+	s32 terrainvalidation;
 	f32 legacydropdistance;
 	f32 legacydropheight;
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
@@ -282,6 +285,9 @@ static struct accessibilitycanegradestate g_AccessibilityCaneGrade;
 static struct accessibilitycaneprofile g_AccessibilityCaneProfile;
 #endif
 
+static void accessibilityCaneEvaluateSample(struct accessibilitycanesample *sample,
+		f32 barrierdistance, s32 terrainfound, s32 crouchfound);
+
 static enum accessibilitycaneevidence accessibilityCaneEvidence(s32 result)
 {
 	return result == CDRESULT_COLLISION ? ACCESSIBILITY_CANE_BLOCKED
@@ -302,6 +308,18 @@ static const char *accessibilityCaneDropValidationName(s32 validation)
 	case ACCESSIBILITY_CANE_DROP_BARRIER_FIRST: return "barrier_first";
 	case ACCESSIBILITY_CANE_DROP_CONNECTED_DESCENT: return "connected_descent";
 	case ACCESSIBILITY_CANE_DROP_FALLBACK: return "fallback";
+	default: return "not_run";
+	}
+}
+
+static const char *accessibilityCaneTerrainValidationName(s32 validation)
+{
+	switch (validation) {
+	case ACCESSIBILITY_CANE_TERRAIN_CONFIRMED: return "confirmed";
+	case ACCESSIBILITY_CANE_TERRAIN_BARRIER_FIRST: return "barrier_first";
+	case ACCESSIBILITY_CANE_TERRAIN_CONNECTED_FLAT: return "connected_flat";
+	case ACCESSIBILITY_CANE_TERRAIN_EDGE: return "edge";
+	case ACCESSIBILITY_CANE_TERRAIN_FALLBACK: return "fallback";
 	default: return "not_run";
 	}
 }
@@ -653,13 +671,14 @@ static void accessibilityCaneLogSweep(const char *reason)
 				sample->normalizedpan, sample->mastervolume,
 				sample->effectivevolume, (uint64_t)sample->queryus);
 		accessibilityCaneAppendLog(
-				" evidence_version:1 barrier_evidence:%s barrier_distance:%.2f rise_clearance:%s decision_reasons:0x%x selected_cue:%d selected_source:%d drop_validation:%s legacy_drop_distance:%.2f legacy_drop_height:%.2f",
+				" evidence_version:2 barrier_evidence:%s barrier_distance:%.2f rise_clearance:%s decision_reasons:0x%x selected_cue:%d selected_source:%d drop_validation:%s terrain_validation:%s legacy_drop_distance:%.2f legacy_drop_height:%.2f",
 				accessibilityCaneEvidenceName(sample->evaluation.observation.barrier),
 				sample->evaluation.observation.barrierdistance,
 				accessibilityCaneEvidenceName(sample->evaluation.riseclearance),
 				sample->evaluation.reasons, sample->evaluation.cue,
 				sample->evaluation.source,
 				accessibilityCaneDropValidationName(sample->dropvalidation),
+				accessibilityCaneTerrainValidationName(sample->terrainvalidation),
 				sample->legacydropdistance, sample->legacydropheight);
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 		accessibilityCaneAppendLog(" evaluation_us:%" PRIu64 " publish_us:%" PRIu64,
@@ -698,19 +717,20 @@ static void accessibilityCaneLogSweep(const char *reason)
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 	/* Separate aggregate avoids truncating the existing full observation record. */
 	g_AccessibilityCaneLogBuffer[0] = '\0';
-	accessibilityCaneAppendLog("version=1 id=%d policy=shadow stage=%d player=%d details=",
+	accessibilityCaneAppendLog("version=2 id=%d policy=active_terrain stage=%d player=%d details=",
 			g_AccessibilityCaneSweepId, g_Vars.stagenum, g_Vars.currentplayernum);
 	for (i = 0; i < ACCESSIBILITY_CANE_PROBE_COUNT; i++) {
 		struct accessibilitycanesample *sample = &g_AccessibilityCaneSamples[i];
 		struct accessibilitycanepathdiagnostic *diag = &sample->pathdiagnostic;
 		struct accessibilitycanepathresult *path = &diag->path;
 		s32 j;
-		accessibilityCaneAppendLog(" s%d={stop:%d cue:%d legacy:%d audible:%d validation:%s direction:%d cue_distance:%.2f stop_distance:%.2f reached:%.2f delta:%.2f edge_width:%.2f height:%.2f count:%d refinements:%d queries:%d floors:%d moves:%d errors:%d budget:%d us:%" PRIu64 " nodes:[",
+		accessibilityCaneAppendLog(" s%d={stop:%d cue:%d legacy:%d audible:%d validation:%s terrain_validation:%s direction:%d cue_distance:%.2f cue_delta:%.2f stop_distance:%.2f reached:%.2f delta:%.2f edge_width:%.2f height:%.2f count:%d refinements:%d queries:%d floors:%d moves:%d errors:%d budget:%d us:%" PRIu64 " nodes:[",
 				i, path->stop, path->cue,
-				sample->dropvalidation ? ACCESSIBILITY_CANE_CUE_DROP : sample->evaluation.cue,
+				sample->legacycue,
 				sample->evaluation.cue,
-				accessibilityCaneDropValidationName(sample->dropvalidation), path->direction,
-				path->cuedistance, path->stopdistance, path->reached,
+				accessibilityCaneDropValidationName(sample->dropvalidation),
+				accessibilityCaneTerrainValidationName(sample->terrainvalidation), path->direction,
+				path->cuedistance, path->cuedelta, path->stopdistance, path->reached,
 				path->finaldelta, path->edgewidth,
 				path->requiredheight, path->count, path->refinements, diag->queries,
 				diag->floorqueries, diag->movequeries, diag->errors, diag->budget,
@@ -774,7 +794,8 @@ static void accessibilityCaneApplyDropValidation(
 	sample->legacydropdistance = sample->terraindistance;
 	sample->legacydropheight = sample->terrainheight;
 	sample->dropvalidation = accessibilityCaneValidateDrop(path,
-			sample->legacydropdistance);
+			sample->legacydropdistance, sample->radius
+					* ACCESSIBILITY_CANE_PATH_TERRAIN_MIN_RUNWAY_RADII);
 	if (sample->dropvalidation == ACCESSIBILITY_CANE_DROP_FALLBACK) return;
 	distance = path->cuedistance;
 	if (sample->dropvalidation == ACCESSIBILITY_CANE_DROP_CONFIRMED_EDGE) {
@@ -813,6 +834,124 @@ static void accessibilityCaneApplyDropValidation(
 		sample->evaluation.observation.terraindistance = distance;
 		sample->evaluation.cue = ACCESSIBILITY_CANE_CUE_TERRAIN;
 		sample->evaluation.source = ACCESSIBILITY_CANE_SOURCE_TERRAIN;
+	}
+}
+
+static void accessibilityCaneSetPathPosition(
+		struct accessibilitycanesample *sample,
+		const struct accessibilityobserver *observer, f32 distance)
+{
+	sample->audiosource.x = observer->origin.x + sample->direction.x * distance;
+	sample->audiosource.y = observer->camera.y;
+	sample->audiosource.z = observer->origin.z + sample->direction.z * distance;
+}
+
+static void accessibilityCaneSelectPathBarrier(
+		struct accessibilitycanesample *sample,
+		const struct accessibilityobserver *observer,
+		f32 *barrierdistance, s32 *result, s32 crouchfound)
+{
+	struct accessibilitycanepathdiagnostic *diag = &sample->pathdiagnostic;
+	f32 distance = diag->path.stopdistance;
+
+	/* Preserve the original sweep's exact contact when it agrees with the
+	 * connected segment. Otherwise use the first blocked path step. */
+	if (*result == CDRESULT_COLLISION && *barrierdistance > 0.0f
+			&& *barrierdistance <= distance + sample->radius) {
+		distance = *barrierdistance;
+	} else {
+		*result = CDRESULT_COLLISION;
+		sample->result = CDRESULT_COLLISION;
+		sample->obstacle = (struct prop *)diag->blocker;
+		sample->obstacletype = sample->obstacle ? sample->obstacle->type : -1;
+		sample->geoflags = 0;
+		memset(&sample->normal, 0, sizeof(sample->normal));
+		memset(&sample->edge1, 0, sizeof(sample->edge1));
+		memset(&sample->edge2, 0, sizeof(sample->edge2));
+		sample->rawhit.x = observer->origin.x + sample->direction.x * distance;
+		sample->rawhit.y = observer->camera.y;
+		sample->rawhit.z = observer->origin.z + sample->direction.z * distance;
+	}
+
+	*barrierdistance = distance;
+	sample->drop = false;
+	sample->terrain = 0;
+	accessibilityCaneEvaluateSample(sample, distance, false, crouchfound);
+}
+
+static void accessibilityCaneApplyTerrainValidation(
+		struct accessibilitycanesample *sample,
+		const struct accessibilityobserver *observer,
+		f32 *barrierdistance, s32 *result,
+		s32 legacyterrainfound, s32 crouchfound)
+{
+	struct accessibilitycanepathresult *path = &sample->pathdiagnostic.path;
+	f32 minimumrunway = sample->radius
+			* ACCESSIBILITY_CANE_PATH_TERRAIN_MIN_RUNWAY_RADII;
+	f32 distance;
+
+	if (sample->dropvalidation != ACCESSIBILITY_CANE_DROP_NOT_RUN
+			|| sample->evaluation.cue == ACCESSIBILITY_CANE_CUE_LADDER
+			|| sample->evaluation.cue == ACCESSIBILITY_CANE_CUE_CROUCH
+			|| (sample->geoflags
+				& (GEOFLAG_LADDER | GEOFLAG_LADDER_PLAYERONLY)) != 0
+			|| (!legacyterrainfound
+				&& path->cue != ACCESSIBILITY_CANE_CUE_TERRAIN)) {
+		return;
+	}
+
+	sample->terrainvalidation = accessibilityCaneValidateTerrain(path,
+			minimumrunway);
+	switch (sample->terrainvalidation) {
+	case ACCESSIBILITY_CANE_TERRAIN_CONFIRMED:
+		distance = path->cuedistance;
+		sample->drop = false;
+		sample->terrain = path->direction;
+		sample->terrainheight = path->cuedelta;
+		sample->terraindistance = distance;
+		sample->terraintraversaltested = true;
+		sample->terrainclearanceresult = CDRESULT_NOCOLLISION;
+		sample->terrainclearancequeries = 1;
+		sample->terrainclearancedistance = path->reached;
+		accessibilityCaneSetPathPosition(sample, observer, distance);
+		accessibilityCaneEvaluateSample(sample, *barrierdistance, true,
+				crouchfound);
+		/* Connected clearance and runway supersede the legacy local-plane
+		 * ceding heuristics for this terrain cue. */
+		sample->evaluation.cue = ACCESSIBILITY_CANE_CUE_TERRAIN;
+		sample->evaluation.source = ACCESSIBILITY_CANE_SOURCE_TERRAIN;
+		sample->evaluation.terraincedes = false;
+		sample->evaluation.shortdeadend = false;
+		sample->terraintraversable = true;
+		sample->terrainblockedrise = false;
+		sample->terrainshortdeadend = false;
+		sample->terrainsuppressed = false;
+		sample->terrainrunway = path->reached - path->cuedistance;
+		if (sample->terrainrunway < 0.0f) sample->terrainrunway = 0.0f;
+		break;
+	case ACCESSIBILITY_CANE_TERRAIN_BARRIER_FIRST:
+		accessibilityCaneSelectPathBarrier(sample, observer,
+				barrierdistance, result, crouchfound);
+		break;
+	case ACCESSIBILITY_CANE_TERRAIN_CONNECTED_FLAT:
+		if (legacyterrainfound) {
+			sample->drop = false;
+			sample->terrain = 0;
+			accessibilityCaneEvaluateSample(sample, *barrierdistance,
+					false, crouchfound);
+		}
+		break;
+	case ACCESSIBILITY_CANE_TERRAIN_EDGE:
+		distance = path->cuedistance;
+		sample->drop = true;
+		sample->terrain = -2;
+		sample->terrainheight = -sample->dropheightthreshold;
+		sample->terraindistance = distance;
+		accessibilityCaneSetPathPosition(sample, observer, distance);
+		accessibilityCaneEvaluateSample(sample, *barrierdistance, true, false);
+		break;
+	default:
+		break;
 	}
 }
 
@@ -1861,15 +2000,12 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 	}
 #endif
 
-#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+	sample->legacycue = sample->evaluation.cue;
 	accessibilityCaneRunPathQuery(sample, &query.observer);
-#else
-	if (sample->evaluation.cue == ACCESSIBILITY_CANE_CUE_DROP) {
-		accessibilityCaneRunPathQuery(sample, &query.observer);
-	}
-#endif
 	accessibilityCaneApplyDropValidation(sample, &query.observer,
 			&barrierdistance, &result);
+	accessibilityCaneApplyTerrainValidation(sample, &query.observer,
+			&barrierdistance, &result, terrainfound, crouchfound);
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 	querystart = sysGetMicroseconds();
 #endif

@@ -414,10 +414,17 @@ independent barrier and raised-position clearance evidence, policy reasons,
 and the selected cue/source; zero clearance queries mean unknown, while the
 legacy barrier fallback remains audible. Under the existing performance flag,
 a separate fixed-storage `accessibility_cane_path` evaluator and native query
-adapter now sample bounded connected walking-floor profiles. Only when the
-legacy result is a drop may a confirmed edge refine it, a proven earlier wall
-replace it with a barrier, or a connected descent replace it with terrain.
-Every other cue and every uncertain result retains legacy policy. The adapter
+adapter now sample bounded connected walking-floor profiles for every supported
+walking ray. A legacy drop may be refined by a confirmed edge, replaced by a
+proven earlier wall, or replaced by connected descending terrain. Ordinary
+up/down output now requires a connected transition followed by either full
+terrain reach or two player radii of verified continuation before a later wall.
+A nearer wall supersedes the transition, a proven flat route suppresses a
+legacy terrain candidate, and a connected edge upgrades one to a drop. A
+validated descent also takes precedence when the legacy probe looked beyond it
+and misclassified a later wall as a drop. Crouch, ladder,
+vehicle, remote-observer, unsupported, and uncertain results retain legacy
+policy. The adapter
 does not change player movement. Unknown/budget termination, support identity,
 stance clearance, edge brackets, and query costs are logged for comparison. Per-window
 timers distinguish observation, decision, publication, sweep logging, full cane

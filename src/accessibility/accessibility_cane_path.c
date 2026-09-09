@@ -4,25 +4,65 @@
 
 enum accessibilitycanedropvalidation accessibilityCaneValidateDrop(
 		const struct accessibilitycanepathresult *result,
-		float legacydropdistance)
+		float legacydropdistance, float minimumrunway)
 {
 	if (result->stop == ACCESSIBILITY_CANE_PATH_EDGE
 			&& result->cue == ACCESSIBILITY_CANE_CUE_DROP) {
 		return ACCESSIBILITY_CANE_DROP_CONFIRMED_EDGE;
+	}
+	/* The legacy vertical probe can look beyond a real connected slope and
+	 * report the later wall as a drop. Preserve the nearer traversable terrain
+	 * when it has the same sustained-runway proof required for an ordinary
+	 * path cue. */
+	if (result->cue == ACCESSIBILITY_CANE_CUE_TERRAIN
+			&& result->direction < 0
+			&& accessibilityCaneValidateTerrain(result, minimumrunway)
+					== ACCESSIBILITY_CANE_TERRAIN_CONFIRMED) {
+		return ACCESSIBILITY_CANE_DROP_CONNECTED_DESCENT;
 	}
 	if (result->stop == ACCESSIBILITY_CANE_PATH_WALL
 			&& result->stopdistance > 0
 			&& result->stopdistance <= legacydropdistance) {
 		return ACCESSIBILITY_CANE_DROP_BARRIER_FIRST;
 	}
-	if ((result->stop == ACCESSIBILITY_CANE_PATH_RANGE
-				|| (result->stop == ACCESSIBILITY_CANE_PATH_WALL
-					&& result->reached >= legacydropdistance))
-			&& result->cue == ACCESSIBILITY_CANE_CUE_TERRAIN
-			&& result->direction < 0) {
-		return ACCESSIBILITY_CANE_DROP_CONNECTED_DESCENT;
-	}
 	return ACCESSIBILITY_CANE_DROP_FALLBACK;
+}
+
+enum accessibilitycaneterrainvalidation accessibilityCaneValidateTerrain(
+		const struct accessibilitycanepathresult *result,
+		float minimumrunway)
+{
+	float runway;
+
+	if (!isfinite(minimumrunway) || minimumrunway < 0) {
+		return ACCESSIBILITY_CANE_TERRAIN_FALLBACK;
+	}
+	if (result->stop == ACCESSIBILITY_CANE_PATH_EDGE
+			&& result->cue == ACCESSIBILITY_CANE_CUE_DROP) {
+		return ACCESSIBILITY_CANE_TERRAIN_EDGE;
+	}
+	if (result->stop == ACCESSIBILITY_CANE_PATH_RANGE) {
+		if (result->cue == ACCESSIBILITY_CANE_CUE_TERRAIN) {
+			return ACCESSIBILITY_CANE_TERRAIN_CONFIRMED;
+		}
+		if (result->cue == ACCESSIBILITY_CANE_CUE_NONE) {
+			return ACCESSIBILITY_CANE_TERRAIN_CONNECTED_FLAT;
+		}
+		return ACCESSIBILITY_CANE_TERRAIN_FALLBACK;
+	}
+	if (result->stop == ACCESSIBILITY_CANE_PATH_WALL) {
+		if (result->cue == ACCESSIBILITY_CANE_CUE_TERRAIN) {
+			runway = result->reached - result->cuedistance;
+			return runway + 0.01f >= minimumrunway
+					? ACCESSIBILITY_CANE_TERRAIN_CONFIRMED
+					: ACCESSIBILITY_CANE_TERRAIN_BARRIER_FIRST;
+		}
+		if (result->cue == ACCESSIBILITY_CANE_CUE_NONE
+				|| result->cue == ACCESSIBILITY_CANE_CUE_BARRIER) {
+			return ACCESSIBILITY_CANE_TERRAIN_BARRIER_FIRST;
+		}
+	}
+	return ACCESSIBILITY_CANE_TERRAIN_FALLBACK;
 }
 
 static int accessibilityCanePathIsDrop(const struct accessibilitycanepathfloor *floor,
@@ -173,6 +213,7 @@ void accessibilityCaneTracePath(const struct accessibilitycanepathinput *input,
 			result->cue = ACCESSIBILITY_CANE_CUE_TERRAIN;
 			result->direction = result->finaldelta > 0 ? 1 : -1;
 			result->cuedistance = next.distance;
+			result->cuedelta = result->finaldelta;
 		}
 		if (next.distance >= input->reach) {
 			result->stop = ACCESSIBILITY_CANE_PATH_RANGE;

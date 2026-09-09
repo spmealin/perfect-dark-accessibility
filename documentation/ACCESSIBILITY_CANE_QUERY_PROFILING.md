@@ -1,10 +1,10 @@
 # Structured cane results and profiling
 
 Status: structured results and a bounded connected floor-profile query are
-implemented. Since 2026-09-09, the connected result validates only legacy drop
-candidates before audio. The existing policy and query cadence remain in use
-for every other cue. With performance diagnostics ON, the path query also runs
-in shadow mode for non-drop walking samples to retain comparison coverage.
+implemented. Connected results validate legacy drops and now arbitrate ordinary
+up/down terrain on supported walking rays. Existing collision observations
+remain the fallback for uncertain and unsupported results and continue to own
+crouch, ladder, CamSpy, grabbed-object, and vehicle behavior.
 
 ## Contract and boundaries
 
@@ -28,7 +28,7 @@ as proof of collision; consult `rise_clearance` and `decision_reasons` instead.
 Likewise, `runway` remains the legacy difference between terrain-sample and
 collision-contact distances, not proven player travel distance.
 
-Every `cane/sweep` sample adds `evidence_version:1`, `barrier_evidence`,
+Every `cane/sweep` sample adds `evidence_version:2`, `barrier_evidence`,
 `barrier_distance`, `rise_clearance`, `decision_reasons`, `selected_cue`, and
 `selected_source`. Cue values are 0 none, 1 barrier, 2 terrain, 3 drop, 4 crouch,
 5 ladder. Source values are 0 none, 1 barrier, 2 terrain. Pending/skipped slots
@@ -58,10 +58,10 @@ One `performance/cane_window` record is emitted per performance window:
 - `sweep_log_total_us`, `sweep_log_max_us`: formatting and submitting sweep logs.
   Stage/reset logs may occur outside the tick, so this is independently measured.
 - `rise_unknown`, `rise_blocked`, `rise_clear`, `query_errors`: evidence counters.
-- `result_policy=legacy_with_validated_drops
-  query_mode=existing_plus_connected_drop`: identifies the audible
-  query/decision path. Shadow cost is separately reported below; full tick and
-  adapter-group timings include it.
+- `result_policy=connected_terrain_and_drops
+  query_mode=existing_plus_connected_path`: identifies the audible
+  query/decision path. Connected-query cost is separately reported below; full
+  tick and adapter-group timings include it.
 
 Samples also include `evaluation_us` and `publish_us`. Existing `query_us`
 continues to cover the observation/evaluation interval before publication.
@@ -115,23 +115,23 @@ query over 2 ms or average query over 0.5 ms remains an investigation trigger;
 also investigate logging/tick spikes even if collision work is cheap. A capped
 60 FPS reading alone does not establish negligible CPU overhead.
 
-Gameplay, speech, and blind-user acceptance of this refactor remain pending.
-The shadow prototype below compares connected support/clearance observations
-before adopting new sound policy. Do not treat successful replay as validation
-of geometry that the audible sensors never queried.
+Blind-user acceptance of active terrain arbitration remains pending. The
+captured shadow evidence below explains why it was promoted, but does not
+replace runtime validation of the resulting sounds.
 
 Rollback: disable diagnostics with the CMake flag and rebuild to remove timers;
 set the existing `Accessibility.VirtualCaneMode=0` to silence the cane. Revert
 the structured-results commit to restore the former integrated classifier.
 
-## Connected floor-profile query and narrow audible adoption
+## Connected floor-profile query and audible adoption
 
 `accessibility_cane_path.c` is a portable, allocation-free bounded evaluator
 with injected floor and movement queries. `accessibility_cane_path_query.c`
 adapts it to native collision APIs. No additional INI switch, key, earcon,
-speech, gameplay hook, or player movement is introduced. With diagnostics OFF,
-it runs only when the legacy classifier selects a drop. Diagnostics ON runs it
-for every scheduled walking sample and enables comparison logs and timers.
+speech, gameplay hook, or player movement is introduced. It runs for every
+supported walking sample because it now arbitrates both drops and ordinary
+terrain. Diagnostics ON adds comparison logs and timers without changing that
+policy.
 
 The prototype samples forward at one player-radius spacing, relative to the
 last connected floor rather than the original player's height. It combines
@@ -161,10 +161,11 @@ is not a hard real-time deadline. No catch-up or additional audio is scheduled.
 Budget/error/capacity termination does not establish clear space beyond the
 last proven node. Fixed storage avoids allocation churn.
 
-`cane/path_shadow` remains the separate diagnostic aggregate per sweep, joined to `cane/sweep`
-by session and `id`, then by sample slot. Each slot records proposed and legacy
-cue, final audible cue, validation outcome, stop, direction, cue/stop distances,
-reached distance, final floor delta, edge
+`cane/path_shadow` remains the event name for compatibility, but version 2 uses
+`policy=active_terrain`. Join it to `cane/sweep` by session and `id`, then by
+sample slot. Each slot records proposed and legacy cue, final audible cue, drop
+and terrain validation outcomes, stop, direction, cue distance/delta, stop
+distance, reached distance, final floor delta, edge
 bracket width, required height, counts, budget, errors and elapsed `us`.
 Nodes are `(distance, footprint ground, point ground, room, flags, supporting
 prop pointer, body height)`. Last queried distance/floors/clearance and blocker
@@ -178,7 +179,7 @@ Cue numbers match the existing structured result. A proposed terrain/crouch
 cue can coexist with a later wall stop: these are separate observations, not
 a claim that the entire corridor is open.
 
-Only an existing drop candidate consumes the path result audibly:
+Drop adoption follows these rules:
 
 - a refined path edge preserves the drop contour at the refined edge;
 - a wall whose sampled stop is no farther than the legacy edge replaces the
@@ -189,12 +190,22 @@ Only an existing drop candidate consumes the path result audibly:
 - unsupported, uncertain, capacity-limited, budget-limited, conflicting, and
   query-error outcomes preserve the legacy drop.
 
-This does not adopt the path evaluator's ordinary barrier, ascent, crouch, or
-ladder policy. `cane/sweep` records `drop_validation`, original distance and
-height. The outcomes are `confirmed_edge`, `barrier_first`,
-`connected_descent`, `fallback`, and `not_run`.
+Ordinary terrain adoption runs independently after drop validation. Full-range
+connected terrain is confirmed. Terrain followed by a wall is confirmed only
+when at least two live player radii were successfully traversed beyond its cue
+point; otherwise the wall wins. A validated descent takes precedence when the
+legacy probe looked beyond it and reported that later wall as a drop. A
+connected flat route suppresses a legacy
+terrain candidate, and a connected edge upgrades one to a drop. Uncertain,
+capacity-limited, budget-limited, unsupported, and crouch-first results retain
+legacy output. The connected system may expose a terrain transition missed by
+legacy probes, but it does not replace ordinary far-wall, crouch, or ladder
+classification. `cane/sweep` records `drop_validation` and
+`terrain_validation`; the compatible `cane/path_shadow` event records legacy,
+path, and final audible cues plus `cue_delta`.
 
-`performance/cane_path_window` reports shadow calls, total/max microseconds,
+`performance/cane_path_window` version 2 uses `policy=active` and reports
+connected-query calls, total/max microseconds,
 query operations, budget stops, errors, and cue differences. These costs are
 already included in full cane ticks and the inclusive adapter-group timing;
 do not add them again. `query_us` and observation timing remain legacy-only.
@@ -239,17 +250,20 @@ units and the connected refinement was 384.84 units. Across the full session,
 connected descent, and five conservatively fell back. The 6,723 connected calls
 used 384,266 bounded operations in 148,058 us total (22.02 us mean, 1,066 us
 maximum), with no budget stops or query errors. No call crossed the documented
-2 ms investigation threshold. This supports retaining the narrow connected
-drop validator without changing its thresholds; it does not yet accept the
-ordinary terrain policy.
+2 ms investigation threshold. This supports retaining the connected query
+without changing its thresholds. It predates active ordinary-terrain adoption,
+which still requires runtime acceptance.
 
-Next test: repeat stairs up/down, an incline ending at a wall, low passages in
-all three stances, and stationary elevator rides. Capture
+Next test: repeat stairs and open ramps up/down, an incline or depression ending
+at a wall, flat floor with nearby side geometry, low passages in all three
+stances, and stationary elevator rides. Confirm usable terrain retains its
+direction, short dead ends report the wall, and flat routes do not emit terrain.
+Capture
 Shift+F2 at ambiguous places. Compare shadow reached distance/stop/support
 identity and unknown/budget counts with the audible record. Compare the same
 route in Fast, Slow and Off to assess added cost. Investigate average shadow
 query over 0.5 ms, any over 2 ms, frequent budget stops, log/tick spikes or new
-frame gaps. Disabling the CMake flag removes broad shadow comparison and its
-timers/logs, but deliberately retains connected validation of actual drop
-candidates. Set `Accessibility.VirtualCaneMode=0` to silence the feature, or
-revert the connected-drop adoption to restore the prior drop policy.
+frame gaps. Disabling the CMake flag removes comparison logs and timers but
+retains active connected drop and terrain decisions. Set
+`Accessibility.VirtualCaneMode=0` to silence the feature, or revert the active
+terrain-adoption commit to restore drop-only connected policy.

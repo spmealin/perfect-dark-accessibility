@@ -203,7 +203,9 @@ void accessibilityCaneQueryPath(const struct accessibilityobserver *observer,
 	s32 slopes = g_Vars.enableslopes;
 	float scale;
 	memset(result, 0, sizeof(*result));
-	if (observer->isremote || observer->isvehicle || g_Vars.currentplayer->bondmovemode != MOVEMODE_WALK) {
+	if (observer->isremote || observer->isvehicle
+			|| g_Vars.currentplayer->bondmovemode != MOVEMODE_WALK
+			|| g_Vars.currentplayer->grabbedprop) {
 		result->path.stop = ACCESSIBILITY_CANE_PATH_UNSUPPORTED;
 		return;
 	}

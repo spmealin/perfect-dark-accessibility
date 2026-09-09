@@ -27,6 +27,15 @@ enum accessibilitycanedropvalidation {
 	ACCESSIBILITY_CANE_DROP_FALLBACK,
 };
 
+enum accessibilitycaneterrainvalidation {
+	ACCESSIBILITY_CANE_TERRAIN_NOT_RUN,
+	ACCESSIBILITY_CANE_TERRAIN_CONFIRMED,
+	ACCESSIBILITY_CANE_TERRAIN_BARRIER_FIRST,
+	ACCESSIBILITY_CANE_TERRAIN_CONNECTED_FLAT,
+	ACCESSIBILITY_CANE_TERRAIN_EDGE,
+	ACCESSIBILITY_CANE_TERRAIN_FALLBACK,
+};
+
 struct accessibilitycanepathfloor {
 	int supported;
 	int pointsupported;
@@ -71,6 +80,7 @@ struct accessibilitycanepathresult {
 	enum accessibilitycanecue cue;
 	int direction;
 	float cuedistance;
+	float cuedelta;
 	float stopdistance;
 	float reached;
 	float finaldelta;
@@ -86,6 +96,9 @@ void accessibilityCaneTracePath(const struct accessibilitycanepathinput *input,
 		struct accessibilitycanepathresult *result);
 enum accessibilitycanedropvalidation accessibilityCaneValidateDrop(
 		const struct accessibilitycanepathresult *result,
-		float legacydropdistance);
+		float legacydropdistance, float minimumrunway);
+enum accessibilitycaneterrainvalidation accessibilityCaneValidateTerrain(
+		const struct accessibilitycanepathresult *result,
+		float minimumrunway);
 
 #endif
