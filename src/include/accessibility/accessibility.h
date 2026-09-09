@@ -28,6 +28,7 @@ s32 accessibilityIsMenuNarrationEnabled(void);
 s32 accessibilityIsRTrackerAudioEnabled(void);
 s32 accessibilityIsTargetingFeedbackEnabled(void);
 f32 accessibilityGetTargetingVolume(void);
+f32 accessibilityGetInterruptedTargetingVolume(void);
 s32 accessibilityIsWeaponChangeAnnouncementsEnabled(void);
 s32 accessibilityIsWeaponFunctionCuesEnabled(void);
 s32 accessibilityIsStanceCuesEnabled(void);

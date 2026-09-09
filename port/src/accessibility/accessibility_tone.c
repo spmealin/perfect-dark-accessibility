@@ -1163,7 +1163,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			&g_AccessibilityMarkerResetSequence);
 	f32 targetfrequency = (f32)SDL_AtomicGet(
 			&g_AccessibilityToneFrequencyMilliHz) / 1000.0f;
-	f32 targetgain = enabled ? accessibilityGetTargetingVolume() : 0.0f;
+	f32 targetgain = 0.0f;
 	f32 hazardtargetfrequency = (f32)SDL_AtomicGet(
 			&g_AccessibilityHazardFrequencyMilliHz) / 1000.0f;
 	f32 hazardtargetgain = hazardenabled
@@ -1190,6 +1190,13 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 	if (!input || len == 0 || len % (sizeof(s16) * 2) != 0
 			|| len > sizeof(g_AccessibilityToneMixBuffer)) {
 		return input;
+	}
+
+	if (enabled) {
+		targetgain = tonepatternflags
+				& ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_INTERRUPTED
+				? accessibilityGetInterruptedTargetingVolume()
+				: accessibilityGetTargetingVolume();
 	}
 
 	if (tonepatternsequence
