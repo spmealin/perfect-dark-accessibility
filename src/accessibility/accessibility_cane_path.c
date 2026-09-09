@@ -1,0 +1,187 @@
+#include <math.h>
+#include <string.h>
+#include "accessibility/accessibility_cane_path.h"
+
+enum accessibilitycanedropvalidation accessibilityCaneValidateDrop(
+		const struct accessibilitycanepathresult *result,
+		float legacydropdistance)
+{
+	if (result->stop == ACCESSIBILITY_CANE_PATH_EDGE
+			&& result->cue == ACCESSIBILITY_CANE_CUE_DROP) {
+		return ACCESSIBILITY_CANE_DROP_CONFIRMED_EDGE;
+	}
+	if (result->stop == ACCESSIBILITY_CANE_PATH_WALL
+			&& result->stopdistance > 0
+			&& result->stopdistance <= legacydropdistance) {
+		return ACCESSIBILITY_CANE_DROP_BARRIER_FIRST;
+	}
+	if ((result->stop == ACCESSIBILITY_CANE_PATH_RANGE
+				|| (result->stop == ACCESSIBILITY_CANE_PATH_WALL
+					&& result->reached >= legacydropdistance))
+			&& result->cue == ACCESSIBILITY_CANE_CUE_TERRAIN
+			&& result->direction < 0) {
+		return ACCESSIBILITY_CANE_DROP_CONNECTED_DESCENT;
+	}
+	return ACCESSIBILITY_CANE_DROP_FALLBACK;
+}
+
+static int accessibilityCanePathIsDrop(const struct accessibilitycanepathfloor *floor,
+		const struct accessibilitycanepathfloor *previous, float threshold)
+{
+	/* Point support locates the physical edge even while the footprint overlaps it. */
+	return !floor->supported || !floor->pointsupported
+			|| (previous->pointsupported
+					&& floor->pointground < previous->pointground - threshold);
+}
+
+void accessibilityCaneTracePath(const struct accessibilitycanepathinput *input,
+		const struct accessibilitycanepathqueries *queries,
+		struct accessibilitycanepathresult *result)
+{
+	struct accessibilitycanepathnode next;
+	float step;
+	float minimumstep;
+	float baseground;
+	float height;
+	int reductions = 0;
+	memset(result, 0, sizeof(*result));
+	result->stop = ACCESSIBILITY_CANE_PATH_UNCERTAIN;
+	if (!isfinite(input->reach) || !isfinite(input->radius)
+			|| !isfinite(input->height) || !isfinite(input->dropthreshold)
+			|| !isfinite(input->maxrise) || !isfinite(input->terrainthreshold)
+			|| input->reach <= 0 || input->radius <= 0 || input->height <= 0
+			|| input->dropthreshold <= 0 || input->maxrise <= 0
+			|| input->terrainthreshold <= 0) return;
+	height = input->height;
+	step = input->radius;
+	minimumstep = input->radius * 0.125f;
+	result->nodes[0].height = height;
+	if (!queries->floor(queries->context, NULL, 0, &result->nodes[0].floor)
+			|| !result->nodes[0].floor.supported) return;
+	result->count = 1;
+	baseground = result->nodes[0].floor.ground;
+	result->requiredheight = height;
+	while (result->count < ACCESSIBILITY_CANE_PATH_NODES) {
+		struct accessibilitycanepathnode *previous = &result->nodes[result->count - 1];
+		enum accessibilitycaneevidence clearance;
+		int i;
+		float delta;
+		memset(&next, 0, sizeof(next));
+		next.distance = previous->distance + step;
+		if (next.distance > input->reach) next.distance = input->reach;
+		next.height = height;
+		if (!queries->floor(queries->context, previous, next.distance, &next.floor)) return;
+
+		if (accessibilityCanePathIsDrop(&next.floor, &previous->floor, input->dropthreshold)) {
+			struct accessibilitycanepathnode safe = *previous;
+			float unsafe = next.distance;
+			/* Refine against the last connected floor, not the player's original height.
+			 * Advance safe only after clearance succeeds; never infer an edge through a wall. */
+			for (i = 0; i < ACCESSIBILITY_CANE_PATH_REFINEMENTS; i++) {
+				struct accessibilitycanepathnode middle = {0};
+				middle.distance = (safe.distance + unsafe) * 0.5f;
+				middle.height = height;
+				if (!queries->floor(queries->context, &safe, middle.distance, &middle.floor)) return;
+				result->refinements++;
+				if (accessibilityCanePathIsDrop(&middle.floor, &safe.floor, input->dropthreshold)) {
+					unsafe = middle.distance;
+				} else {
+					/* A high shelf is not a proven safe bracket. */
+					if (middle.floor.ground - safe.floor.ground > input->maxrise) return;
+					clearance = queries->move(queries->context, &safe, &middle, height);
+					if (clearance != ACCESSIBILITY_CANE_CLEAR) {
+						if (clearance == ACCESSIBILITY_CANE_BLOCKED) {
+							result->stop = ACCESSIBILITY_CANE_PATH_WALL;
+							result->cue = ACCESSIBILITY_CANE_CUE_BARRIER;
+							result->cuedistance = middle.distance;
+							result->stopdistance = middle.distance;
+						}
+						return;
+					}
+					safe = middle;
+				}
+			}
+			/* A multi-step descent encountered during refinement is followed normally. */
+			if (next.floor.supported && next.floor.pointsupported
+					&& !accessibilityCanePathIsDrop(&next.floor, &safe.floor, input->dropthreshold)) {
+				if (safe.distance <= previous->distance) return;
+				next = safe;
+			} else {
+				struct accessibilitycanepathnode edge = safe;
+				edge.distance = unsafe;
+				clearance = queries->move(queries->context, &safe, &edge, height);
+				if (clearance != ACCESSIBILITY_CANE_CLEAR) {
+					if (clearance == ACCESSIBILITY_CANE_BLOCKED) {
+						result->stop = ACCESSIBILITY_CANE_PATH_WALL;
+						result->cue = ACCESSIBILITY_CANE_CUE_BARRIER;
+						result->cuedistance = unsafe;
+						result->stopdistance = unsafe;
+					}
+					return;
+				}
+				result->stop = ACCESSIBILITY_CANE_PATH_EDGE;
+				result->cue = ACCESSIBILITY_CANE_CUE_DROP;
+				result->direction = -1;
+				result->cuedistance = (safe.distance + unsafe) * 0.5f;
+				result->stopdistance = result->cuedistance;
+				result->edgewidth = unsafe - safe.distance;
+				result->reached = safe.distance;
+				return;
+			}
+		}
+
+		delta = next.floor.ground - previous->floor.ground;
+		if (delta > input->maxrise) {
+			if (step > minimumstep && reductions < ACCESSIBILITY_CANE_PATH_REFINEMENTS) {
+				step *= 0.5f;
+				reductions++;
+				result->refinements++;
+				continue;
+			}
+			return; /* Insufficient proof that a high landing is reachable. */
+		}
+		clearance = queries->move(queries->context, previous, &next, height);
+		for (i = 0; clearance == ACCESSIBILITY_CANE_BLOCKED && i < 2; i++) {
+			float lower = input->lowerheights[i];
+			if (lower <= 0 || lower >= height - 1.0f) continue;
+			clearance = queries->move(queries->context, previous, &next, lower);
+			if (clearance == ACCESSIBILITY_CANE_CLEAR) {
+				height = lower;
+				result->requiredheight = height;
+				result->cue = ACCESSIBILITY_CANE_CUE_CROUCH;
+				result->cuedistance = previous->distance;
+			}
+		}
+		if (clearance != ACCESSIBILITY_CANE_CLEAR) {
+			if (clearance == ACCESSIBILITY_CANE_BLOCKED) {
+				result->stop = ACCESSIBILITY_CANE_PATH_WALL;
+				/* Retain a prior verified terrain/stance transition as a separate fact. */
+				if (result->cue == ACCESSIBILITY_CANE_CUE_NONE) {
+					result->cue = ACCESSIBILITY_CANE_CUE_BARRIER;
+					result->cuedistance = next.distance;
+				}
+				result->stopdistance = next.distance;
+			}
+			return;
+		}
+		next.height = height;
+		result->nodes[result->count++] = next;
+		result->reached = next.distance;
+		result->finaldelta = next.floor.ground - baseground;
+		if (result->cue == ACCESSIBILITY_CANE_CUE_NONE
+				&& fabsf(result->finaldelta) >= input->terrainthreshold) {
+			result->cue = ACCESSIBILITY_CANE_CUE_TERRAIN;
+			result->direction = result->finaldelta > 0 ? 1 : -1;
+			result->cuedistance = next.distance;
+		}
+		if (next.distance >= input->reach) {
+			result->stop = ACCESSIBILITY_CANE_PATH_RANGE;
+			result->stopdistance = next.distance;
+			return;
+		}
+		step = input->radius;
+		reductions = 0;
+	}
+	result->stop = ACCESSIBILITY_CANE_PATH_CAPACITY;
+	result->stopdistance = result->reached;
+}

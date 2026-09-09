@@ -283,6 +283,8 @@ set(SRC_ACCESSIBILITY
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_beacon.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_cane.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_cane_result.c"
+  "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_cane_path.c"
+  "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_cane_path_query.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_compass.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_combat_radar.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_hazard.c"

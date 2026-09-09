@@ -102,7 +102,7 @@ static void accessibilityPerformanceLogCane(u64 elapsed, f64 renderfps)
 	struct accessibilitycaneprofile profile;
 	accessibilityCaneTakeProfile(&profile);
 	accessibilityLogEvent("performance", "cane_window",
-			"version=1 window_us=%" PRIu64 " stage=%d menu_count=%d render_fps=%.3f mode=%d tick_calls=%" PRIu64 " tick_total_us=%" PRIu64 " tick_max_us=%" PRIu64 " query_calls=%" PRIu64 " observation_total_us=%" PRIu64 " evaluation_total_us=%" PRIu64 " publish_total_us=%" PRIu64 " sweep_log_total_us=%" PRIu64 " sweep_log_max_us=%" PRIu64 " rise_unknown=%" PRIu64 " rise_blocked=%" PRIu64 " rise_clear=%" PRIu64 " query_errors=%" PRIu64 " result_policy=legacy query_mode=existing_samples",
+			"version=2 window_us=%" PRIu64 " stage=%d menu_count=%d render_fps=%.3f mode=%d tick_calls=%" PRIu64 " tick_total_us=%" PRIu64 " tick_max_us=%" PRIu64 " query_calls=%" PRIu64 " observation_total_us=%" PRIu64 " evaluation_total_us=%" PRIu64 " publish_total_us=%" PRIu64 " sweep_log_total_us=%" PRIu64 " sweep_log_max_us=%" PRIu64 " rise_unknown=%" PRIu64 " rise_blocked=%" PRIu64 " rise_clear=%" PRIu64 " query_errors=%" PRIu64 " result_policy=legacy_with_validated_drops query_mode=existing_plus_connected_drop",
 			(uint64_t)elapsed, mainGetStageNum(), g_MenuData.count, renderfps,
 			accessibilityGetVirtualCaneMode(), (uint64_t)profile.tickcalls,
 			(uint64_t)profile.tickus, (uint64_t)profile.tickmaxus,
@@ -111,6 +111,12 @@ static void accessibilityPerformanceLogCane(u64 elapsed, f64 renderfps)
 			(uint64_t)profile.logus, (uint64_t)profile.logmaxus,
 			(uint64_t)profile.unknownrises, (uint64_t)profile.blockedrises,
 			(uint64_t)profile.clearrises, (uint64_t)profile.queryerrors);
+	accessibilityLogEvent("performance", "cane_path_window",
+			"version=1 window_us=%" PRIu64 " policy=shadow calls=%" PRIu64 " total_us=%" PRIu64 " max_us=%" PRIu64 " queries=%" PRIu64 " budget_stops=%" PRIu64 " errors=%" PRIu64 " cue_differences=%" PRIu64,
+			(uint64_t)elapsed, (uint64_t)profile.pathcalls,
+			(uint64_t)profile.pathus, (uint64_t)profile.pathmaxus,
+			(uint64_t)profile.pathqueries, (uint64_t)profile.pathbudgets,
+			(uint64_t)profile.patherrors, (uint64_t)profile.pathdifferences);
 	/* Inclusive of cane and synchronous logs, exclusive of lvTick/render/audio. */
 	accessibilityLogEvent("performance", "gameplay_accessibility_window",
 			"window_us=%" PRIu64 " stage=%d menu_count=%d render_fps=%.3f calls=%" PRIu64 " total_us=%" PRIu64 " max_us=%" PRIu64 " wall_time_percent=%.5f scope=post_lvTick_adapters",

@@ -540,7 +540,24 @@ For the current Carrington Institute firing-range proof, first verify that the p
 
 #### Virtual cane prototype
 
-The structured-result migration preserves existing sounds and sensor queries.
+The structured-result migration preserves production sensor queries and all
+non-drop sounds. A legacy drop now receives a bounded connected-floor check
+before output: confirmed edge remains a drop, an earlier barrier becomes a wall
+cue, connected descent becomes downward terrain, and uncertainty retains the
+drop. With performance diagnostics ON, the same query also runs for non-drop
+walking samples for comparison.
+Inspect `cane/path_shadow` and `performance/cane_path_window`: staircases must
+not become drops merely from accumulated descent; walls must bound connected
+progress; lower passages must record the required stance; elevator support
+must be referenced at its current position. Unknown/budget stops must not be
+interpreted as proof of a clear path. At the CI elevator false-positive site,
+the barrier must replace the former drop. A genuine edge must retain the drop;
+stairs down must use downward terrain; elevator motion must not become a drop.
+Capture ambiguous output with Shift+F2 and correlate `drop_validation`,
+`legacy_drop_distance`, `stop_distance`, `reached`, `budget`, and `blocker`.
+DataDyne Central: Defection session `1788970498` supplies post-adoption
+native-engine evidence for genuine large edges; broader blind-user validation
+of the revised drop policy remains pending.
 Use `documentation/ACCESSIBILITY_CANE_QUERY_PROFILING.md` for standalone fixture
 and captured-log replay commands, reason/evidence fields, and per-window timing
 interpretation. Session `1788562366` replayed 14,718 decisions without mismatch;

@@ -25,6 +25,13 @@ struct accessibilitycaneprofile {
 	u64 blockedrises;
 	u64 clearrises;
 	u64 queryerrors;
+	u64 pathcalls;
+	u64 pathus;
+	u64 pathmaxus;
+	u64 pathqueries;
+	u64 pathbudgets;
+	u64 patherrors;
+	u64 pathdifferences;
 };
 
 void accessibilityCaneTakeProfile(struct accessibilitycaneprofile *profile);

@@ -411,10 +411,16 @@ The first structured-query migration separates engine observation from a
 value-only decision module (`accessibility_cane_result.c`). Results retain
 independent barrier and raised-position clearance evidence, policy reasons,
 and the selected cue/source; zero clearance queries mean unknown, while the
-legacy barrier fallback remains audible. No new collision probes or connected
-route claims are introduced. Under the existing performance flag, per-window
+legacy barrier fallback remains audible. Under the existing performance flag,
+a separate fixed-storage `accessibility_cane_path` evaluator and native query
+adapter now sample bounded connected walking-floor profiles. Only when the
+legacy result is a drop may a confirmed edge refine it, a proven earlier wall
+replace it with a barrier, or a connected descent replace it with terrain.
+Every other cue and every uncertain result retains legacy policy. The adapter
+does not change player movement. Unknown/budget termination, support identity,
+stance clearance, edge brackets, and query costs are logged for comparison. Per-window
 timers distinguish observation, decision, publication, sweep logging, full cane
-ticks, and the inclusive post-`lvTick` adapter group. The latter excludes game
+ticks, shadow path queries, and the inclusive post-`lvTick` adapter group. The latter excludes game
 and rendering hooks plus audio synthesis. See
 `documentation/ACCESSIBILITY_CANE_QUERY_PROFILING.md` for the contract, metric
 scope, replay evidence, and next measurement step.
