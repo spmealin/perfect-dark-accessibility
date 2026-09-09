@@ -577,10 +577,11 @@ Use controlled geometry for the first pass. Face a flat wall, an angled wall, an
 
 In DataDyne Research: Investigation, approach the route-blocking pane represented
 by incident captures 3 and 4. Every cane ray whose selected collision is the
-healthy pane must play a 90 ms falling octave, beginning at twice the normal
-distance frequency and resolving to it; neighboring wall rays must retain
-their steady 35 ms chirps. Confirm `cane/sweep` reports `breakable:1`, the
-blocking prop, and matching start/end frequencies. Aim an ordinary firearm at
+healthy pane must use the same steady 35 ms distance-pitched chirp as an
+ordinary barrier; neighboring wall rays must be indistinguishable by material.
+Confirm `cane/sweep` still reports `breakable:1` and the blocking prop for
+diagnosis, but records the ordinary wall duration and matching start/end
+frequencies. Aim an ordinary firearm at
 the pane's actual geometry and confirm the centered alignment tone uses the
 rapid 90 ms sound/10 ms gap pattern even though native sight filtering does
 not retain scenery. Move between the pane and an ordinary hostile and confirm
@@ -595,9 +596,11 @@ and verify no enemy-presence voice or offscreen/nearby scanner cue is created.
 
 Acceptance evidence, 2026-07-28: the project owner, testing as the blind
 primary user, reported that the implementation in commit `9472c1a69` worked.
-This accepts the user-facing cane distinction and direct-aim feedback for the
-captured DataDyne route-blocking pane in the default `ntsc-final` Windows
-build. No new barrier, masking, performance, or interaction problem was
+This accepts direct-aim feedback for the captured DataDyne route-blocking pane
+in the default `ntsc-final` Windows build. The formerly accepted cane-specific
+falling-octave distinction was subsequently retired because exact-aim feedback
+now communicates breakability; cane navigation retains only the ordinary
+barrier cue. No new barrier, masking, performance, or interaction problem was
 reported during that test. The report does not yet validate decorative or
 invincible glass exclusions, incompatible and explosion-only attacks, another
 level's path blockers, CamSpy perspective, or long-session stability; retain
