@@ -97,6 +97,14 @@ static void fixtures(void)
 	o.ladder = 1;
 	accessibilityCaneEvaluateResult(&o, &r);
 	assert(r.cue == ACCESSIBILITY_CANE_CUE_LADDER);
+
+	/* Native ladder faces must offer a predominantly horizontal normal. */
+	assert(accessibilityCaneLadderNormalIsClimbable(24522.0f, 0.0f, 0.0f));
+	assert(accessibilityCaneLadderNormalIsClimbable(1.0f, 0.0f, 0.0f));
+	assert(accessibilityCaneLadderNormalIsClimbable(-10.0f, 2.0f, 20.0f));
+	assert(!accessibilityCaneLadderNormalIsClimbable(0.0f, 62600.0f, 0.0f));
+	assert(!accessibilityCaneLadderNormalIsClimbable(1.0f, 1.0f, 0.0f));
+	assert(!accessibilityCaneLadderNormalIsClimbable(0.0f, 0.0f, 0.0f));
 	puts("Cane result fixtures passed.");
 }
 

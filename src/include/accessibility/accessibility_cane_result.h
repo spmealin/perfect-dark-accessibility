@@ -78,5 +78,6 @@ struct accessibilitycaneresult {
 void accessibilityCaneEvaluateResult(
 		const struct accessibilitycaneobservation *observation,
 		struct accessibilitycaneresult *result);
+int accessibilityCaneLadderNormalIsClimbable(float x, float y, float z);
 
 #endif

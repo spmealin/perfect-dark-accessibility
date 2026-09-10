@@ -10,6 +10,7 @@ struct fixture {
 	float edge;
 	float wall;
 	float ceiling;
+	float ceilingend;
 	float base;
 	int calls;
 	int failafter;
@@ -36,16 +37,39 @@ static enum accessibilitycaneevidence movequery(void *context,
 	struct fixture *f = context;
 	assert(to->distance >= from->distance);
 	if (++f->calls > f->failafter) return ACCESSIBILITY_CANE_UNKNOWN;
-	return to->distance >= f->wall || (to->distance >= 60 && height > f->ceiling)
+	return to->distance >= f->wall || (to->distance >= 60
+			&& to->distance < f->ceilingend && height > f->ceiling)
 			? ACCESSIBILITY_CANE_BLOCKED : ACCESSIBILITY_CANE_CLEAR;
+}
+
+static enum accessibilitycaneevidence clearancequery(void *context,
+		const struct accessibilitycanepathnode *at, float height)
+{
+	struct fixture *f = context;
+	if (++f->calls > f->failafter) return ACCESSIBILITY_CANE_UNKNOWN;
+	return at->distance >= f->wall || (at->distance >= 60
+			&& at->distance < f->ceilingend && height > f->ceiling)
+			? ACCESSIBILITY_CANE_BLOCKED : ACCESSIBILITY_CANE_CLEAR;
+}
+
+static int phrasestep(const struct accessibilitycanepathphrase *phrase, int index)
+{
+	return (phrase->bits >> (index * 3)) & 7;
 }
 
 int main(void)
 {
 	struct accessibilitycanepathinput input = {180, 30, 160, {115, 80}, 30, 12, 80};
-	struct fixture f = {0, 0, 10000, 10000, 10000, 0, 0, 10000};
-	struct accessibilitycanepathqueries queries = {&f, floorquery, movequery};
+	struct fixture f = {
+		.edge = 10000, .wall = 10000, .ceiling = 10000,
+		.ceilingend = 10000, .failafter = 10000,
+	};
+	struct accessibilitycanepathqueries queries = {
+		.context = &f, .floor = floorquery, .move = movequery,
+		.clearance = clearancequery,
+	};
 	struct accessibilitycanepathresult result;
+	struct accessibilitycanepathphrase phrase;
 	accessibilityCaneTracePath(&input, &queries, &result);
 	assert(result.stop == ACCESSIBILITY_CANE_PATH_RANGE && result.count == 7);
 	assert(result.cue == ACCESSIBILITY_CANE_CUE_NONE);
@@ -115,9 +139,105 @@ int main(void)
 	assert(result.cue == ACCESSIBILITY_CANE_CUE_CROUCH && result.requiredheight == 80);
 	assert(accessibilityCaneValidateTerrain(&result, 120)
 			== ACCESSIBILITY_CANE_TERRAIN_FALLBACK);
+	assert(accessibilityCaneValidateCrouch(&result, 60)
+			== ACCESSIBILITY_CANE_CROUCH_CONFIRMED);
+	assert(accessibilityCaneValidateCrouch(&result, 180)
+			== ACCESSIBILITY_CANE_CROUCH_SHORT);
+	f.wall = 90;
+	accessibilityCaneTracePath(&input, &queries, &result);
+	assert(result.cue == ACCESSIBILITY_CANE_CUE_CROUCH
+			&& result.stop == ACCESSIBILITY_CANE_PATH_WALL);
+	assert(accessibilityCaneValidateCrouch(&result, 60)
+			== ACCESSIBILITY_CANE_CROUCH_SHORT);
+	f.wall = 120;
+	accessibilityCaneTracePath(&input, &queries, &result);
+	assert(accessibilityCaneValidateCrouch(&result, 60)
+			== ACCESSIBILITY_CANE_CROUCH_DEAD_END);
+	/* A bounded low obstruction is a passage only after the route recovers
+	 * standing clearance and proves continuation beyond that recovery. */
+	f.wall = 180;
+	f.ceilingend = 90;
+	accessibilityCaneTracePath(&input, &queries, &result);
+	assert(result.standingrecoverydistance == 90);
+	assert(result.standingcontinuation == 60);
+	assert(accessibilityCaneValidateCrouch(&result, 60)
+			== ACCESSIBILITY_CANE_CROUCH_CONFIRMED);
+	f.ceilingend = 10000;
+	memset(&result, 0, sizeof(result));
+	result.cue = ACCESSIBILITY_CANE_CUE_TERRAIN;
+	result.stop = ACCESSIBILITY_CANE_PATH_WALL;
+	result.cuedistance = 30;
+	result.count = 4;
+	result.nodes[0].distance = 0;
+	result.nodes[1].distance = 30;
+	result.nodes[1].floor.ground = 10;
+	result.nodes[2].distance = 60;
+	result.nodes[2].floor.ground = 20;
+	result.nodes[3].distance = 90;
+	result.nodes[3].floor.ground = 20.5f;
+	accessibilityCaneBuildTerrainPhrase(&result, 1.0f, 120.0f, &phrase);
+	assert(phrase.count == 5);
+	assert(phrasestep(&phrase, 0) == ACCESSIBILITY_CANE_PATH_PHRASE_LEVEL);
+	assert(phrasestep(&phrase, 1) == ACCESSIBILITY_CANE_PATH_PHRASE_UP);
+	assert(phrasestep(&phrase, 2) == ACCESSIBILITY_CANE_PATH_PHRASE_UP);
+	assert(phrasestep(&phrase, 3) == ACCESSIBILITY_CANE_PATH_PHRASE_LEVEL);
+	assert(phrasestep(&phrase, 4) == ACCESSIBILITY_CANE_PATH_PHRASE_WALL);
+	assert(phrase.steps[0].distance == 0 && phrase.steps[0].elevation == 0);
+	assert(phrase.steps[3].distance == 90 && phrase.steps[3].elevation == 20.5f);
+	assert(phrase.steps[4].distance == 120);
+	result.nodes[1].floor.ground = -10;
+	result.nodes[2].floor.ground = -20;
+	result.nodes[3].floor.ground = -20.5f;
+	accessibilityCaneBuildTerrainPhrase(&result, 1.0f, 120.0f, &phrase);
+	assert(phrasestep(&phrase, 0) == ACCESSIBILITY_CANE_PATH_PHRASE_LEVEL);
+	assert(phrasestep(&phrase, 1) == ACCESSIBILITY_CANE_PATH_PHRASE_DOWN);
+	assert(phrasestep(&phrase, 2) == ACCESSIBILITY_CANE_PATH_PHRASE_DOWN);
+	assert(phrasestep(&phrase, 3) == ACCESSIBILITY_CANE_PATH_PHRASE_LEVEL);
+	assert(phrasestep(&phrase, 4) == ACCESSIBILITY_CANE_PATH_PHRASE_WALL);
+	/* Long profiles are evenly reduced to the fixed mixer capacity and still
+	 * reserve their final atom for the terminal wall. */
+	memset(&result, 0, sizeof(result));
+	result.cue = ACCESSIBILITY_CANE_CUE_TERRAIN;
+	result.stop = ACCESSIBILITY_CANE_PATH_WALL;
+	result.cuedistance = 30;
+	result.count = 10;
+	for (int i = 0; i < result.count; i++) {
+		result.nodes[i].distance = i * 30;
+		result.nodes[i].floor.ground = i * 10;
+	}
+	accessibilityCaneBuildTerrainPhrase(&result, 1.0f, 300.0f, &phrase);
+	assert(phrase.count == ACCESSIBILITY_CANE_PATH_PHRASE_STEPS);
+	assert(phrasestep(&phrase, phrase.count - 1)
+			== ACCESSIBILITY_CANE_PATH_PHRASE_WALL);
+	assert(phrase.steps[phrase.count - 1].distance == 300);
+	/* Flat, descending stairs, landing, then a farther wall. Absolute
+	 * elevations preserve both level regions and the proportional descent. */
+	memset(&result, 0, sizeof(result));
+	result.cue = ACCESSIBILITY_CANE_CUE_TERRAIN;
+	result.stop = ACCESSIBILITY_CANE_PATH_RANGE;
+	result.count = 16;
+	for (int i = 0; i < result.count; i++) {
+		result.nodes[i].distance = i * 30;
+		result.nodes[i].floor.ground = i < 8 ? 0
+				: (i < 14 ? -(i - 7) * 17.0f : -102.0f);
+	}
+	accessibilityCaneBuildTerrainPhrase(&result, 1.0f, 648.0f, &phrase);
+	assert(phrase.count == ACCESSIBILITY_CANE_PATH_PHRASE_STEPS);
+	assert(phrase.steps[0].elevation == 0);
+	assert(phrase.steps[1].elevation == 0);
+	assert(phrase.steps[phrase.count - 3].elevation == -102.0f);
+	assert(phrase.steps[phrase.count - 2].elevation == -102.0f);
+	assert(phrasestep(&phrase, phrase.count - 2)
+			== ACCESSIBILITY_CANE_PATH_PHRASE_LEVEL);
+	assert(phrasestep(&phrase, phrase.count - 1)
+			== ACCESSIBILITY_CANE_PATH_PHRASE_WALL);
+	assert(phrase.steps[phrase.count - 1].distance == 648);
+	f.wall = 10000;
 	input.height = 80;
 	accessibilityCaneTracePath(&input, &queries, &result);
 	assert(result.cue == ACCESSIBILITY_CANE_CUE_TERRAIN);
+	assert(accessibilityCaneValidateCrouch(&result, 60)
+			== ACCESSIBILITY_CANE_CROUCH_FALLBACK);
 	f.stair = 0;
 	f.base = 400;
 	accessibilityCaneTracePath(&input, &queries, &result);

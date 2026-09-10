@@ -8,6 +8,24 @@
 #define ACCESSIBILITY_CANE_PATH_REFINEMENTS 5
 #define ACCESSIBILITY_CANE_PATH_QUERY_LIMIT 192
 #define ACCESSIBILITY_CANE_PATH_TIME_LIMIT_US 2000
+#define ACCESSIBILITY_CANE_PATH_PHRASE_STEPS 10
+
+enum accessibilitycanepathphrasestep {
+	ACCESSIBILITY_CANE_PATH_PHRASE_NONE,
+	ACCESSIBILITY_CANE_PATH_PHRASE_LEVEL,
+	ACCESSIBILITY_CANE_PATH_PHRASE_UP,
+	ACCESSIBILITY_CANE_PATH_PHRASE_DOWN,
+	ACCESSIBILITY_CANE_PATH_PHRASE_WALL,
+};
+
+struct accessibilitycanepathphrase {
+	int count;
+	unsigned int bits;
+	struct {
+		float distance;
+		float elevation;
+	} steps[ACCESSIBILITY_CANE_PATH_PHRASE_STEPS];
+};
 
 enum accessibilitycanepathstop {
 	ACCESSIBILITY_CANE_PATH_NOT_RUN,
@@ -34,6 +52,14 @@ enum accessibilitycaneterrainvalidation {
 	ACCESSIBILITY_CANE_TERRAIN_CONNECTED_FLAT,
 	ACCESSIBILITY_CANE_TERRAIN_EDGE,
 	ACCESSIBILITY_CANE_TERRAIN_FALLBACK,
+};
+
+enum accessibilitycanecrouchvalidation {
+	ACCESSIBILITY_CANE_CROUCH_NOT_RUN,
+	ACCESSIBILITY_CANE_CROUCH_CONFIRMED,
+	ACCESSIBILITY_CANE_CROUCH_SHORT,
+	ACCESSIBILITY_CANE_CROUCH_DEAD_END,
+	ACCESSIBILITY_CANE_CROUCH_FALLBACK,
 };
 
 struct accessibilitycanepathfloor {
@@ -73,6 +99,8 @@ struct accessibilitycanepathqueries {
 	enum accessibilitycaneevidence (*move)(void *context,
 			const struct accessibilitycanepathnode *from,
 			const struct accessibilitycanepathnode *to, float height);
+	enum accessibilitycaneevidence (*clearance)(void *context,
+			const struct accessibilitycanepathnode *at, float height);
 };
 
 struct accessibilitycanepathresult {
@@ -86,6 +114,8 @@ struct accessibilitycanepathresult {
 	float finaldelta;
 	float edgewidth;
 	float requiredheight;
+	float standingrecoverydistance;
+	float standingcontinuation;
 	int count;
 	int refinements;
 	struct accessibilitycanepathnode nodes[ACCESSIBILITY_CANE_PATH_NODES];
@@ -100,5 +130,11 @@ enum accessibilitycanedropvalidation accessibilityCaneValidateDrop(
 enum accessibilitycaneterrainvalidation accessibilityCaneValidateTerrain(
 		const struct accessibilitycanepathresult *result,
 		float minimumrunway);
+enum accessibilitycanecrouchvalidation accessibilityCaneValidateCrouch(
+		const struct accessibilitycanepathresult *result,
+		float minimumcontinuation);
+void accessibilityCaneBuildTerrainPhrase(
+		const struct accessibilitycanepathresult *result, float minimumdelta,
+		float terminalwalldistance, struct accessibilitycanepathphrase *phrase);
 
 #endif

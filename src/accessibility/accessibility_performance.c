@@ -102,7 +102,7 @@ static void accessibilityPerformanceLogCane(u64 elapsed, f64 renderfps)
 	struct accessibilitycaneprofile profile;
 	accessibilityCaneTakeProfile(&profile);
 	accessibilityLogEvent("performance", "cane_window",
-			"version=2 window_us=%" PRIu64 " stage=%d menu_count=%d render_fps=%.3f mode=%d tick_calls=%" PRIu64 " tick_total_us=%" PRIu64 " tick_max_us=%" PRIu64 " query_calls=%" PRIu64 " observation_total_us=%" PRIu64 " evaluation_total_us=%" PRIu64 " publish_total_us=%" PRIu64 " sweep_log_total_us=%" PRIu64 " sweep_log_max_us=%" PRIu64 " rise_unknown=%" PRIu64 " rise_blocked=%" PRIu64 " rise_clear=%" PRIu64 " query_errors=%" PRIu64 " result_policy=connected_terrain_and_drops query_mode=existing_plus_connected_path",
+			"version=2 window_us=%" PRIu64 " stage=%d menu_count=%d render_fps=%.3f mode=%d tick_calls=%" PRIu64 " tick_total_us=%" PRIu64 " tick_max_us=%" PRIu64 " query_calls=%" PRIu64 " observation_total_us=%" PRIu64 " evaluation_total_us=%" PRIu64 " publish_total_us=%" PRIu64 " sweep_log_total_us=%" PRIu64 " sweep_log_max_us=%" PRIu64 " rise_unknown=%" PRIu64 " rise_blocked=%" PRIu64 " rise_clear=%" PRIu64 " query_errors=%" PRIu64 " result_policy=connected_terrain_drops_and_crouch query_mode=existing_plus_connected_path",
 			(uint64_t)elapsed, mainGetStageNum(), g_MenuData.count, renderfps,
 			accessibilityGetVirtualCaneMode(), (uint64_t)profile.tickcalls,
 			(uint64_t)profile.tickus, (uint64_t)profile.tickmaxus,

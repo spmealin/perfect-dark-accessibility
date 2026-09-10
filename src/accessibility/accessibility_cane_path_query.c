@@ -193,6 +193,25 @@ static enum accessibilitycaneevidence accessibilityCanePathMove(void *opaque,
 	return accessibilityCanePathSegment(context, &start, rooms, &end, height);
 }
 
+static enum accessibilitycaneevidence accessibilityCanePathClearance(void *opaque,
+		const struct accessibilitycanepathnode *at, float height)
+{
+	struct accessibilitycanepathcontext *context = opaque;
+	struct coord pos = accessibilityCanePathPosition(context, at->distance,
+			at->floor.ground);
+	RoomNum rooms[8];
+	float top = height - context->originheight;
+	float bottom = context->bottom - context->originheight;
+	s32 result;
+
+	memcpy(rooms, at->floor.rooms, sizeof(rooms));
+	if (!accessibilityCanePathReserve(context)) return ACCESSIBILITY_CANE_UNKNOWN;
+	context->diagnostic->clearancequeries++;
+	result = cdTestVolume(&pos, context->observer->radius, rooms,
+			context->types, true, top, bottom);
+	return result ? ACCESSIBILITY_CANE_CLEAR : ACCESSIBILITY_CANE_BLOCKED;
+}
+
 void accessibilityCaneQueryPath(const struct accessibilityobserver *observer,
 		const struct coord *direction, f32 reach, f32 terrainthreshold,
 		f32 dropthreshold, struct accessibilitycanepathdiagnostic *result)
@@ -231,6 +250,7 @@ void accessibilityCaneQueryPath(const struct accessibilityobserver *observer,
 	queries.context = &context;
 	queries.floor = accessibilityCanePathFloor;
 	queries.move = accessibilityCanePathMove;
+	queries.clearance = accessibilityCanePathClearance;
 	accessibilityCaneTracePath(&input, &queries, &result->path);
 	g_Vars.enableslopes = slopes;
 	result->elapsedus = sysGetMicroseconds() - context.started;

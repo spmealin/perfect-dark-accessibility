@@ -2,9 +2,23 @@
 
 Status: structured results and a bounded connected floor-profile query are
 implemented. Connected results validate legacy drops and now arbitrate ordinary
-up/down terrain on supported walking rays. Existing collision observations
-remain the fallback for uncertain and unsupported results and continue to own
-crouch, ladder, CamSpy, grabbed-object, and vehicle behavior.
+up/down terrain and crouch openings on supported walking rays. Existing
+collision observations remain the fallback for short, uncertain, and
+unsupported results and continue to own ladder, CamSpy, grabbed-object, and
+vehicle behavior.
+
+Ladder recognition remains a native adapter decision rather than a connected
+path result. In addition to direct collision flags, supported walking barriers
+receive a player-sized `cdFindLadder` overlap at the position where the player
+would touch the wall, followed when necessary by the same lowered adjacent-room
+check used by movement. This covers thin climbable geometry embedded in an
+ordinary wall without introducing stage or model identifiers. Sweep records
+include `ladder_probe_hit`, `ladder_probe_queries`, `ladder_probe_rejections`,
+`ladder_probe_distance`, and `ladder_normal`; the probe cost is included in the
+existing observation and full-cane timings. The adapter publishes the native
+normal, while the value-only result helper accepts only predominantly
+horizontal face normals. This rejects floor- or ceiling-facing flagged
+geometry without adding stage, room, model, or coordinate exceptions.
 
 ## Contract and boundaries
 
@@ -58,8 +72,8 @@ One `performance/cane_window` record is emitted per performance window:
 - `sweep_log_total_us`, `sweep_log_max_us`: formatting and submitting sweep logs.
   Stage/reset logs may occur outside the tick, so this is independently measured.
 - `rise_unknown`, `rise_blocked`, `rise_clear`, `query_errors`: evidence counters.
-- `result_policy=connected_terrain_and_drops
-  query_mode=existing_plus_connected_path`: identifies the audible
+- `result_policy=connected_terrain_drops_and_crouch`
+  `query_mode=existing_plus_connected_path`: identifies the audible
   query/decision path. Connected-query cost is separately reported below; full
   tick and adapter-group timings include it.
 
@@ -162,9 +176,9 @@ Budget/error/capacity termination does not establish clear space beyond the
 last proven node. Fixed storage avoids allocation churn.
 
 `cane/path_shadow` remains the event name for compatibility, but version 2 uses
-`policy=active_terrain`. Join it to `cane/sweep` by session and `id`, then by
+`policy=active_crouch`. Join it to `cane/sweep` by session and `id`, then by
 sample slot. Each slot records proposed and legacy cue, final audible cue, drop
-and terrain validation outcomes, stop, direction, cue distance/delta, stop
+terrain, and crouch validation outcomes, stop, direction, cue distance/delta, stop
 distance, reached distance, final floor delta, edge
 bracket width, required height, counts, budget, errors and elapsed `us`.
 Nodes are `(distance, footprint ground, point ground, room, flags, supporting
@@ -198,11 +212,22 @@ legacy probe looked beyond it and reported that later wall as a drop. A
 connected flat route suppresses a legacy
 terrain candidate, and a connected edge upgrades one to a drop. Uncertain,
 capacity-limited, budget-limited, unsupported, and crouch-first results retain
-legacy output. The connected system may expose a terrain transition missed by
-legacy probes, but it does not replace ordinary far-wall, crouch, or ladder
-classification. `cane/sweep` records `drop_validation` and
-`terrain_validation`; the compatible `cane/path_shadow` event records legacy,
-path, and final audible cues plus `cue_delta`.
+legacy terrain output.
+
+Crouch adoption runs after drop and terrain arbitration. A lower-clearance path
+is confirmed after proving at least two live player radii beyond the first
+low-clearance node. A route open through the full query range is sufficient.
+A route ending at a wall must first recover pointwise standing clearance and
+sustain it for two radii; without that recovery it is a proven crouch dead end
+and resolves as a barrier. Its sound is positioned one radius inside the
+proven opening. Short paths and uncertain, capacity-limited, budget-limited,
+unsupported, or malformed results retain the legacy decision. Native ladder
+geometry always keeps ladder priority. The connected system can therefore
+expose a traversable low opening that a local standing barrier probe missed
+without claiming a shallow recess. `cane/sweep` records `drop_validation`,
+`terrain_validation`, and `crouch_validation`; the compatible
+`cane/path_shadow` event additionally records `standing_recovery`,
+`standing_continuation`, and the bounded point-clearance query count.
 
 `performance/cane_path_window` version 2 uses `policy=active` and reports
 connected-query calls, total/max microseconds,
@@ -212,6 +237,20 @@ do not add them again. `query_us` and observation timing remain legacy-only.
 Sweep logging timing now includes formatting/submitting both aggregate records.
 Differences are diagnostic, not automatic regressions: the sampled reach and
 the experimental policy differ from the production barrier policy.
+
+For an audible connected terrain result, the value-only path layer also packs
+up to ten three-bit classifications and fixed distance/elevation knots into
+the existing sample record. Successive values are 1 level, 2 up, 3 down, and
+4 terminal wall. The publication layer derives a frequency from absolute
+elevation and a gain from each knot's own distance; the mixer continuously
+interpolates those parameters across the floor profile. `cane/sweep` records
+all four values in `path_phrase` beside `path_phrase_count` and
+`path_phrase_bits`. Other cues and fallback terrain record zero. The terminal
+wall may come from the already-observed movement barrier beyond the floor
+query's reach, so this adds no collision query and no dynamic allocation.
+Mixer work remains bounded to one active cane voice and at most ten knots;
+compare the existing audio-mix and frame-window timings rather than counting
+it as query cost.
 
 Standalone fixtures (no ROM required), from MinGW64:
 

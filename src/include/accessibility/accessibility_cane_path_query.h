@@ -10,6 +10,7 @@ struct accessibilitycanepathdiagnostic {
 	s32 queries;
 	s32 floorqueries;
 	s32 movequeries;
+	s32 clearancequeries;
 	s32 errors;
 	s32 budget; /* 1 query cap, 2 elapsed-time cap */
 	f32 lastdistance;

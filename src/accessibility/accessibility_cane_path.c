@@ -65,6 +65,114 @@ enum accessibilitycaneterrainvalidation accessibilityCaneValidateTerrain(
 	return ACCESSIBILITY_CANE_TERRAIN_FALLBACK;
 }
 
+enum accessibilitycanecrouchvalidation accessibilityCaneValidateCrouch(
+		const struct accessibilitycanepathresult *result,
+		float minimumcontinuation)
+{
+	float continuation;
+
+	if (!isfinite(minimumcontinuation) || minimumcontinuation < 0
+			|| result->cue != ACCESSIBILITY_CANE_CUE_CROUCH
+			|| result->count < 2
+			|| result->requiredheight <= 0
+			|| result->requiredheight >= result->nodes[0].height - 1.0f) {
+		return ACCESSIBILITY_CANE_CROUCH_FALLBACK;
+	}
+	if (result->stop != ACCESSIBILITY_CANE_PATH_RANGE
+			&& result->stop != ACCESSIBILITY_CANE_PATH_WALL) {
+		return ACCESSIBILITY_CANE_CROUCH_FALLBACK;
+	}
+
+	continuation = result->reached - result->cuedistance;
+	if (continuation + 0.01f < minimumcontinuation) {
+		return ACCESSIBILITY_CANE_CROUCH_SHORT;
+	}
+	if (result->stop == ACCESSIBILITY_CANE_PATH_WALL
+			&& result->standingcontinuation + 0.01f < minimumcontinuation) {
+		return ACCESSIBILITY_CANE_CROUCH_DEAD_END;
+	}
+	return ACCESSIBILITY_CANE_CROUCH_CONFIRMED;
+}
+
+static enum accessibilitycanepathphrasestep accessibilityCanePhraseStep(
+		const struct accessibilitycanepathnode *from,
+		const struct accessibilitycanepathnode *to, float minimumdelta)
+{
+	float delta = to->floor.ground - from->floor.ground;
+	if (delta > minimumdelta) return ACCESSIBILITY_CANE_PATH_PHRASE_UP;
+	if (delta < -minimumdelta) return ACCESSIBILITY_CANE_PATH_PHRASE_DOWN;
+	return ACCESSIBILITY_CANE_PATH_PHRASE_LEVEL;
+}
+
+void accessibilityCaneBuildTerrainPhrase(
+		const struct accessibilitycanepathresult *result, float minimumdelta,
+		float terminalwalldistance, struct accessibilitycanepathphrase *phrase)
+{
+	int indices[ACCESSIBILITY_CANE_PATH_PHRASE_STEPS];
+	int candidatecount;
+	int floorcount;
+	int haswall;
+	int flatstart;
+	int i;
+	float previousground;
+
+	if (!phrase) return;
+	memset(phrase, 0, sizeof(*phrase));
+	if (!result || !isfinite(minimumdelta) || minimumdelta < 0.0f
+			|| result->cue != ACCESSIBILITY_CANE_CUE_TERRAIN
+			|| result->count < 2) return;
+
+	haswall = isfinite(terminalwalldistance) && terminalwalldistance > 0.0f;
+	candidatecount = result->count;
+	floorcount = ACCESSIBILITY_CANE_PATH_PHRASE_STEPS - (haswall ? 1 : 0);
+	if (candidatecount < floorcount) floorcount = candidatecount;
+
+	for (i = 0; i < floorcount; i++) {
+		indices[i] = floorcount == 1 ? result->count - 1
+				: i * (candidatecount - 1) / (floorcount - 1);
+	}
+
+	/* Preserve a real landing at the end of a long downsampled profile. The
+	 * final two atoms then hold the same absolute pitch rather than making the
+	 * last stair look as though it continues into the terminal wall. */
+	flatstart = result->count - 1;
+	while (flatstart > 1 && fabsf(result->nodes[flatstart].floor.ground
+			- result->nodes[flatstart - 1].floor.ground) <= minimumdelta) {
+		flatstart--;
+	}
+	if (floorcount >= 2 && flatstart < result->count - 1
+			&& (floorcount < 3 || indices[floorcount - 3] < flatstart)) {
+		indices[floorcount - 2] = flatstart;
+		indices[floorcount - 1] = result->count - 1;
+	}
+
+	previousground = result->nodes[0].floor.ground;
+	for (i = 0; i < floorcount; i++) {
+		int index = indices[i];
+		struct accessibilitycanepathnode previous = result->nodes[index];
+		enum accessibilitycanepathphrasestep step;
+		previous.floor.ground = previousground;
+		step = accessibilityCanePhraseStep(&previous, &result->nodes[index],
+				minimumdelta);
+		phrase->bits |= (unsigned int)step << (phrase->count * 3);
+		phrase->steps[phrase->count].distance = result->nodes[index].distance;
+		phrase->steps[phrase->count].elevation
+				= result->nodes[index].floor.ground
+				- result->nodes[0].floor.ground;
+		phrase->count++;
+		previousground = result->nodes[index].floor.ground;
+	}
+	if (haswall && phrase->count < ACCESSIBILITY_CANE_PATH_PHRASE_STEPS) {
+		phrase->bits |= (unsigned int)ACCESSIBILITY_CANE_PATH_PHRASE_WALL
+				<< (phrase->count * 3);
+		phrase->steps[phrase->count].distance = terminalwalldistance;
+		phrase->steps[phrase->count].elevation
+				= phrase->count > 0
+						? phrase->steps[phrase->count - 1].elevation : 0.0f;
+		phrase->count++;
+	}
+}
+
 static int accessibilityCanePathIsDrop(const struct accessibilitycanepathfloor *floor,
 		const struct accessibilitycanepathfloor *previous, float threshold)
 {
@@ -83,6 +191,7 @@ void accessibilityCaneTracePath(const struct accessibilitycanepathinput *input,
 	float minimumstep;
 	float baseground;
 	float height;
+	float standingrunstart = -1.0f;
 	int reductions = 0;
 	memset(result, 0, sizeof(*result));
 	result->stop = ACCESSIBILITY_CANE_PATH_UNCERTAIN;
@@ -208,6 +317,21 @@ void accessibilityCaneTracePath(const struct accessibilitycanepathinput *input,
 		result->nodes[result->count++] = next;
 		result->reached = next.distance;
 		result->finaldelta = next.floor.ground - baseground;
+		if (height < input->height - 1.0f && queries->clearance) {
+			enum accessibilitycaneevidence standing = queries->clearance(
+					queries->context, &next, input->height);
+			if (standing == ACCESSIBILITY_CANE_CLEAR) {
+				float standingcontinuation;
+				if (standingrunstart < 0.0f) standingrunstart = next.distance;
+				standingcontinuation = next.distance - standingrunstart;
+				if (standingcontinuation > result->standingcontinuation) {
+					result->standingrecoverydistance = standingrunstart;
+					result->standingcontinuation = standingcontinuation;
+				}
+			} else {
+				standingrunstart = -1.0f;
+			}
+		}
 		if (result->cue == ACCESSIBILITY_CANE_CUE_NONE
 				&& fabsf(result->finaldelta) >= input->terrainthreshold) {
 			result->cue = ACCESSIBILITY_CANE_CUE_TERRAIN;

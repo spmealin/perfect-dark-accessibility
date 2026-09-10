@@ -1,5 +1,24 @@
+#include <math.h>
 #include <string.h>
 #include "accessibility/accessibility_cane_result.h"
+
+int accessibilityCaneLadderNormalIsClimbable(float x, float y, float z)
+{
+	float horizontal;
+	float vertical;
+
+	if (!isfinite(x) || !isfinite(y) || !isfinite(z)) {
+		return 0;
+	}
+
+	horizontal = x * x + z * z;
+	vertical = y * y;
+
+	/* Native climbing projects horizontal movement onto the ladder face to
+	 * derive vertical travel. Floor- or ceiling-facing flagged geometry cannot
+	 * supply that response and is not a usable ladder surface. */
+	return horizontal > 0.000001f && horizontal > vertical;
+}
 
 void accessibilityCaneEvaluateResult(
 		const struct accessibilitycaneobservation *observation,
