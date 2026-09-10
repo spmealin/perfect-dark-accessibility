@@ -49,7 +49,7 @@ Every `cane/sweep` sample adds `evidence_version:2`, `barrier_evidence`,
 retain unknown evidence and no selection.
 
 Reason bits are: 0x001 barrier-query error; 0x002 rise untested; 0x004 clearance
-error; 0x008 clearance collision; 0x010 clearance incomplete; 0x020 current-grade
+error; 0x008 clearance collision; 0x010 clearance incomplete; 0x020 surface-plane
 continuation; 0x040 traversable plateau; 0x080 short runway; 0x100 drop adjacent
 to barrier; 0x200 crouch/terrain merge. Reasons may be combined.
 
