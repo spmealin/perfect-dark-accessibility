@@ -10,17 +10,9 @@
 #define ACCESSIBILITY_CANE_PATH_TIME_LIMIT_US 2000
 #define ACCESSIBILITY_CANE_PATH_PHRASE_STEPS 10
 
-enum accessibilitycanepathphrasestep {
-	ACCESSIBILITY_CANE_PATH_PHRASE_NONE,
-	ACCESSIBILITY_CANE_PATH_PHRASE_LEVEL,
-	ACCESSIBILITY_CANE_PATH_PHRASE_UP,
-	ACCESSIBILITY_CANE_PATH_PHRASE_DOWN,
-	ACCESSIBILITY_CANE_PATH_PHRASE_WALL,
-};
-
 struct accessibilitycanepathphrase {
 	int count;
-	unsigned int bits;
+	int floorcount;
 	struct {
 		float distance;
 		float elevation;

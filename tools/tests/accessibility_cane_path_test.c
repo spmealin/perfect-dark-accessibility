@@ -52,11 +52,6 @@ static enum accessibilitycaneevidence clearancequery(void *context,
 			? ACCESSIBILITY_CANE_BLOCKED : ACCESSIBILITY_CANE_CLEAR;
 }
 
-static int phrasestep(const struct accessibilitycanepathphrase *phrase, int index)
-{
-	return (phrase->bits >> (index * 3)) & 7;
-}
-
 int main(void)
 {
 	struct accessibilitycanepathinput input = {180, 30, 160, {115, 80}, 30, 12, 80};
@@ -177,23 +172,22 @@ int main(void)
 	result.nodes[3].floor.ground = 20.5f;
 	accessibilityCaneBuildTerrainPhrase(&result, 1.0f, 120.0f, &phrase);
 	assert(phrase.count == 5);
-	assert(phrasestep(&phrase, 0) == ACCESSIBILITY_CANE_PATH_PHRASE_LEVEL);
-	assert(phrasestep(&phrase, 1) == ACCESSIBILITY_CANE_PATH_PHRASE_UP);
-	assert(phrasestep(&phrase, 2) == ACCESSIBILITY_CANE_PATH_PHRASE_UP);
-	assert(phrasestep(&phrase, 3) == ACCESSIBILITY_CANE_PATH_PHRASE_LEVEL);
-	assert(phrasestep(&phrase, 4) == ACCESSIBILITY_CANE_PATH_PHRASE_WALL);
+	assert(phrase.floorcount == 4);
 	assert(phrase.steps[0].distance == 0 && phrase.steps[0].elevation == 0);
+	assert(phrase.steps[1].distance == 30 && phrase.steps[1].elevation == 10);
+	assert(phrase.steps[2].distance == 60 && phrase.steps[2].elevation == 20);
 	assert(phrase.steps[3].distance == 90 && phrase.steps[3].elevation == 20.5f);
 	assert(phrase.steps[4].distance == 120);
 	result.nodes[1].floor.ground = -10;
 	result.nodes[2].floor.ground = -20;
 	result.nodes[3].floor.ground = -20.5f;
 	accessibilityCaneBuildTerrainPhrase(&result, 1.0f, 120.0f, &phrase);
-	assert(phrasestep(&phrase, 0) == ACCESSIBILITY_CANE_PATH_PHRASE_LEVEL);
-	assert(phrasestep(&phrase, 1) == ACCESSIBILITY_CANE_PATH_PHRASE_DOWN);
-	assert(phrasestep(&phrase, 2) == ACCESSIBILITY_CANE_PATH_PHRASE_DOWN);
-	assert(phrasestep(&phrase, 3) == ACCESSIBILITY_CANE_PATH_PHRASE_LEVEL);
-	assert(phrasestep(&phrase, 4) == ACCESSIBILITY_CANE_PATH_PHRASE_WALL);
+	assert(phrase.count == 5 && phrase.floorcount == 4);
+	assert(phrase.steps[0].elevation == 0);
+	assert(phrase.steps[1].elevation == -10);
+	assert(phrase.steps[2].elevation == -20);
+	assert(phrase.steps[3].elevation == -20.5f);
+	assert(phrase.steps[4].distance == 120);
 	/* Long profiles are evenly reduced to the fixed mixer capacity and still
 	 * reserve their final atom for the terminal wall. */
 	memset(&result, 0, sizeof(result));
@@ -207,8 +201,7 @@ int main(void)
 	}
 	accessibilityCaneBuildTerrainPhrase(&result, 1.0f, 300.0f, &phrase);
 	assert(phrase.count == ACCESSIBILITY_CANE_PATH_PHRASE_STEPS);
-	assert(phrasestep(&phrase, phrase.count - 1)
-			== ACCESSIBILITY_CANE_PATH_PHRASE_WALL);
+	assert(phrase.floorcount == ACCESSIBILITY_CANE_PATH_PHRASE_STEPS - 1);
 	assert(phrase.steps[phrase.count - 1].distance == 300);
 	/* Flat, descending stairs, landing, then a farther wall. Absolute
 	 * elevations preserve both level regions and the proportional descent. */
@@ -223,14 +216,11 @@ int main(void)
 	}
 	accessibilityCaneBuildTerrainPhrase(&result, 1.0f, 648.0f, &phrase);
 	assert(phrase.count == ACCESSIBILITY_CANE_PATH_PHRASE_STEPS);
+	assert(phrase.floorcount == ACCESSIBILITY_CANE_PATH_PHRASE_STEPS - 1);
 	assert(phrase.steps[0].elevation == 0);
 	assert(phrase.steps[1].elevation == 0);
 	assert(phrase.steps[phrase.count - 3].elevation == -102.0f);
 	assert(phrase.steps[phrase.count - 2].elevation == -102.0f);
-	assert(phrasestep(&phrase, phrase.count - 2)
-			== ACCESSIBILITY_CANE_PATH_PHRASE_LEVEL);
-	assert(phrasestep(&phrase, phrase.count - 1)
-			== ACCESSIBILITY_CANE_PATH_PHRASE_WALL);
 	assert(phrase.steps[phrase.count - 1].distance == 648);
 	f.wall = 10000;
 	input.height = 80;

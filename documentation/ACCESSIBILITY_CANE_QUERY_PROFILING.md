@@ -238,16 +238,17 @@ Sweep logging timing now includes formatting/submitting both aggregate records.
 Differences are diagnostic, not automatic regressions: the sampled reach and
 the experimental policy differ from the production barrier policy.
 
-For an audible connected terrain result, the value-only path layer also packs
-up to ten three-bit classifications and fixed distance/elevation knots into
-the existing sample record. Successive values are 1 level, 2 up, 3 down, and
-4 terminal wall. The publication layer derives a frequency from absolute
-elevation and a gain from each knot's own distance; the mixer continuously
-interpolates those parameters across the floor profile. `cane/sweep` records
-all four values in `path_phrase` beside `path_phrase_count` and
-`path_phrase_bits`. Other cues and fallback terrain record zero. The terminal
-wall may come from the already-observed movement barrier beyond the floor
-query's reach, so this adds no collision query and no dynamic allocation.
+For an audible connected terrain result, the value-only path layer publishes
+up to ten fixed distance/elevation knots and an explicit floor-knot count into
+the existing sample record. A total count greater than the floor count means
+the final knot is a terminal wall. The publication layer derives a frequency
+from absolute elevation and a gain from each knot's own distance; the mixer
+continuously interpolates those parameters across the floor profile.
+`cane/sweep` records the knots in `path_contour` beside
+`path_contour_floor_count`, `path_contour_count`, and `terminal_wall`. Other
+cues and fallback terrain record zero. The terminal wall may come from the
+already-observed movement barrier beyond the floor query's reach, so this adds
+no collision query and no dynamic allocation.
 Mixer work remains bounded to one active cane voice and at most ten knots;
 compare the existing audio-mix and frame-window timings rather than counting
 it as query cost.

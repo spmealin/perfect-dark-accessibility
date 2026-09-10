@@ -94,16 +94,6 @@ enum accessibilitycanecrouchvalidation accessibilityCaneValidateCrouch(
 	return ACCESSIBILITY_CANE_CROUCH_CONFIRMED;
 }
 
-static enum accessibilitycanepathphrasestep accessibilityCanePhraseStep(
-		const struct accessibilitycanepathnode *from,
-		const struct accessibilitycanepathnode *to, float minimumdelta)
-{
-	float delta = to->floor.ground - from->floor.ground;
-	if (delta > minimumdelta) return ACCESSIBILITY_CANE_PATH_PHRASE_UP;
-	if (delta < -minimumdelta) return ACCESSIBILITY_CANE_PATH_PHRASE_DOWN;
-	return ACCESSIBILITY_CANE_PATH_PHRASE_LEVEL;
-}
-
 void accessibilityCaneBuildTerrainPhrase(
 		const struct accessibilitycanepathresult *result, float minimumdelta,
 		float terminalwalldistance, struct accessibilitycanepathphrase *phrase)
@@ -114,7 +104,6 @@ void accessibilityCaneBuildTerrainPhrase(
 	int haswall;
 	int flatstart;
 	int i;
-	float previousground;
 
 	if (!phrase) return;
 	memset(phrase, 0, sizeof(*phrase));
@@ -146,25 +135,16 @@ void accessibilityCaneBuildTerrainPhrase(
 		indices[floorcount - 1] = result->count - 1;
 	}
 
-	previousground = result->nodes[0].floor.ground;
 	for (i = 0; i < floorcount; i++) {
 		int index = indices[i];
-		struct accessibilitycanepathnode previous = result->nodes[index];
-		enum accessibilitycanepathphrasestep step;
-		previous.floor.ground = previousground;
-		step = accessibilityCanePhraseStep(&previous, &result->nodes[index],
-				minimumdelta);
-		phrase->bits |= (unsigned int)step << (phrase->count * 3);
 		phrase->steps[phrase->count].distance = result->nodes[index].distance;
 		phrase->steps[phrase->count].elevation
 				= result->nodes[index].floor.ground
 				- result->nodes[0].floor.ground;
 		phrase->count++;
-		previousground = result->nodes[index].floor.ground;
 	}
+	phrase->floorcount = phrase->count;
 	if (haswall && phrase->count < ACCESSIBILITY_CANE_PATH_PHRASE_STEPS) {
-		phrase->bits |= (unsigned int)ACCESSIBILITY_CANE_PATH_PHRASE_WALL
-				<< (phrase->count * 3);
 		phrase->steps[phrase->count].distance = terminalwalldistance;
 		phrase->steps[phrase->count].elevation
 				= phrase->count > 0

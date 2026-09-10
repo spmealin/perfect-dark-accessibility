@@ -24,7 +24,6 @@
 #include "accessibility/accessibility_cane_path_query.h"
 #include "accessibility/accessibility_log.h"
 #include "accessibility/accessibility_observer.h"
-#include "accessibility/accessibility_path_blocker.h"
 #include "accessibility/accessibility_tone.h"
 
 #define ACCESSIBILITY_CANE_PROBE_COUNT 9
@@ -143,7 +142,6 @@ struct accessibilitycanesample {
 	f32 ladderprobedistance;
 	struct coord laddernormal;
 	s32 crouchterrainmerge;
-	s32 breakable;
 	f32 terrainground;
 	f32 terrainheight;
 	f32 terraindistance;
@@ -641,7 +639,7 @@ static void accessibilityCaneLogSweep(const char *reason)
 		struct accessibilitycanesample *sample = &g_AccessibilityCaneSamples[i];
 
 		accessibilityCaneAppendLog(
-				"%ss%d={angle:%d state:%s scheduled:%d actual:%d late:%d result:%d pass:%d observer:%p remote:%d vehicle:%d vehicle_speed:%.3f base_reach:%.2f effective_reach:%.2f ignored_grabbed_prop:%p ignored_vehicle_prop:%p origin:%.2f,%.2f,%.2f forward:%.5f,%.5f direction:%.5f,%.5f end:%.2f,%.2f,%.2f bbox:%.2f,%.2f,%.2f raw:%.2f,%.2f,%.2f audio:%.2f,%.2f,%.2f distance:%.2f frequency_hz:%.2f end_frequency_hz:%.2f duration_ms:%d tone_pattern:%d path_phrase_count:%d path_phrase_bits:0x%08x terrain:%d drop:%d crouch:%d ladder:%d ladder_probe_hit:%d ladder_probe_queries:%d ladder_probe_rejections:%d ladder_probe_distance:%.2f ladder_normal:%.5f,%.5f,%.5f crouch_terrain_merge:%d breakable:%d terrain_ground:%.2f terrain_height:%.2f terrain_distance:%.2f terrain_room:%d terrain_flags:0x%04x terrain_queries:%d drop_refinements:%d drop_threshold:%.2f drop_barrier_suppressed:%d drop_barrier_gap:%.2f stance:%s traversal_tested:%d traversable:%d blocked_rise:%d short_deadend:%d plateau:%d terrain_suppressed:%d surface_grade_ratio:%.5f grade_max_residual:%.3f grade_continuous:%d grade_safe:%d clearance_result:%d clearance_queries:%d clearance_distance:%.2f plateau_distance:%.2f runway:%.2f minimum_runway:%.2f crouch_result:%d crouch_pass:%d crouch_ymax:%.2f obstacle:%p type:%d geoflags:0x%08x normal:%.5f,%.5f,%.5f edge:%.2f,%.2f,%.2f,%.2f volume:%d pan:%d normalized:%.5f,%.5f master_volume:%.5f effective_volume:%.5f query_us:%" PRIu64,
+				"%ss%d={angle:%d state:%s scheduled:%d actual:%d late:%d result:%d pass:%d observer:%p remote:%d vehicle:%d vehicle_speed:%.3f base_reach:%.2f effective_reach:%.2f ignored_grabbed_prop:%p ignored_vehicle_prop:%p origin:%.2f,%.2f,%.2f forward:%.5f,%.5f direction:%.5f,%.5f end:%.2f,%.2f,%.2f bbox:%.2f,%.2f,%.2f raw:%.2f,%.2f,%.2f audio:%.2f,%.2f,%.2f distance:%.2f frequency_hz:%.2f end_frequency_hz:%.2f duration_ms:%d tone_pattern:%d path_contour_floor_count:%d path_contour_count:%d terminal_wall:%d terrain:%d drop:%d crouch:%d ladder:%d ladder_probe_hit:%d ladder_probe_queries:%d ladder_probe_rejections:%d ladder_probe_distance:%.2f ladder_normal:%.5f,%.5f,%.5f crouch_terrain_merge:%d terrain_ground:%.2f terrain_height:%.2f terrain_distance:%.2f terrain_room:%d terrain_flags:0x%04x terrain_queries:%d drop_refinements:%d drop_threshold:%.2f drop_barrier_suppressed:%d drop_barrier_gap:%.2f stance:%s traversal_tested:%d traversable:%d blocked_rise:%d short_deadend:%d plateau:%d terrain_suppressed:%d surface_grade_ratio:%.5f grade_max_residual:%.3f grade_continuous:%d grade_safe:%d clearance_result:%d clearance_queries:%d clearance_distance:%.2f plateau_distance:%.2f runway:%.2f minimum_runway:%.2f crouch_result:%d crouch_pass:%d crouch_ymax:%.2f obstacle:%p type:%d geoflags:0x%08x normal:%.5f,%.5f,%.5f edge:%.2f,%.2f,%.2f,%.2f volume:%d pan:%d normalized:%.5f,%.5f master_volume:%.5f effective_volume:%.5f query_us:%" PRIu64,
 				i ? " " : "", i, sample->angledegrees,
 				accessibilityCaneSampleStateName(sample->state),
 				sample->scheduledtick, sample->actualtick, sample->lateness,
@@ -661,7 +659,8 @@ static void accessibilityCaneLogSweep(const char *reason)
 				sample->audiosource.y, sample->audiosource.z,
 				sample->distance, sample->frequency, sample->endfrequency,
 				sample->durationms, sample->tonepattern,
-				sample->pathphrase.count, sample->pathphrase.bits,
+				sample->pathphrase.floorcount, sample->pathphrase.count,
+				sample->pathphrase.count > sample->pathphrase.floorcount,
 				sample->terrain, sample->drop, sample->crouchpassage,
 				sample->ladder, sample->ladderprobehit,
 				sample->ladderprobequeries, sample->ladderproberejections,
@@ -669,7 +668,6 @@ static void accessibilityCaneLogSweep(const char *reason)
 				sample->laddernormal.x, sample->laddernormal.y,
 				sample->laddernormal.z,
 				sample->crouchterrainmerge,
-				sample->breakable,
 				sample->terrainground,
 				sample->terrainheight, sample->terraindistance,
 				sample->terrainroom, sample->terrainflags,
@@ -715,12 +713,12 @@ static void accessibilityCaneLogSweep(const char *reason)
 				sample->legacydropdistance, sample->legacydropheight);
 		if (sample->pathphrase.count > 0) {
 			s32 j;
-			accessibilityCaneAppendLog(" path_phrase=[");
+			accessibilityCaneAppendLog(" path_contour=[");
 			for (j = 0; j < sample->pathphrase.count; j++) {
 				accessibilityCaneAppendLog(
-						"%s%d={kind:%d distance:%.2f elevation:%.2f frequency_hz:%.2f volume:%.5f}",
+						"%s%d={type:%s distance:%.2f elevation:%.2f frequency_hz:%.2f volume:%.5f}",
 						j ? " " : "", j,
-						(sample->pathphrase.bits >> (j * 3)) & 7,
+						j < sample->pathphrase.floorcount ? "floor" : "wall",
 						sample->pathphrase.steps[j].distance,
 						sample->pathphrase.steps[j].elevation,
 						sample->pathphrasefrequencies[j],
@@ -2039,8 +2037,7 @@ static void accessibilityCanePlaySample(
 		f32 pitchratio;
 		s32 pathvolume = psCalculateVolumeFromDistance(pathdistance,
 				fulldistance, fadedistance, silentdistance, AL_VOL_FULL);
-		if (((sample->pathphrase.bits >> (i * 3)) & 7)
-				== ACCESSIBILITY_CANE_PATH_PHRASE_WALL) {
+		if (i >= sample->pathphrase.floorcount) {
 			sample->pathphrasefrequencies[i]
 					= accessibilityCaneFrequencyForDistance(pathdistance,
 							reach, nearfrequency, farfrequency);
@@ -2063,7 +2060,7 @@ static void accessibilityCanePlaySample(
 			sample->frequency, sample->endfrequency,
 			sample->effectivevolume, sample->normalizedpan,
 			sample->durationms, sample->tonepattern,
-			sample->pathphrase.bits, sample->pathphrase.count,
+			sample->pathphrase.floorcount, sample->pathphrase.count,
 			sample->pathphrasefrequencies, sample->pathphrasevolumes);
 }
 
@@ -2257,10 +2254,6 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 		sample->audiosource.y = query.observer.camera.y;
 		horizontal = barrierdistance;
 		sample->ladder = sample->evaluation.cue == ACCESSIBILITY_CANE_CUE_LADDER;
-		if (!sample->crouchpassage && !sample->ladder) {
-			sample->breakable
-					= accessibilityPathBlockerIsBreakable(sample->obstacle);
-		}
 		g_AccessibilityCaneHits++;
 	} else {
 		sample->state = result == CDRESULT_NOCOLLISION
