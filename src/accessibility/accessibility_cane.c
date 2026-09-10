@@ -247,7 +247,7 @@ struct accessibilitycanequery {
 };
 
 static const s32 g_AccessibilityCaneAngles[ACCESSIBILITY_CANE_PROBE_COUNT] = {
-	-60, -45, -30, -15, 0, 15, 30, 45, 60,
+	-80, -45, -25, -10, 0, 10, 25, 45, 80,
 };
 
 static const s32 g_AccessibilityCaneSlowOffsets[ACCESSIBILITY_CANE_PROBE_COUNT] = {

@@ -70,10 +70,10 @@ A permanent controller binding and an options-menu control are outside this prot
 Each sweep samples these camera-relative horizontal angles in this exact order:
 
 ```text
--60, -45, -30, -15, 0, +15, +30, +45, +60 degrees
+-80, -45, -25, -10, 0, +10, +25, +45, +80 degrees
 ```
 
-The observed sound must move left to right. Do not assume the sign convention from the mathematical rotation alone: verify in the game that `-60` pans left and `+60` pans right, and reverse the rotation signs if the engine coordinate system requires it.
+The observed sound must move left to right. Do not assume the sign convention from the mathematical rotation alone: verify in the game that `-80` pans left and `+80` pans right, and reverse the rotation signs if the engine coordinate system requires it.
 
 Each probe originally had a maximum horizontal distance of 600 world units. Blind-user acceptance testing increased the default reach by 50 percent to 900 world units. Reach and attenuation are now bounded `pd.ini` settings, so later testing can tune them without recompilation. A miss produces silence but still consumes its position in the sweep. There is no distance-to-pitch mapping in this prototype.
 
@@ -123,7 +123,7 @@ Run the virtual cane only when all of the following are true:
 - No menu, pause screen, cutscene, stage transition, or other non-gameplay context is active.
 - The mode is single-player for this prototype.
 
-On scope loss, immediately stop all cane voices and reset the sweep scheduler, but preserve the configured mode. On scope regain, begin a fresh left-to-right sweep at `-60` degrees. A stage change or player-context change must do the same. Turning, walking, crouching, or changing rooms is not a scope loss.
+On scope loss, immediately stop all cane voices and reset the sweep scheduler, but preserve the configured mode. On scope regain, begin a fresh left-to-right sweep at `-80` degrees. A stage change or player-context change must do the same. Turning, walking, crouching, or changing rooms is not a scope loss.
 
 Multiplayer and split-screen behavior are explicitly deferred. Do not accidentally use the wrong player's camera or combine geometry from several player contexts.
 
@@ -292,10 +292,10 @@ The implementation should behave as this state machine:
 
 1. **Disabled:** mode is Off or global accessibility is disabled. No scheduler work and no active voices.
 2. **Out of scope:** mode is Slow/Fast, but gameplay scope is invalid. Preserve mode, stop voices, and wait.
-3. **Begin sweep:** scope becomes valid or mode changes to Slow/Fast. Set cursor to `-60`, assign a new sweep identifier, and allow the first sample immediately.
+3. **Begin sweep:** scope becomes valid or mode changes to Slow/Fast. Set cursor to `-80`, assign a new sweep identifier, and allow the first sample immediately.
 4. **Sample:** at the scheduled offset, capture the live pose and bbox, perform one query, optionally play that slot, record the result, and advance the cursor.
-5. **End pause:** after `+60`, make no queries until the cycle boundary.
-6. **Next sweep:** assign a new sweep identifier and return to `-60` using the current live pose.
+5. **End pause:** after `+80`, make no queries until the cycle boundary.
+6. **Next sweep:** assign a new sweep identifier and return to `-80` using the current live pose.
 
 Changing Slow to Fast or Fast to Slow starts a new left-to-right sweep immediately. Changing to Off stops all cane voices and discards partial diagnostic aggregation after emitting a reset/mode-change record.
 
