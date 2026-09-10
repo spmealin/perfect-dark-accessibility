@@ -19,6 +19,8 @@ its established path.
 
 Current feature-specific engineering records include:
 
+- `ACCESSIBILITY_CANE_ACCEPTANCE_EVIDENCE.md` — value-only blind-user cane
+  results preserved independently of disposable local diagnostic logs.
 - `ACCESSIBILITY_CANE_QUERY_PROFILING.md` — structured cane observations,
   evidence versus audible policy, replay verification, and timing scopes.
 - `ACCESSIBILITY_SPECIAL_DEVICE_TARGET_AUDIT.md` — campaign setup inventory,
