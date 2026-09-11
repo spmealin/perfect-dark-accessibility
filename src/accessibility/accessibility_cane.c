@@ -8,7 +8,9 @@
 #include "bss.h"
 #include "data.h"
 #include "types.h"
+#include "game/bondeyespy.h"
 #include "game/bondmove.h"
+#include "game/chr.h"
 #include "game/lv.h"
 #include "game/player.h"
 #include "game/prop.h"
@@ -174,6 +176,13 @@ struct accessibilitycanesample {
 	struct prop *obstacle;
 	struct prop *ignoredgrabbedprop;
 	struct prop *ignoredvehicleprop;
+	struct prop *ignoredremoteprop;
+	RoomNum observerrooms[8];
+	RoomNum initialdstrooms[8];
+	RoomNum finaldstrooms[8];
+	RoomNum remotefloorroom;
+	s32 remotefloorroomsimplified;
+	s32 remoteroomsexpanded;
 	s32 obstacletype;
 	u32 geoflags;
 	struct coord normal;
@@ -626,7 +635,7 @@ static void accessibilityCaneLogSweep(const char *reason)
 		struct accessibilitycanesample *sample = &g_AccessibilityCaneSamples[i];
 
 		accessibilityCaneAppendLog(
-				"%ss%d={angle:%d state:%s scheduled:%d actual:%d late:%d result:%d pass:%d observer:%p remote:%d vehicle:%d vehicle_speed:%.3f base_reach:%.2f effective_reach:%.2f ignored_grabbed_prop:%p ignored_vehicle_prop:%p origin:%.2f,%.2f,%.2f forward:%.5f,%.5f direction:%.5f,%.5f end:%.2f,%.2f,%.2f bbox:%.2f,%.2f,%.2f raw:%.2f,%.2f,%.2f audio:%.2f,%.2f,%.2f distance:%.2f frequency_hz:%.2f end_frequency_hz:%.2f duration_ms:%d tone_pattern:%d path_contour_floor_count:%d path_contour_count:%d terminal_wall:%d terrain:%d drop:%d crouch:%d ladder:%d ladder_probe_hit:%d ladder_probe_queries:%d ladder_probe_rejections:%d ladder_probe_distance:%.2f ladder_normal:%.5f,%.5f,%.5f crouch_terrain_merge:%d terrain_ground:%.2f terrain_height:%.2f terrain_distance:%.2f terrain_room:%d terrain_flags:0x%04x terrain_queries:%d drop_refinements:%d drop_threshold:%.2f drop_barrier_suppressed:%d drop_barrier_gap:%.2f stance:%s traversal_tested:%d traversable:%d blocked_rise:%d short_deadend:%d plateau:%d terrain_suppressed:%d surface_grade_ratio:%.5f grade_max_residual:%.3f grade_continuous:%d grade_safe:%d clearance_result:%d clearance_queries:%d clearance_distance:%.2f plateau_distance:%.2f runway:%.2f minimum_runway:%.2f crouch_result:%d crouch_pass:%d crouch_ymax:%.2f obstacle:%p type:%d geoflags:0x%08x normal:%.5f,%.5f,%.5f edge:%.2f,%.2f,%.2f,%.2f volume:%d pan:%d normalized:%.5f,%.5f master_volume:%.5f effective_volume:%.5f query_us:%" PRIu64,
+				"%ss%d={angle:%d state:%s scheduled:%d actual:%d late:%d result:%d pass:%d observer:%p remote:%d vehicle:%d vehicle_speed:%.3f base_reach:%.2f effective_reach:%.2f ignored_grabbed_prop:%p ignored_vehicle_prop:%p ignored_remote_prop:%p origin:%.2f,%.2f,%.2f forward:%.5f,%.5f direction:%.5f,%.5f end:%.2f,%.2f,%.2f bbox:%.2f,%.2f,%.2f raw:%.2f,%.2f,%.2f audio:%.2f,%.2f,%.2f distance:%.2f frequency_hz:%.2f end_frequency_hz:%.2f duration_ms:%d tone_pattern:%d path_contour_floor_count:%d path_contour_count:%d terminal_wall:%d terrain:%d drop:%d crouch:%d ladder:%d ladder_probe_hit:%d ladder_probe_queries:%d ladder_probe_rejections:%d ladder_probe_distance:%.2f ladder_normal:%.5f,%.5f,%.5f crouch_terrain_merge:%d terrain_ground:%.2f terrain_height:%.2f terrain_distance:%.2f terrain_room:%d terrain_flags:0x%04x terrain_queries:%d drop_refinements:%d drop_threshold:%.2f drop_barrier_suppressed:%d drop_barrier_gap:%.2f stance:%s traversal_tested:%d traversable:%d blocked_rise:%d short_deadend:%d plateau:%d terrain_suppressed:%d surface_grade_ratio:%.5f grade_max_residual:%.3f grade_continuous:%d grade_safe:%d clearance_result:%d clearance_queries:%d clearance_distance:%.2f plateau_distance:%.2f runway:%.2f minimum_runway:%.2f crouch_result:%d crouch_pass:%d crouch_ymax:%.2f obstacle:%p type:%d geoflags:0x%08x normal:%.5f,%.5f,%.5f edge:%.2f,%.2f,%.2f,%.2f volume:%d pan:%d normalized:%.5f,%.5f master_volume:%.5f effective_volume:%.5f query_us:%" PRIu64,
 				i ? " " : "", i, sample->angledegrees,
 				accessibilityCaneSampleStateName(sample->state),
 				sample->scheduledtick, sample->actualtick, sample->lateness,
@@ -636,6 +645,7 @@ static void accessibilityCaneLogSweep(const char *reason)
 				sample->basereach, sample->effectivereach,
 				(void *)sample->ignoredgrabbedprop,
 				(void *)sample->ignoredvehicleprop,
+				(void *)sample->ignoredremoteprop,
 				sample->origin.x, sample->origin.y,
 				sample->origin.z, sample->forward.x, sample->forward.z,
 				sample->direction.x, sample->direction.z,
@@ -698,6 +708,25 @@ static void accessibilityCaneLogSweep(const char *reason)
 				accessibilityCaneTerrainValidationName(sample->terrainvalidation),
 				accessibilityCaneCrouchValidationName(sample->crouchvalidation),
 				sample->legacydropdistance, sample->legacydropheight);
+		if (sample->observerremote) {
+			accessibilityCaneAppendLog(
+					" remote_floor_room:%d remote_floor_simplified:%d remote_rooms_expanded:%d observer_rooms:%d,%d,%d,%d,%d,%d,%d,%d initial_dst_rooms:%d,%d,%d,%d,%d,%d,%d,%d final_dst_rooms:%d,%d,%d,%d,%d,%d,%d,%d",
+					sample->remotefloorroom,
+					sample->remotefloorroomsimplified,
+					sample->remoteroomsexpanded,
+					sample->observerrooms[0], sample->observerrooms[1],
+					sample->observerrooms[2], sample->observerrooms[3],
+					sample->observerrooms[4], sample->observerrooms[5],
+					sample->observerrooms[6], sample->observerrooms[7],
+					sample->initialdstrooms[0], sample->initialdstrooms[1],
+					sample->initialdstrooms[2], sample->initialdstrooms[3],
+					sample->initialdstrooms[4], sample->initialdstrooms[5],
+					sample->initialdstrooms[6], sample->initialdstrooms[7],
+					sample->finaldstrooms[0], sample->finaldstrooms[1],
+					sample->finaldstrooms[2], sample->finaldstrooms[3],
+					sample->finaldstrooms[4], sample->finaldstrooms[5],
+					sample->finaldstrooms[6], sample->finaldstrooms[7]);
+		}
 		if (sample->pathphrase.count > 0) {
 			s32 j;
 			accessibilityCaneAppendLog(" path_contour=[");
@@ -1860,15 +1889,51 @@ static s32 accessibilityCanePrepareQuery(
 	return true;
 }
 
-static void accessibilityCaneResolveDestinationRooms(
-		struct accessibilitycanequery *query)
+static void accessibilityCaneCopyRoomList(RoomNum *dst, const RoomNum *src)
 {
-#if VERSION < VERSION_NTSC_1_0
 	s32 i;
-#endif
+	s32 ended = false;
+
+	for (i = 0; i < 8; i++) {
+		if (ended || !src) {
+			dst[i] = -1;
+		} else {
+			dst[i] = src[i];
+			ended = src[i] == -1;
+		}
+	}
+}
+
+static void accessibilityCaneResolveDestinationRooms(
+		struct accessibilitycanequery *query,
+		struct accessibilitycanesample *sample)
+{
+	s32 i;
+
+	sample->remotefloorroom = -1;
+	accessibilityCaneCopyRoomList(sample->observerrooms,
+			query->observer.prop->rooms);
 
 	func0f065dfc(&query->start, query->observer.prop->rooms,
 			&query->end, query->dstrooms, query->morerooms, 20);
+	accessibilityCaneCopyRoomList(sample->initialdstrooms, query->dstrooms);
+
+	if (query->observer.isremote && query->observer.prop->chr) {
+		eyespyFindGround(&sample->remotefloorroom);
+
+		for (i = 0; i < 8 && query->dstrooms[i] != -1; i++) {
+			if (query->dstrooms[i] == sample->remotefloorroom) {
+				query->dstrooms[0] = sample->remotefloorroom;
+				query->dstrooms[1] = -1;
+				sample->remotefloorroomsimplified = true;
+				break;
+			}
+		}
+
+		chr0f021fa8(query->observer.prop->chr,
+				&query->end, query->dstrooms);
+		sample->remoteroomsexpanded = true;
+	}
 
 #if VERSION < VERSION_NTSC_1_0
 	if (!query->observer.isremote) {
@@ -1886,6 +1951,8 @@ static void accessibilityCaneResolveDestinationRooms(
 		bmoveFindEnteredRoomsByPos(g_Vars.currentplayer,
 				&query->end, query->dstrooms);
 	}
+
+	accessibilityCaneCopyRoomList(sample->finaldstrooms, query->dstrooms);
 }
 
 static s32 accessibilityCaneFindBarrier(
@@ -2112,7 +2179,7 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 	sample->radius = query.observer.radius;
 	sample->ymax = query.observer.ymax;
 	sample->ymin = query.observer.ymin;
-	accessibilityCaneResolveDestinationRooms(&query);
+	accessibilityCaneResolveDestinationRooms(&query, sample);
 
 	/*
 	 * The grabbed object travels immediately in front of Joanna and remains
@@ -2135,6 +2202,16 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 				g_Vars.currentplayer->prop);
 		accessibilityCaneCollisionGuardDisableProp(&guard,
 				query.observer.prop);
+	}
+
+	if (query.observer.isremote) {
+		s32 oldcount = guard.propcount;
+
+		accessibilityCaneCollisionGuardDisableProp(&guard,
+				query.observer.prop);
+		if (guard.propcount > oldcount) {
+			sample->ignoredremoteprop = query.observer.prop;
+		}
 	}
 
 	result = accessibilityCaneFindBarrier(sample, &query.start, &query.end,
