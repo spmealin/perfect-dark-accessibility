@@ -12,6 +12,7 @@
 #include "game/radar.h"
 #include "system.h"
 #include "accessibility/accessibility.h"
+#include "accessibility/accessibility_landmark.h"
 #include "accessibility/accessibility_announcement.h"
 #include "accessibility/accessibility_log.h"
 #include "accessibility/accessibility_tone.h"
@@ -363,6 +364,10 @@ static void accessibilityTrackerScan(s32 source)
 
 		if (source == ACCESSIBILITY_TRACKER_SOURCE_RTRACKER) {
 			category = radarGetRTrackedType(prop);
+			if (category != RADAR_TRACKED_NONE
+					&& accessibilityLandmarkIsCompletedProp(prop)) {
+				category = RADAR_TRACKED_NONE;
+			}
 		} else if (source == ACCESSIBILITY_TRACKER_SOURCE_INFRARED
 				&& (prop->flags & PROPFLAG_ONANYSCREENPREVTICK)
 				&& (prop->type == PROPTYPE_OBJ

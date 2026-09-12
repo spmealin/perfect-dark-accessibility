@@ -21,12 +21,19 @@
 #define ACCESSIBILITY_LANDMARK_HYSTERESIS 75.0f
 #define ACCESSIBILITY_LANDMARK_LOG_TICKS TICKS(60)
 #define ACCESSIBILITY_LANDMARK_START_SPACING TICKS(15)
+/* setupsho.c owns these stage-script values. They are recorded here because
+ * each shuffled tag remains stable while the corresponding completion flag
+ * is the authoritative per-pillar placement state. */
+#define ACCESSIBILITY_LANDMARK_SKEDAR_PILLAR1_MARKED 0x00000100u
+#define ACCESSIBILITY_LANDMARK_SKEDAR_PILLAR2_MARKED 0x00000200u
+#define ACCESSIBILITY_LANDMARK_SKEDAR_PILLAR3_MARKED 0x00000400u
 
 struct accessibilitylandmarkspec {
 	s32 stage;
 	s32 tag;
 	s32 proptype;
 	s32 objective;
+	u32 completionflag;
 	const char *name;
 };
 
@@ -50,11 +57,17 @@ struct accessibilitylandmarkstate {
  * entries in the current stage receive independent preallocated voices.
  */
 static const struct accessibilitylandmarkspec g_AccessibilityLandmarkSpecs[] = {
-	{ STAGE_RESCUE, 0x18, PROPTYPE_DOOR, -1, "crate_placement_marker" },
-	{ STAGE_AIRBASE, 0x04, PROPTYPE_OBJ, 1, "suitcase_deposit_conveyor" },
-	{ STAGE_ATTACKSHIP, 0x04, PROPTYPE_OBJ, 0, "shield_console_1" },
-	{ STAGE_ATTACKSHIP, 0x05, PROPTYPE_OBJ, 0, "shield_console_2" },
-	{ STAGE_ATTACKSHIP, 0x06, PROPTYPE_OBJ, 0, "shield_console_3" },
+	{ STAGE_RESCUE, 0x18, PROPTYPE_DOOR, -1, 0, "crate_placement_marker" },
+	{ STAGE_AIRBASE, 0x04, PROPTYPE_OBJ, 1, 0, "suitcase_deposit_conveyor" },
+	{ STAGE_ATTACKSHIP, 0x04, PROPTYPE_OBJ, 0, 0, "shield_console_1" },
+	{ STAGE_ATTACKSHIP, 0x05, PROPTYPE_OBJ, 0, 0, "shield_console_2" },
+	{ STAGE_ATTACKSHIP, 0x06, PROPTYPE_OBJ, 0, 0, "shield_console_3" },
+	{ STAGE_SKEDARRUINS, 0x01, PROPTYPE_OBJ, 0,
+		ACCESSIBILITY_LANDMARK_SKEDAR_PILLAR1_MARKED, "target_pillar_1" },
+	{ STAGE_SKEDARRUINS, 0x02, PROPTYPE_OBJ, 0,
+		ACCESSIBILITY_LANDMARK_SKEDAR_PILLAR2_MARKED, "target_pillar_2" },
+	{ STAGE_SKEDARRUINS, 0x03, PROPTYPE_OBJ, 0,
+		ACCESSIBILITY_LANDMARK_SKEDAR_PILLAR3_MARKED, "target_pillar_3" },
 };
 
 static struct accessibilitylandmarkstate
@@ -92,6 +105,15 @@ static const struct accessibilitylandmarkspec *accessibilityLandmarkFindSpec(
 s32 accessibilityLandmarkOwnsProp(struct prop *prop)
 {
 	return accessibilityLandmarkFindSpec(prop) != NULL;
+}
+
+s32 accessibilityLandmarkIsCompletedProp(struct prop *prop)
+{
+	const struct accessibilitylandmarkspec *spec
+			= accessibilityLandmarkFindSpec(prop);
+
+	return spec && spec->completionflag
+			&& (g_StageFlags & spec->completionflag) != 0;
 }
 
 static const char *accessibilityLandmarkScopeReason(void)
@@ -162,6 +184,11 @@ static s32 accessibilityLandmarkObjectEligible(
 		const struct accessibilitylandmarkspec *spec,
 		struct defaultobj *obj, const char **reason)
 {
+	if (spec->completionflag && (g_StageFlags & spec->completionflag)) {
+		*reason = "completion_flag_set";
+		return false;
+	}
+
 	if (spec->objective >= 0) {
 		if (spec->objective >= objectiveGetCount()
 				|| !(objectiveGetDifficultyBits(spec->objective)

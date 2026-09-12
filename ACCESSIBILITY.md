@@ -363,15 +363,21 @@ chirp: no chirps consistently means a level-authored landmark.
 
 Registry entries currently cover Area 51: Rescue's intact silver-X wall, where
 the hovercrate is intended to be positioned, Air Base's baggage conveyor,
-where the equipped suitcase is deposited, and the three shield-system consoles
-on the Attack Ship. They follow the shared active
+where the equipped suitcase is deposited, the three shield-system consoles
+on the Attack Ship, and the three shuffled target-amplifier pillars in Skedar
+Ruins. They follow the shared active
 observer, use `Accessibility.MarkerRange` and `Accessibility.MarkerVolume`,
 and require a direct visual line of sight. The wall stops when destroyed; the
 conveyor sounds only while the difficulty includes the "Check in equipment"
 objective and that objective remains incomplete. The three shield consoles
 sound only while "Disable shield system" remains incomplete, stop individually
 when destroyed, and enter audibility 250 ms apart so colocated consoles remain
-spatially distinguishable. For a tagged object whose setup origin is embedded
+spatially distinguishable. Each Skedar Ruins pillar sounds while "Identify
+temple targets" remains incomplete and its corresponding authoritative
+per-pillar stage flag is clear. A pillar stops individually as soon as the
+level accepts its Target Amplifier. The accessibility R-Tracker also suppresses
+that completed pillar even though the solo level script leaves its native
+yellow-tracker object flag set. For a tagged object whose setup origin is embedded
 in its mounting geometry, the LOS query tests the nearest model-box face and
 four inset surface points; render state by itself is never sufficient.
 Registry ownership also excludes these props from
@@ -379,8 +385,9 @@ F5, so their native activation flags cannot misleadingly describe them as
 ordinary interactables. Authored landmarks do not require F5,
 consume interactable-scanner results, imply normal activation, or create a
 targeting lock. Four dedicated mixer voices are preallocated; adding a landmark
-requires a stage, setup tag, expected prop type, optional objective gate, and
-stable semantic name in the registry rather than new playback logic.
+requires a stage, setup tag, expected prop type, optional objective gate,
+optional per-object completion flag, and stable semantic name in the registry
+rather than new playback logic.
 
 ### View orientation recovery
 
