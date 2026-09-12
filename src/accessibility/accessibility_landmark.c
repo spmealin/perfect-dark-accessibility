@@ -34,10 +34,12 @@ struct accessibilitylandmarkspec {
 	s32 proptype;
 	s32 objective;
 	u32 completionflag;
+	s32 requirevulnerable;
 	const char *name;
 };
 
 struct accessibilitylandmarkstate {
+	const struct accessibilitylandmarkspec *spec;
 	struct defaultobj *obj;
 	s32 audible;
 	s32 inrange;
@@ -57,17 +59,22 @@ struct accessibilitylandmarkstate {
  * entries in the current stage receive independent preallocated voices.
  */
 static const struct accessibilitylandmarkspec g_AccessibilityLandmarkSpecs[] = {
-	{ STAGE_RESCUE, 0x18, PROPTYPE_DOOR, -1, 0, "crate_placement_marker" },
-	{ STAGE_AIRBASE, 0x04, PROPTYPE_OBJ, 1, 0, "suitcase_deposit_conveyor" },
-	{ STAGE_ATTACKSHIP, 0x04, PROPTYPE_OBJ, 0, 0, "shield_console_1" },
-	{ STAGE_ATTACKSHIP, 0x05, PROPTYPE_OBJ, 0, 0, "shield_console_2" },
-	{ STAGE_ATTACKSHIP, 0x06, PROPTYPE_OBJ, 0, 0, "shield_console_3" },
+	{ STAGE_RESCUE, 0x18, PROPTYPE_DOOR, -1, 0, false, "crate_placement_marker" },
+	{ STAGE_AIRBASE, 0x04, PROPTYPE_OBJ, 1, 0, false, "suitcase_deposit_conveyor" },
+	{ STAGE_ATTACKSHIP, 0x04, PROPTYPE_OBJ, 0, 0, false, "shield_console_1" },
+	{ STAGE_ATTACKSHIP, 0x05, PROPTYPE_OBJ, 0, 0, false, "shield_console_2" },
+	{ STAGE_ATTACKSHIP, 0x06, PROPTYPE_OBJ, 0, 0, false, "shield_console_3" },
 	{ STAGE_SKEDARRUINS, 0x01, PROPTYPE_OBJ, 0,
-		ACCESSIBILITY_LANDMARK_SKEDAR_PILLAR1_MARKED, "target_pillar_1" },
+		ACCESSIBILITY_LANDMARK_SKEDAR_PILLAR1_MARKED, false, "target_pillar_1" },
 	{ STAGE_SKEDARRUINS, 0x02, PROPTYPE_OBJ, 0,
-		ACCESSIBILITY_LANDMARK_SKEDAR_PILLAR2_MARKED, "target_pillar_2" },
+		ACCESSIBILITY_LANDMARK_SKEDAR_PILLAR2_MARKED, false, "target_pillar_2" },
 	{ STAGE_SKEDARRUINS, 0x03, PROPTYPE_OBJ, 0,
-		ACCESSIBILITY_LANDMARK_SKEDAR_PILLAR3_MARKED, "target_pillar_3" },
+		ACCESSIBILITY_LANDMARK_SKEDAR_PILLAR3_MARKED, false, "target_pillar_3" },
+	{ STAGE_SKEDARRUINS, 0x13, PROPTYPE_OBJ, 4, 0, true, "king_spike_middle_left" },
+	{ STAGE_SKEDARRUINS, 0x14, PROPTYPE_OBJ, 4, 0, true, "king_spike_middle_right" },
+	{ STAGE_SKEDARRUINS, 0x15, PROPTYPE_OBJ, 4, 0, true, "king_spike_bottom_left" },
+	{ STAGE_SKEDARRUINS, 0x16, PROPTYPE_OBJ, 4, 0, true, "king_spike_bottom_right" },
+	{ STAGE_SKEDARRUINS, 0x17, PROPTYPE_OBJ, 4, 0, true, "king_spike_top" },
 };
 
 static struct accessibilitylandmarkstate
@@ -229,6 +236,11 @@ static s32 accessibilityLandmarkObjectEligible(
 		return false;
 	}
 
+	if (spec->requirevulnerable && (obj->flags & OBJFLAG_INVINCIBLE)) {
+		*reason = "object_invincible";
+		return false;
+	}
+
 	*reason = "eligible";
 	return true;
 }
@@ -266,23 +278,108 @@ static void accessibilityLandmarkStopVoices(void)
 static void accessibilityLandmarkUpdate(
 		const struct accessibilityobserver *observer)
 {
+	struct accessibilitylandmarkcandidate {
+		const struct accessibilitylandmarkspec *spec;
+		struct defaultobj *obj;
+		s32 slot;
+	};
+	struct accessibilitylandmarkcandidate candidates[
+			ARRAYCOUNT(g_AccessibilityLandmarkSpecs)];
+	s32 claimed[ACCESSIBILITY_TONE_LANDMARK_SLOT_COUNT] = { 0 };
 	f32 range;
 	f32 mastervolume;
-	s32 slot = 0;
+	s32 candidatecount = 0;
+	s32 candidateindex;
+	s32 slot;
 	s32 specindex;
 	s32 audiblecount = 0;
 
 	accessibilityGetMarkerTuning(&range, &mastervolume);
 
 	for (specindex = 0;
-			specindex < ARRAYCOUNT(g_AccessibilityLandmarkSpecs)
-					&& slot < ACCESSIBILITY_TONE_LANDMARK_SLOT_COUNT;
+			specindex < ARRAYCOUNT(g_AccessibilityLandmarkSpecs);
 			specindex++) {
 		const struct accessibilitylandmarkspec *spec
 				= &g_AccessibilityLandmarkSpecs[specindex];
-		struct accessibilitylandmarkstate *state;
 		struct defaultobj *obj;
 		const char *reason = "stage_mismatch";
+
+		if (spec->stage != g_Vars.stagenum) {
+			continue;
+		}
+
+		obj = objFindByTagId(spec->tag);
+
+		if (accessibilityLandmarkObjectEligible(spec, obj, &reason)) {
+			candidates[candidatecount].spec = spec;
+			candidates[candidatecount].obj = obj;
+			candidates[candidatecount].slot = -1;
+			candidatecount++;
+		} else {
+			for (slot = 0;
+					slot < ACCESSIBILITY_TONE_LANDMARK_SLOT_COUNT;
+					slot++) {
+				if (g_AccessibilityLandmarkStates[slot].spec == spec
+						&& (g_AccessibilityLandmarkStates[slot].obj
+								|| g_AccessibilityLandmarkStates[slot].audible)) {
+					accessibilityLogEvent("landmark", "state",
+							"slot=%d name=%s state=inactive reason=%s tick=%d stage=%d",
+							slot, spec->name, reason, g_Vars.lvframe60,
+							g_Vars.stagenum);
+					break;
+				}
+			}
+		}
+	}
+
+	/* Retain existing slot identities so destroying or hiding one landmark does
+	 * not restart and reshuffle every remaining positioned voice. */
+	for (candidateindex = 0; candidateindex < candidatecount;
+			candidateindex++) {
+		for (slot = 0; slot < ACCESSIBILITY_TONE_LANDMARK_SLOT_COUNT; slot++) {
+			if (!claimed[slot]
+					&& g_AccessibilityLandmarkStates[slot].spec
+							== candidates[candidateindex].spec
+					&& g_AccessibilityLandmarkStates[slot].obj
+							== candidates[candidateindex].obj) {
+				candidates[candidateindex].slot = slot;
+				claimed[slot] = true;
+				break;
+			}
+		}
+	}
+
+	/* Allocate only eligible entries. Inactive entries in the same stage must
+	 * not consume one of the four preallocated voices. */
+	for (candidateindex = 0; candidateindex < candidatecount;
+			candidateindex++) {
+		if (candidates[candidateindex].slot >= 0) {
+			continue;
+		}
+
+		for (slot = 0; slot < ACCESSIBILITY_TONE_LANDMARK_SLOT_COUNT; slot++) {
+			if (!claimed[slot]) {
+				candidates[candidateindex].slot = slot;
+				claimed[slot] = true;
+				break;
+			}
+		}
+
+		if (candidates[candidateindex].slot < 0) {
+			accessibilityLogEvent("landmark", "capacity",
+					"name=%s tag=%d eligible=%d capacity=%d tick=%d stage=%d",
+					candidates[candidateindex].spec->name,
+					candidates[candidateindex].spec->tag, candidatecount,
+					ACCESSIBILITY_TONE_LANDMARK_SLOT_COUNT,
+					g_Vars.lvframe60, g_Vars.stagenum);
+		}
+	}
+
+	for (slot = 0; slot < ACCESSIBILITY_TONE_LANDMARK_SLOT_COUNT; slot++) {
+		const struct accessibilitylandmarkspec *spec = NULL;
+		struct accessibilitylandmarkstate *state
+				= &g_AccessibilityLandmarkStates[slot];
+		struct defaultobj *obj = NULL;
 		f32 limit;
 		s32 inrange;
 		s32 lineofsight;
@@ -291,29 +388,25 @@ static void accessibilityLandmarkUpdate(
 		f32 normalizedpan;
 		s32 restart;
 
-		if (spec->stage != g_Vars.stagenum) {
-			continue;
+		for (candidateindex = 0; candidateindex < candidatecount;
+				candidateindex++) {
+			if (candidates[candidateindex].slot == slot) {
+				spec = candidates[candidateindex].spec;
+				obj = candidates[candidateindex].obj;
+				break;
+			}
 		}
 
-		state = &g_AccessibilityLandmarkStates[slot];
-		obj = objFindByTagId(spec->tag);
-
-		if (!accessibilityLandmarkObjectEligible(spec, obj, &reason)) {
-			if (state->obj || state->audible) {
-				accessibilityLogEvent("landmark", "state",
-						"slot=%d name=%s state=inactive reason=%s tick=%d stage=%d",
-						slot, spec->name, reason, g_Vars.lvframe60,
-						g_Vars.stagenum);
-			}
+		if (!spec) {
 			accessibilityToneSetLandmarkSlot(
 					slot, false, 0.0f, 0.0f, false);
 			memset(state, 0, sizeof(*state));
-			slot++;
 			continue;
 		}
 
-		if (state->obj != obj) {
+		if (state->spec != spec || state->obj != obj) {
 			memset(state, 0, sizeof(*state));
+			state->spec = spec;
 			state->obj = obj;
 		}
 
@@ -371,14 +464,6 @@ static void accessibilityLandmarkUpdate(
 		audiblecount += state->audible;
 		accessibilityToneSetLandmarkSlot(slot, state->audible,
 				state->gain, normalizedpan, restart);
-		slot++;
-	}
-
-	while (slot < ACCESSIBILITY_TONE_LANDMARK_SLOT_COUNT) {
-		accessibilityToneSetLandmarkSlot(slot, false, 0.0f, 0.0f, false);
-		memset(&g_AccessibilityLandmarkStates[slot], 0,
-				sizeof(g_AccessibilityLandmarkStates[slot]));
-		slot++;
 	}
 
 	if (audiblecount > 0
