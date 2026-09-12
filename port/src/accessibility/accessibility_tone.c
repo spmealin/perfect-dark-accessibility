@@ -203,6 +203,7 @@ static SDL_atomic_t g_AccessibilityCanePathFloorCount[ACCESSIBILITY_TONE_CANE_SL
 static SDL_atomic_t g_AccessibilityCanePathCount[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityCanePathFrequencyMilliHz[ACCESSIBILITY_TONE_CANE_SLOT_COUNT][ACCESSIBILITY_CANE_PATH_MAX_STEPS];
 static SDL_atomic_t g_AccessibilityCanePathVolumeMillionths[ACCESSIBILITY_TONE_CANE_SLOT_COUNT][ACCESSIBILITY_CANE_PATH_MAX_STEPS];
+static SDL_atomic_t g_AccessibilityCanePathPanMillionths[ACCESSIBILITY_TONE_CANE_SLOT_COUNT][ACCESSIBILITY_CANE_PATH_MAX_STEPS];
 static SDL_atomic_t g_AccessibilityMarkerEnabled[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
 static SDL_atomic_t g_AccessibilityMarkerSequence[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
 static SDL_atomic_t g_AccessibilityMarkerVolumeMillionths[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
@@ -316,6 +317,7 @@ static s32 g_AccessibilityCanePathFloorCountState[ACCESSIBILITY_TONE_CANE_SLOT_C
 static s32 g_AccessibilityCanePathCountState[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 static f32 g_AccessibilityCanePathFrequencyHzState[ACCESSIBILITY_TONE_CANE_SLOT_COUNT][ACCESSIBILITY_CANE_PATH_MAX_STEPS];
 static f32 g_AccessibilityCanePathVolumeState[ACCESSIBILITY_TONE_CANE_SLOT_COUNT][ACCESSIBILITY_CANE_PATH_MAX_STEPS];
+static f32 g_AccessibilityCanePathPanState[ACCESSIBILITY_TONE_CANE_SLOT_COUNT][ACCESSIBILITY_CANE_PATH_MAX_STEPS];
 static f32 g_AccessibilityCanePhase[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 static f32 g_AccessibilityCaneFrequencyHz[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 static f32 g_AccessibilityCaneEndFrequencyHz[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
@@ -898,7 +900,8 @@ void accessibilityToneStopHillBeacon(void)
 void accessibilityTonePlayCaneSlot(s32 slot, f32 startfrequencyhz,
 		f32 endfrequencyhz, f32 volume, f32 pan, s32 durationms,
 		s32 pattern, s32 pathfloorcount, s32 pathcount,
-		const f32 *pathfrequencieshz, const f32 *pathvolumes)
+		const f32 *pathfrequencieshz, const f32 *pathvolumes,
+		const f32 *pathpans)
 {
 	s32 i;
 
@@ -930,7 +933,8 @@ void accessibilityTonePlayCaneSlot(s32 slot, f32 startfrequencyhz,
 		durationms = 500;
 	}
 	if (pattern != ACCESSIBILITY_TONE_CANE_PATTERN_CROUCH_DOUBLE
-			&& pattern != ACCESSIBILITY_TONE_CANE_PATTERN_PATH) {
+			&& pattern != ACCESSIBILITY_TONE_CANE_PATTERN_PATH
+			&& pattern != ACCESSIBILITY_TONE_CANE_PATTERN_RUNWAY) {
 		pattern = ACCESSIBILITY_TONE_CANE_PATTERN_CONTOUR;
 	}
 	if (pathcount < 1 || pathcount > ACCESSIBILITY_CANE_PATH_MAX_STEPS
@@ -938,7 +942,8 @@ void accessibilityTonePlayCaneSlot(s32 slot, f32 startfrequencyhz,
 			|| !pathfrequencieshz || !pathvolumes) {
 		pathcount = 0;
 		pathfloorcount = 0;
-		if (pattern == ACCESSIBILITY_TONE_CANE_PATTERN_PATH) {
+		if (pattern == ACCESSIBILITY_TONE_CANE_PATTERN_PATH
+				|| pattern == ACCESSIBILITY_TONE_CANE_PATTERN_RUNWAY) {
 			pattern = ACCESSIBILITY_TONE_CANE_PATTERN_CONTOUR;
 		}
 	}
@@ -958,13 +963,18 @@ void accessibilityTonePlayCaneSlot(s32 slot, f32 startfrequencyhz,
 	for (i = 0; i < pathcount; i++) {
 		f32 pathfrequency = pathfrequencieshz[i];
 		f32 pathvolume = pathvolumes[i];
+		f32 pathpan = pathpans ? pathpans[i] : pan;
 		if (pathfrequency < 1.0f) pathfrequency = 1.0f;
 		if (pathvolume < 0.0f) pathvolume = 0.0f;
 		if (pathvolume > 1.0f) pathvolume = 1.0f;
+		if (pathpan < -1.0f) pathpan = -1.0f;
+		if (pathpan > 1.0f) pathpan = 1.0f;
 		SDL_AtomicSet(&g_AccessibilityCanePathFrequencyMilliHz[slot][i],
 				(s32)(pathfrequency * 1000.0f));
 		SDL_AtomicSet(&g_AccessibilityCanePathVolumeMillionths[slot][i],
 				(s32)(pathvolume * 1000000.0f));
+		SDL_AtomicSet(&g_AccessibilityCanePathPanMillionths[slot][i],
+				(s32)(pathpan * 1000000.0f));
 	}
 	SDL_AtomicSet(&g_AccessibilityCaneEnabled[slot], volume > 0.0f);
 	SDL_AtomicAdd(&g_AccessibilityCaneSequence[slot], 1);
@@ -1493,6 +1503,10 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 					g_AccessibilityCanePathVolumeState[slot][i]
 							= (f32)SDL_AtomicGet(
 									&g_AccessibilityCanePathVolumeMillionths[slot][i])
+								/ 1000000.0f;
+					g_AccessibilityCanePathPanState[slot][i]
+							= (f32)SDL_AtomicGet(
+									&g_AccessibilityCanePathPanMillionths[slot][i])
 								/ 1000000.0f;
 				}
 				g_AccessibilityCaneSamplesRemaining[slot]
@@ -2646,13 +2660,18 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		}
 
 		if (anycaneactive) {
+		s32 runwayactive = g_AccessibilityCaneSamplesRemaining[
+				ACCESSIBILITY_TONE_CANE_SLOT_COUNT - 1] > 0
+				&& g_AccessibilityCanePatternState[
+						ACCESSIBILITY_TONE_CANE_SLOT_COUNT - 1]
+						== ACCESSIBILITY_TONE_CANE_PATTERN_RUNWAY;
+
 			for (slot = 0; slot < ACCESSIBILITY_TONE_CANE_SLOT_COUNT; slot++) {
 				if (g_AccessibilityCaneSamplesRemaining[slot] > 0) {
 					f32 envelope = 1.0f;
-					f32 leftpan = g_AccessibilityCanePan[slot] > 0.0f
-							? 1.0f - g_AccessibilityCanePan[slot] : 1.0f;
-					f32 rightpan = g_AccessibilityCanePan[slot] < 0.0f
-							? 1.0f + g_AccessibilityCanePan[slot] : 1.0f;
+					f32 canepan = g_AccessibilityCanePan[slot];
+					f32 leftpan;
+					f32 rightpan;
 					f32 frequency;
 					f32 cane;
 					f32 canevolume = g_AccessibilityCaneVolume[slot];
@@ -2687,6 +2706,29 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 							}
 						}
 					} else if (g_AccessibilityCanePatternState[slot]
+							== ACCESSIBILITY_TONE_CANE_PATTERN_RUNWAY
+							&& g_AccessibilityCanePathCountState[slot] > 0) {
+						s32 count = g_AccessibilityCanePathCountState[slot];
+						s32 stepduration
+								= g_AccessibilityCaneDurationSamples[slot] / count;
+						s32 step;
+						s32 within;
+						s32 beepsamples = (s32)(ACCESSIBILITY_TONE_SAMPLE_RATE
+								* 0.024f);
+
+						if (stepduration < 1) stepduration = 1;
+						step = g_AccessibilityCaneSample[slot] / stepduration;
+						if (step >= count) step = count - 1;
+						within = g_AccessibilityCaneSample[slot]
+								- step * stepduration;
+						frequency = g_AccessibilityCanePathFrequencyHzState[slot][step];
+						canevolume = g_AccessibilityCanePathVolumeState[slot][step];
+						canepan = g_AccessibilityCanePathPanState[slot][step];
+						sounding = within < beepsamples;
+						localsample = within;
+						localremaining = beepsamples - within;
+						if (within == 0) g_AccessibilityCanePhase[slot] = 0.0f;
+					} else if (g_AccessibilityCanePatternState[slot]
 							== ACCESSIBILITY_TONE_CANE_PATTERN_PATH
 							&& g_AccessibilityCanePathCountState[slot] > 0) {
 						s32 count = g_AccessibilityCanePathCountState[slot];
@@ -2715,13 +2757,17 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 							}
 							frequency = g_AccessibilityCanePathFrequencyHzState[slot][segment];
 							canevolume = g_AccessibilityCanePathVolumeState[slot][segment];
+							canepan = g_AccessibilityCanePathPanState[slot][segment];
 							if (segment + 1 < floorcount) {
 								f32 nextfrequency
 										= g_AccessibilityCanePathFrequencyHzState[slot][segment + 1];
 								f32 nextvolume
 										= g_AccessibilityCanePathVolumeState[slot][segment + 1];
+								f32 nextpan
+										= g_AccessibilityCanePathPanState[slot][segment + 1];
 								frequency *= powf(nextfrequency / frequency, fraction);
 								canevolume += (nextvolume - canevolume) * fraction;
+								canepan += (nextpan - canepan) * fraction;
 							}
 							localsample = g_AccessibilityCaneSample[slot];
 							localremaining = floorduration
@@ -2731,6 +2777,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 									- floorduration;
 							frequency = g_AccessibilityCanePathFrequencyHzState[slot][count - 1];
 							canevolume = g_AccessibilityCanePathVolumeState[slot][count - 1];
+							canepan = g_AccessibilityCanePathPanState[slot][count - 1];
 							wallstep = 1;
 							sounding = wallsample
 									>= ACCESSIBILITY_CANE_PATH_WALL_GAP_SAMPLES;
@@ -2751,6 +2798,13 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 								* powf(g_AccessibilityCaneEndFrequencyHz[slot]
 										/ g_AccessibilityCaneFrequencyHz[slot],
 										progress);
+					}
+
+					leftpan = canepan > 0.0f ? 1.0f - canepan : 1.0f;
+					rightpan = canepan < 0.0f ? 1.0f + canepan : 1.0f;
+					if (runwayactive
+							&& slot != ACCESSIBILITY_TONE_CANE_SLOT_COUNT - 1) {
+						canevolume *= 0.2f;
 					}
 
 					if (localsample

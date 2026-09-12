@@ -61,9 +61,19 @@
 #define ACCESSIBILITY_CANE_PATH_PHRASE_OCTAVE_HEIGHT 240.0f
 #define ACCESSIBILITY_CANE_PATH_PHRASE_MIN_PITCH_RATIO 0.5f
 #define ACCESSIBILITY_CANE_PATH_PHRASE_MAX_PITCH_RATIO 2.0f
+#define ACCESSIBILITY_CANE_BROAD_TERRAIN_PLAYER_WIDTHS 5.0f
+#define ACCESSIBILITY_CANE_BROAD_LARGE_DELTA_PLAYER_WIDTHS 2.0f
+#define ACCESSIBILITY_CANE_UNCERTAIN_DEAD_END_PLAYER_WIDTHS 4.0f
+#define ACCESSIBILITY_CANE_UNCERTAIN_DEAD_END_MAX_DELTA_PLAYER_WIDTHS 1.0f
+#define ACCESSIBILITY_CANE_UNCERTAIN_TERRAIN_VOLUME_SCALE 0.65f
+#define ACCESSIBILITY_CANE_PERIPHERAL_TERRAIN_VOLUME_SCALE 0.65f
+#define ACCESSIBILITY_CANE_RUNWAY_FREQUENCY_HZ 330.0f
+#define ACCESSIBILITY_CANE_RUNWAY_RIGHT_FREQUENCY_HZ 440.0f
+#define ACCESSIBILITY_CANE_RUNWAY_STEP_MS 40
+#define ACCESSIBILITY_CANE_RUNWAY_VOLUME_SCALE 1.0f
 #define ACCESSIBILITY_CANE_SLOW_CYCLE_TICKS TICKS(120)
 #define ACCESSIBILITY_CANE_FAST_CYCLE_TICKS TICKS(60)
-#define ACCESSIBILITY_CANE_LOG_BUFFER_SIZE 32768
+#define ACCESSIBILITY_CANE_LOG_BUFFER_SIZE 65536
 #define ACCESSIBILITY_CANE_DEGREES_TO_RADIANS 0.01745329251994329577f
 
 enum accessibilitycanesamplestate {
@@ -114,6 +124,7 @@ struct accessibilitycanesample {
 	s32 lateness;
 	s32 result;
 	s32 collisionpass;
+	s32 barrierretries;
 	struct coord origin;
 	struct coord forward;
 	struct coord direction;
@@ -197,6 +208,14 @@ struct accessibilitycanesample {
 	u64 queryus;
 	struct accessibilitycaneresult evaluation;
 	struct accessibilitycanepathdiagnostic pathdiagnostic;
+	struct accessibilitycanecorridordiagnostic corridordiagnostic;
+	f32 corridoraudioscale;
+	s32 corridorsuppressed;
+	s32 corridorrunwayplayed;
+	s32 corridorroutegroup;
+	s32 corridorroutetotal;
+	s32 corridorroutemembers;
+	s32 corridorroutesideangles[2];
 	s32 legacycue;
 	s32 dropvalidation;
 	s32 terrainvalidation;
@@ -213,6 +232,12 @@ struct accessibilitycanesample {
 	f32 vehiclespeed;
 	f32 basereach;
 	f32 effectivereach;
+	f32 fulldistance;
+	f32 fadedistance;
+	f32 silentdistance;
+	f32 nearfrequency;
+	f32 farfrequency;
+	s32 terrainaudioheld;
 };
 
 struct accessibilitycanesurface {
@@ -284,6 +309,8 @@ static s32 g_AccessibilityCaneSweepMode;
 static s32 g_AccessibilityCaneSweepId;
 static s32 g_AccessibilityCaneSweepSamples;
 static s32 g_AccessibilityCaneSweepSkipped;
+static s32 g_AccessibilityCaneRunwayPlayed;
+static s32 g_AccessibilityCaneRunwayRouteCursor;
 static u64 g_AccessibilityCaneQueries;
 static u64 g_AccessibilityCaneHits;
 static u64 g_AccessibilityCaneMisses;
@@ -349,6 +376,37 @@ static const char *accessibilityCaneCrouchValidationName(s32 validation)
 	case ACCESSIBILITY_CANE_CROUCH_DEAD_END: return "dead_end";
 	case ACCESSIBILITY_CANE_CROUCH_FALLBACK: return "fallback";
 	default: return "not_run";
+	}
+}
+
+static const char *accessibilityCaneCorridorName(s32 classification)
+{
+	switch (classification) {
+	case ACCESSIBILITY_CANE_CORRIDOR_BOUNDED: return "bounded";
+	case ACCESSIBILITY_CANE_CORRIDOR_GUIDED: return "guided";
+	case ACCESSIBILITY_CANE_CORRIDOR_BROAD: return "broad";
+	case ACCESSIBILITY_CANE_CORRIDOR_UNCERTAIN: return "uncertain";
+	default: return "not_run";
+	}
+}
+
+static const char *accessibilityCaneCorridorSideName(s32 evidence)
+{
+	switch (evidence) {
+	case ACCESSIBILITY_CANE_CORRIDOR_SIDE_BOUNDARY: return "boundary";
+	case ACCESSIBILITY_CANE_CORRIDOR_SIDE_OPEN: return "open";
+	default: return "unknown";
+	}
+}
+
+static const char *accessibilityCaneCorridorKindName(s32 kind)
+{
+	switch (kind) {
+	case ACCESSIBILITY_CANE_CORRIDOR_KIND_NONE: return "none";
+	case ACCESSIBILITY_CANE_CORRIDOR_KIND_BARRIER: return "barrier";
+	case ACCESSIBILITY_CANE_CORRIDOR_KIND_EDGE: return "edge";
+	case ACCESSIBILITY_CANE_CORRIDOR_KIND_TERRAIN: return "terrain";
+	default: return "unknown";
 	}
 }
 
@@ -588,6 +646,224 @@ static void accessibilityCaneAppendLog(const char *format, ...)
 	va_end(args);
 }
 
+static s32 accessibilityCaneTerrainWidthCandidate(
+		const struct accessibilitycanesample *sample)
+{
+	return sample->state == ACCESSIBILITY_CANE_SAMPLE_TERRAIN
+			&& sample->evaluation.cue == ACCESSIBILITY_CANE_CUE_TERRAIN
+			&& (sample->terrain == 1 || sample->terrain == -1)
+			&& !sample->observerremote && !sample->observervehicle;
+}
+
+static f32 accessibilityCaneTerrainMidpointDistance(
+		const struct accessibilitycanesample *sample, s32 *valid)
+{
+	const struct accessibilitycanepathresult *path
+			= &sample->pathdiagnostic.path;
+	f32 startground;
+	f32 target;
+	f32 previousprogress = 0.0f;
+	s32 i;
+
+	*valid = false;
+
+	if (path->cue != ACCESSIBILITY_CANE_CUE_TERRAIN
+			|| path->count < 2 || path->direction == 0
+			|| fabsf(path->cuedelta) < ACCESSIBILITY_CANE_PATH_PHRASE_MIN_DELTA) {
+		return 0.0f;
+	}
+
+	startground = path->nodes[0].floor.ground;
+	target = fabsf(path->cuedelta) * 0.5f;
+
+	for (i = 1; i < path->count; i++) {
+		f32 progress = (path->nodes[i].floor.ground - startground)
+				* path->direction;
+
+		if (progress >= target) {
+			f32 range = progress - previousprogress;
+			f32 fraction = range > 0.001f
+					? (target - previousprogress) / range : 1.0f;
+
+			*valid = true;
+			return path->nodes[i - 1].distance
+					+ (path->nodes[i].distance
+							- path->nodes[i - 1].distance) * fraction;
+		}
+
+		previousprogress = progress;
+	}
+
+	return 0.0f;
+}
+
+static void accessibilityCaneLogTerrainWidthSensor(const char *reason)
+{
+	s32 first;
+	s32 groupcount = 0;
+	s32 flaggedcount = 0;
+
+	if (g_AccessibilityCaneSweepSamples != ACCESSIBILITY_CANE_PROBE_COUNT
+			|| g_AccessibilityCaneSweepSkipped != 0) {
+		return;
+	}
+
+	g_AccessibilityCaneLogBuffer[0] = '\0';
+
+	for (first = 0; first < ACCESSIBILITY_CANE_PROBE_COUNT;) {
+		struct accessibilitycanesample *firstsample
+				= &g_AccessibilityCaneSamples[first];
+		s32 last;
+		s32 direction;
+		f32 rightx;
+		f32 rightz;
+		f32 minlateral = 0.0f;
+		f32 maxlateral = 0.0f;
+		f32 mindepth = 0.0f;
+		f32 maxdepth = 0.0f;
+		f32 minmidlateral = 0.0f;
+		f32 maxmidlateral = 0.0f;
+		f32 minmiddepth = 0.0f;
+		f32 maxmiddepth = 0.0f;
+		f32 diameter;
+		f32 threshold;
+		f32 transitionwidth;
+		f32 midpointwidth = 0.0f;
+		f32 observedwidth;
+		f32 depthspread;
+		f32 midpointdepthspread = 0.0f;
+		s32 midpointcount = 0;
+		s32 midpointcomplete;
+		s32 edgelimited;
+		s32 flagged;
+		s32 i;
+
+		if (!accessibilityCaneTerrainWidthCandidate(firstsample)) {
+			first++;
+			continue;
+		}
+
+		direction = firstsample->terrain;
+		last = first;
+
+		while (last + 1 < ACCESSIBILITY_CANE_PROBE_COUNT
+				&& accessibilityCaneTerrainWidthCandidate(
+					&g_AccessibilityCaneSamples[last + 1])
+				&& g_AccessibilityCaneSamples[last + 1].terrain == direction) {
+			last++;
+		}
+
+		rightx = -firstsample->forward.z;
+		rightz = firstsample->forward.x;
+		diameter = firstsample->radius * 2.0f;
+
+		for (i = first; i <= last; i++) {
+			struct accessibilitycanesample *sample
+					= &g_AccessibilityCaneSamples[i];
+			f32 pointx = sample->origin.x
+					+ sample->direction.x * sample->terraindistance;
+			f32 pointz = sample->origin.z
+					+ sample->direction.z * sample->terraindistance;
+			f32 deltax = pointx - firstsample->origin.x;
+			f32 deltaz = pointz - firstsample->origin.z;
+			f32 lateral = deltax * rightx + deltaz * rightz;
+			f32 depth = deltax * firstsample->forward.x
+					+ deltaz * firstsample->forward.z;
+			s32 midpointvalid;
+			f32 midpointdistance
+					= accessibilityCaneTerrainMidpointDistance(
+						sample, &midpointvalid);
+
+			if (i == first || lateral < minlateral) {
+				minlateral = lateral;
+			}
+			if (i == first || lateral > maxlateral) {
+				maxlateral = lateral;
+			}
+			if (i == first || depth < mindepth) {
+				mindepth = depth;
+			}
+			if (i == first || depth > maxdepth) {
+				maxdepth = depth;
+			}
+			if (sample->radius * 2.0f > diameter) {
+				diameter = sample->radius * 2.0f;
+			}
+
+			if (midpointvalid) {
+				f32 midpointx = sample->origin.x
+						+ sample->direction.x * midpointdistance;
+				f32 midpointz = sample->origin.z
+						+ sample->direction.z * midpointdistance;
+				f32 middeltax = midpointx - firstsample->origin.x;
+				f32 middeltaz = midpointz - firstsample->origin.z;
+				f32 midlateral = middeltax * rightx + middeltaz * rightz;
+				f32 middepth = middeltax * firstsample->forward.x
+						+ middeltaz * firstsample->forward.z;
+
+				if (midpointcount == 0 || midlateral < minmidlateral) {
+					minmidlateral = midlateral;
+				}
+				if (midpointcount == 0 || midlateral > maxmidlateral) {
+					maxmidlateral = midlateral;
+				}
+				if (midpointcount == 0 || middepth < minmiddepth) {
+					minmiddepth = middepth;
+				}
+				if (midpointcount == 0 || middepth > maxmiddepth) {
+					maxmiddepth = middepth;
+				}
+				midpointcount++;
+			}
+		}
+
+		threshold = diameter * ACCESSIBILITY_CANE_BROAD_TERRAIN_PLAYER_WIDTHS;
+		transitionwidth = maxlateral - minlateral;
+		depthspread = maxdepth - mindepth;
+		midpointcomplete = midpointcount == last - first + 1;
+		if (midpointcomplete) {
+			midpointwidth = maxmidlateral - minmidlateral;
+			midpointdepthspread = maxmiddepth - minmiddepth;
+		}
+		observedwidth = midpointcomplete && midpointwidth > transitionwidth
+				? midpointwidth : transitionwidth;
+		edgelimited = first == 0 || last == ACCESSIBILITY_CANE_PROBE_COUNT - 1;
+		flagged = last > first && diameter > 0.0f
+				&& observedwidth > threshold;
+		groupcount++;
+		flaggedcount += flagged;
+
+		accessibilityCaneAppendLog(
+				"%sg%d={direction:%s first_slot:%d last_slot:%d first_angle:%d last_angle:%d samples:%d transition_width_world:%.2f transition_width_player:%.3f midpoint_complete:%d midpoint_samples:%d midpoint_width_world:%.2f midpoint_width_player:%.3f observed_width_world:%.2f observed_width_player:%.3f threshold_world:%.2f threshold_player:%.2f transition_depth_min:%.2f transition_depth_max:%.2f transition_depth_spread:%.2f midpoint_depth_min:%.2f midpoint_depth_max:%.2f midpoint_depth_spread:%.2f edge_limited:%d flagged:%d}",
+				groupcount > 1 ? " " : "", groupcount - 1,
+				direction > 0 ? "up" : "down", first, last,
+				firstsample->angledegrees,
+				g_AccessibilityCaneSamples[last].angledegrees,
+				last - first + 1, transitionwidth,
+				diameter > 0.0f ? transitionwidth / diameter : 0.0f,
+				midpointcomplete, midpointcount, midpointwidth,
+				diameter > 0.0f ? midpointwidth / diameter : 0.0f,
+				observedwidth,
+				diameter > 0.0f ? observedwidth / diameter : 0.0f,
+				threshold, ACCESSIBILITY_CANE_BROAD_TERRAIN_PLAYER_WIDTHS,
+				mindepth, maxdepth, depthspread,
+				midpointcomplete ? minmiddepth : 0.0f,
+				midpointcomplete ? maxmiddepth : 0.0f,
+				midpointdepthspread, edgelimited, flagged);
+
+		first = last + 1;
+	}
+
+	if (groupcount > 0) {
+		accessibilityLogEvent("cane", "terrain_width_sensor",
+				"version=2 id=%d mode=%s reason=%s groups=%d flagged=%d details=%s",
+				g_AccessibilityCaneSweepId,
+				accessibilityCaneModeName(g_AccessibilityCaneSweepMode),
+				reason ? reason : "complete", groupcount, flaggedcount,
+				g_AccessibilityCaneLogBuffer);
+	}
+}
+
 static void accessibilityCaneLogSweep(const char *reason)
 {
 	s32 i;
@@ -635,11 +911,11 @@ static void accessibilityCaneLogSweep(const char *reason)
 		struct accessibilitycanesample *sample = &g_AccessibilityCaneSamples[i];
 
 		accessibilityCaneAppendLog(
-				"%ss%d={angle:%d state:%s scheduled:%d actual:%d late:%d result:%d pass:%d observer:%p remote:%d vehicle:%d vehicle_speed:%.3f base_reach:%.2f effective_reach:%.2f ignored_grabbed_prop:%p ignored_vehicle_prop:%p ignored_remote_prop:%p origin:%.2f,%.2f,%.2f forward:%.5f,%.5f direction:%.5f,%.5f end:%.2f,%.2f,%.2f bbox:%.2f,%.2f,%.2f raw:%.2f,%.2f,%.2f audio:%.2f,%.2f,%.2f distance:%.2f frequency_hz:%.2f end_frequency_hz:%.2f duration_ms:%d tone_pattern:%d path_contour_floor_count:%d path_contour_count:%d terminal_wall:%d terrain:%d drop:%d crouch:%d ladder:%d ladder_probe_hit:%d ladder_probe_queries:%d ladder_probe_rejections:%d ladder_probe_distance:%.2f ladder_normal:%.5f,%.5f,%.5f crouch_terrain_merge:%d terrain_ground:%.2f terrain_height:%.2f terrain_distance:%.2f terrain_room:%d terrain_flags:0x%04x terrain_queries:%d drop_refinements:%d drop_threshold:%.2f drop_barrier_suppressed:%d drop_barrier_gap:%.2f stance:%s traversal_tested:%d traversable:%d blocked_rise:%d short_deadend:%d plateau:%d terrain_suppressed:%d surface_grade_ratio:%.5f grade_max_residual:%.3f grade_continuous:%d grade_safe:%d clearance_result:%d clearance_queries:%d clearance_distance:%.2f plateau_distance:%.2f runway:%.2f minimum_runway:%.2f crouch_result:%d crouch_pass:%d crouch_ymax:%.2f obstacle:%p type:%d geoflags:0x%08x normal:%.5f,%.5f,%.5f edge:%.2f,%.2f,%.2f,%.2f volume:%d pan:%d normalized:%.5f,%.5f master_volume:%.5f effective_volume:%.5f query_us:%" PRIu64,
+				"%ss%d={angle:%d state:%s scheduled:%d actual:%d late:%d result:%d pass:%d barrier_retries:%d observer:%p remote:%d vehicle:%d vehicle_speed:%.3f base_reach:%.2f effective_reach:%.2f ignored_grabbed_prop:%p ignored_vehicle_prop:%p ignored_remote_prop:%p origin:%.2f,%.2f,%.2f forward:%.5f,%.5f direction:%.5f,%.5f end:%.2f,%.2f,%.2f bbox:%.2f,%.2f,%.2f raw:%.2f,%.2f,%.2f audio:%.2f,%.2f,%.2f distance:%.2f frequency_hz:%.2f end_frequency_hz:%.2f duration_ms:%d tone_pattern:%d path_contour_floor_count:%d path_contour_count:%d terminal_wall:%d terrain:%d drop:%d crouch:%d ladder:%d ladder_probe_hit:%d ladder_probe_queries:%d ladder_probe_rejections:%d ladder_probe_distance:%.2f ladder_normal:%.5f,%.5f,%.5f crouch_terrain_merge:%d terrain_ground:%.2f terrain_height:%.2f terrain_distance:%.2f terrain_room:%d terrain_flags:0x%04x terrain_queries:%d drop_refinements:%d drop_threshold:%.2f drop_barrier_suppressed:%d drop_barrier_gap:%.2f stance:%s traversal_tested:%d traversable:%d blocked_rise:%d short_deadend:%d plateau:%d terrain_suppressed:%d surface_grade_ratio:%.5f grade_max_residual:%.3f grade_continuous:%d grade_safe:%d clearance_result:%d clearance_queries:%d clearance_distance:%.2f plateau_distance:%.2f runway:%.2f minimum_runway:%.2f crouch_result:%d crouch_pass:%d crouch_ymax:%.2f obstacle:%p type:%d geoflags:0x%08x normal:%.5f,%.5f,%.5f edge:%.2f,%.2f,%.2f,%.2f volume:%d pan:%d normalized:%.5f,%.5f master_volume:%.5f effective_volume:%.5f query_us:%" PRIu64,
 				i ? " " : "", i, sample->angledegrees,
 				accessibilityCaneSampleStateName(sample->state),
 				sample->scheduledtick, sample->actualtick, sample->lateness,
-				sample->result, sample->collisionpass,
+				sample->result, sample->collisionpass, sample->barrierretries,
 				(void *)sample->observerprop, sample->observerremote,
 				sample->observervehicle, sample->vehiclespeed,
 				sample->basereach, sample->effectivereach,
@@ -708,6 +984,55 @@ static void accessibilityCaneLogSweep(const char *reason)
 				accessibilityCaneTerrainValidationName(sample->terrainvalidation),
 				accessibilityCaneCrouchValidationName(sample->crouchvalidation),
 				sample->legacydropdistance, sample->legacydropheight);
+		if (sample->corridordiagnostic.classification
+				!= ACCESSIBILITY_CANE_CORRIDOR_NOT_RUN) {
+			struct accessibilitycanecorridordiagnostic *corridor
+					= &sample->corridordiagnostic;
+			s32 j;
+			accessibilityCaneAppendLog(
+					" corridor={version:4 classification:%s max_width:%.2f stations:%d bounded:%d left_guided:%d right_guided:%d broad:%d uncertain:%d audio_scale:%.3f suppressed:%d terrain_audio_held:%d runway_played:%d route_group:%d route_total:%d route_members:%d route_left_angle:%d route_right_angle:%d queries:%d floors:%d moves:%d retries:%d errors:%d budget:%d us:%" PRIu64 " details:[",
+					accessibilityCaneCorridorName(corridor->classification),
+					corridor->maxwidth, corridor->stationcount,
+					corridor->boundedstations,
+					corridor->leftguidedstations,
+					corridor->rightguidedstations,
+					corridor->broadstations,
+					corridor->uncertainstations,
+					sample->corridoraudioscale, sample->corridorsuppressed,
+					sample->terrainaudioheld,
+					sample->corridorrunwayplayed,
+					sample->corridorroutegroup,
+					sample->corridorroutetotal,
+					sample->corridorroutemembers,
+					sample->corridorroutesideangles[0],
+					sample->corridorroutesideangles[1],
+					corridor->queries, corridor->floorqueries,
+					corridor->movequeries, corridor->retries, corridor->errors,
+					corridor->budget, (uint64_t)corridor->elapsedus);
+			for (j = 0; j < corridor->stationcount; j++) {
+				struct accessibilitycanecorridorstation *station
+						= &corridor->stations[j];
+				accessibilityCaneAppendLog(
+						"%s%d={path_distance:%.2f post_transition:%d center:%.2f,%.2f,%.2f left:%s/%s,%.2f,%.2f,%.2f,%.2f right:%s/%s,%.2f,%.2f,%.2f,%.2f}",
+						j ? " " : "", j, station->pathdistance,
+						station->posttransition,
+						station->center.x, station->center.y,
+						station->center.z,
+						accessibilityCaneCorridorSideName(
+								station->left.evidence),
+						accessibilityCaneCorridorKindName(
+								station->left.kind),
+						station->left.distance, station->left.point.x,
+						station->left.point.y, station->left.point.z,
+						accessibilityCaneCorridorSideName(
+								station->right.evidence),
+						accessibilityCaneCorridorKindName(
+								station->right.kind),
+						station->right.distance, station->right.point.x,
+						station->right.point.y, station->right.point.z);
+			}
+			accessibilityCaneAppendLog("]}");
+		}
 		if (sample->observerremote) {
 			accessibilityCaneAppendLog(
 					" remote_floor_room:%d remote_floor_simplified:%d remote_rooms_expanded:%d observer_rooms:%d,%d,%d,%d,%d,%d,%d,%d initial_dst_rooms:%d,%d,%d,%d,%d,%d,%d,%d final_dst_rooms:%d,%d,%d,%d,%d,%d,%d,%d",
@@ -776,6 +1101,7 @@ static void accessibilityCaneLogSweep(const char *reason)
 
 	accessibilityLogEventMessage("cane", "sweep",
 			g_AccessibilityCaneLogBuffer);
+	accessibilityCaneLogTerrainWidthSensor(reason);
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 	/* Separate aggregate avoids truncating the existing full observation record. */
 	g_AccessibilityCaneLogBuffer[0] = '\0';
@@ -786,7 +1112,7 @@ static void accessibilityCaneLogSweep(const char *reason)
 		struct accessibilitycanepathdiagnostic *diag = &sample->pathdiagnostic;
 		struct accessibilitycanepathresult *path = &diag->path;
 		s32 j;
-		accessibilityCaneAppendLog(" s%d={stop:%d cue:%d legacy:%d audible:%d validation:%s terrain_validation:%s crouch_validation:%s direction:%d cue_distance:%.2f cue_delta:%.2f stop_distance:%.2f reached:%.2f delta:%.2f edge_width:%.2f height:%.2f standing_recovery:%.2f standing_continuation:%.2f count:%d refinements:%d queries:%d floors:%d moves:%d clearances:%d errors:%d budget:%d us:%" PRIu64 " nodes:[",
+		accessibilityCaneAppendLog(" s%d={stop:%d cue:%d legacy:%d audible:%d validation:%s terrain_validation:%s crouch_validation:%s direction:%d cue_distance:%.2f cue_delta:%.2f stop_distance:%.2f reached:%.2f delta:%.2f edge_width:%.2f height:%.2f standing_recovery:%.2f standing_continuation:%.2f count:%d refinements:%d queries:%d floors:%d moves:%d clearances:%d retries:%d errors:%d budget:%d us:%" PRIu64 " nodes:[",
 				i, path->stop, path->cue,
 				sample->legacycue,
 				sample->evaluation.cue,
@@ -798,7 +1124,7 @@ static void accessibilityCaneLogSweep(const char *reason)
 				path->requiredheight, path->standingrecoverydistance,
 				path->standingcontinuation, path->count, path->refinements, diag->queries,
 				diag->floorqueries, diag->movequeries, diag->clearancequeries,
-				diag->errors, diag->budget,
+				diag->retries, diag->errors, diag->budget,
 				(uint64_t)diag->elapsedus);
 		for (j = 0; j < path->count; j++) {
 			struct accessibilitycanepathnode *node = &path->nodes[j];
@@ -841,6 +1167,7 @@ static void accessibilityCaneRunPathQuery(struct accessibilitycanesample *sample
 	if (diag->elapsedus > g_AccessibilityCaneProfile.pathmaxus)
 		g_AccessibilityCaneProfile.pathmaxus = diag->elapsedus;
 	g_AccessibilityCaneProfile.pathqueries += diag->queries;
+	g_AccessibilityCaneProfile.pathretries += diag->retries;
 	g_AccessibilityCaneProfile.pathbudgets += diag->budget != 0;
 	g_AccessibilityCaneProfile.patherrors += diag->errors;
 	g_AccessibilityCaneProfile.pathdifferences += diag->path.cue != sample->evaluation.cue;
@@ -957,7 +1284,8 @@ static void accessibilityCaneApplyTerrainValidation(
 
 	if (sample->dropvalidation != ACCESSIBILITY_CANE_DROP_NOT_RUN
 			|| sample->evaluation.cue == ACCESSIBILITY_CANE_CUE_LADDER
-			|| sample->evaluation.cue == ACCESSIBILITY_CANE_CUE_CROUCH
+			|| (sample->evaluation.cue == ACCESSIBILITY_CANE_CUE_CROUCH
+				&& path->cue != ACCESSIBILITY_CANE_CUE_TERRAIN)
 			|| (sample->geoflags
 				& (GEOFLAG_LADDER | GEOFLAG_LADDER_PLAYERONLY)) != 0
 			|| (!legacyterrainfound
@@ -1088,6 +1416,455 @@ static void accessibilityCaneApplyCrouchValidation(
 	accessibilityCaneEvaluateSample(sample, distance, false, true);
 }
 
+static void accessibilityCaneClassifyCorridor(
+		struct accessibilitycanesample *sample,
+		const struct accessibilityobserver *observer)
+{
+	struct accessibilitycanecollisionguard guard;
+	struct accessibilitycanecorridordiagnostic *corridor
+			= &sample->corridordiagnostic;
+	f32 playerwidth = observer->radius * 2.0f;
+	f32 delta = 0.0f;
+	f32 baseground;
+	s32 absoluteangle = sample->angledegrees < 0
+			? -sample->angledegrees : sample->angledegrees;
+	s32 shallowdeadend;
+	s32 i;
+
+	if (sample->evaluation.cue != ACCESSIBILITY_CANE_CUE_TERRAIN
+			|| sample->evaluation.source != ACCESSIBILITY_CANE_SOURCE_TERRAIN
+			|| (sample->terrainvalidation
+					!= ACCESSIBILITY_CANE_TERRAIN_CONFIRMED
+				&& sample->dropvalidation
+						!= ACCESSIBILITY_CANE_DROP_CONNECTED_DESCENT)) {
+		return;
+	}
+	baseground = sample->pathdiagnostic.path.nodes[0].floor.ground;
+	for (i = 1; i < sample->pathdiagnostic.path.count; i++) {
+		f32 nodedelta = fabsf(
+				sample->pathdiagnostic.path.nodes[i].floor.ground - baseground);
+		if (nodedelta > delta) delta = nodedelta;
+	}
+
+	accessibilityCaneCollisionGuardInit(&guard);
+	accessibilityCaneCollisionGuardDisableProp(&guard, observer->prop);
+	accessibilityCaneQueryCorridor(observer, &sample->direction,
+			&sample->pathdiagnostic.path,
+			playerwidth * ACCESSIBILITY_CANE_BROAD_TERRAIN_PLAYER_WIDTHS,
+			corridor);
+	accessibilityCaneCollisionGuardRestore(&guard);
+	shallowdeadend = sample->pathdiagnostic.path.stop
+			== ACCESSIBILITY_CANE_PATH_WALL
+		&& sample->pathdiagnostic.path.stopdistance
+				<= playerwidth
+					* ACCESSIBILITY_CANE_UNCERTAIN_DEAD_END_PLAYER_WIDTHS
+		&& delta < playerwidth
+				* ACCESSIBILITY_CANE_UNCERTAIN_DEAD_END_MAX_DELTA_PLAYER_WIDTHS;
+
+	if (corridor->classification == ACCESSIBILITY_CANE_CORRIDOR_BOUNDED
+			|| corridor->classification == ACCESSIBILITY_CANE_CORRIDOR_GUIDED) {
+		/* The deferred boundary trace carries this route's elevation contour. */
+		sample->corridoraudioscale = 0.0f;
+		sample->corridorsuppressed = true;
+	} else if (corridor->classification == ACCESSIBILITY_CANE_CORRIDOR_BROAD) {
+		if (delta < playerwidth
+				* ACCESSIBILITY_CANE_BROAD_LARGE_DELTA_PLAYER_WIDTHS) {
+			sample->corridoraudioscale = 0.0f;
+			sample->corridorsuppressed = true;
+		} else if (absoluteangle > 45) {
+			/* The peripheral rays are also side-passage sentinels. Preserve a
+			 * quieter contour when they find a substantial traversable route. */
+			sample->corridoraudioscale
+					= ACCESSIBILITY_CANE_PERIPHERAL_TERRAIN_VOLUME_SCALE;
+		}
+	} else if (corridor->classification
+			== ACCESSIBILITY_CANE_CORRIDOR_UNCERTAIN) {
+		s32 index = (s32)(sample - g_AccessibilityCaneSamples);
+		struct accessibilitycanesample *previous = index > 0
+				? &g_AccessibilityCaneSamples[index - 1] : NULL;
+
+		if (shallowdeadend) {
+			/* A small elevation change into a nearby wall is not a usable route
+			 * unless paired boundaries prove it. */
+			sample->corridoraudioscale = 0.0f;
+			sample->corridorsuppressed = true;
+		} else if (previous
+				&& (previous->corridordiagnostic.classification
+						== ACCESSIBILITY_CANE_CORRIDOR_BOUNDED
+					|| previous->corridordiagnostic.classification
+						== ACCESSIBILITY_CANE_CORRIDOR_GUIDED)
+				&& previous->terrain == sample->terrain) {
+			/* A neighboring bounded ray already describes this same route.
+			 * Do not layer the legacy contour over its boundary runway. */
+			sample->corridoraudioscale = 0.0f;
+			sample->corridorsuppressed = true;
+		} else {
+			sample->corridoraudioscale
+					= ACCESSIBILITY_CANE_UNCERTAIN_TERRAIN_VOLUME_SCALE;
+		}
+	}
+
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+	if (corridor->classification != ACCESSIBILITY_CANE_CORRIDOR_NOT_RUN) {
+		g_AccessibilityCaneProfile.corridorcalls++;
+		g_AccessibilityCaneProfile.corridorus += corridor->elapsedus;
+		if (corridor->elapsedus > g_AccessibilityCaneProfile.corridormaxus) {
+			g_AccessibilityCaneProfile.corridormaxus = corridor->elapsedus;
+		}
+		g_AccessibilityCaneProfile.corridorqueries += corridor->queries;
+		g_AccessibilityCaneProfile.corridorretries += corridor->retries;
+		g_AccessibilityCaneProfile.corridorbudgets += corridor->budget != 0;
+		g_AccessibilityCaneProfile.corridorerrors += corridor->errors;
+		if (corridor->classification == ACCESSIBILITY_CANE_CORRIDOR_BOUNDED) {
+			g_AccessibilityCaneProfile.corridorbounded++;
+		} else if (corridor->classification == ACCESSIBILITY_CANE_CORRIDOR_GUIDED) {
+			g_AccessibilityCaneProfile.corridorguided++;
+		} else if (corridor->classification == ACCESSIBILITY_CANE_CORRIDOR_BROAD) {
+			g_AccessibilityCaneProfile.corridorbroad++;
+		} else {
+			g_AccessibilityCaneProfile.corridoruncertain++;
+		}
+		g_AccessibilityCaneProfile.corridorsuppressed
+				+= sample->corridorsuppressed != 0;
+	}
+#endif
+}
+
+static void accessibilityCanePlaySample(
+		struct accessibilitycanesample *sample, f32 distance, f32 reach,
+		f32 nearfrequency, f32 farfrequency, f32 fulldistance,
+		f32 fadedistance, f32 silentdistance);
+
+struct accessibilitycanecorridorroute {
+	struct accessibilitycanesample *representative;
+	struct accessibilitycanesample *sides[2];
+	s32 members;
+};
+
+static s32 accessibilityCaneCorridorSideIsAudible(
+		const struct accessibilitycanecorridorside *side);
+static s32 accessibilityCaneCorridorIsStructuredRoute(
+		const struct accessibilitycanesample *sample);
+
+static void accessibilityCanePlayCorridorRunway(
+		struct accessibilitycanecorridorroute *route,
+		const struct accessibilityobserver *observer)
+{
+	struct accessibilitycanesample *sample = route->representative;
+	f32 frequencies[ACCESSIBILITY_CANE_CORRIDOR_STATIONS * 2];
+	f32 volumes[ACCESSIBILITY_CANE_CORRIDOR_STATIONS * 2];
+	f32 pans[ACCESSIBILITY_CANE_CORRIDOR_STATIONS * 2];
+	f32 maximumvolume = 0.0f;
+	f32 baseelevation = 0.0f;
+	s32 count = 0;
+	s32 i;
+	s32 sideindex;
+	s32 havebaseelevation = false;
+
+	if (g_AccessibilityCaneRunwayPlayed || !sample) {
+		return;
+	}
+
+	/* Adjacent rays describe lanes through one route, not competing routes.
+	 * Trace the best-supported outer left edge and then the outer right edge.
+	 * Each edge retains its own stations, so it can continue along a landing
+	 * wall or terminate independently at an opening. */
+	for (sideindex = 0; sideindex < 2; sideindex++) {
+		struct accessibilitycanesample *sidesample = route->sides[sideindex];
+		struct accessibilitycanecorridordiagnostic *corridor;
+
+		if (!sidesample) continue;
+		corridor = &sidesample->corridordiagnostic;
+		for (i = 0; i < corridor->stationcount; i++) {
+			struct accessibilitycanecorridorstation *station
+					= &corridor->stations[i];
+			struct accessibilitycanecorridorside *side = sideindex == 0
+					? &station->left : &station->right;
+			struct coord source;
+			f32 deltax;
+			f32 deltaz;
+			f32 distance;
+			s32 volume;
+			s32 pan;
+
+			if (side->evidence != ACCESSIBILITY_CANE_CORRIDOR_SIDE_BOUNDARY
+					|| (side->kind != ACCESSIBILITY_CANE_CORRIDOR_KIND_BARRIER
+						&& side->kind != ACCESSIBILITY_CANE_CORRIDOR_KIND_EDGE)) {
+				continue;
+			}
+			if (!havebaseelevation) {
+				baseelevation = station->center.y;
+				havebaseelevation = true;
+			}
+			source = side->point;
+			deltax = source.x - observer->origin.x;
+			deltaz = source.z - observer->origin.z;
+			distance = sqrtf(deltax * deltax + deltaz * deltaz);
+
+			source.y = observer->camera.y;
+			volume = psCalculateVolumeFromDistance(distance,
+					sample->fulldistance, sample->fadedistance,
+					sample->silentdistance, AL_VOL_FULL);
+			pan = psCalculatePan(&source, sample->fulldistance,
+					sample->fadedistance, sample->silentdistance,
+					distance, false, NULL);
+			{
+				f32 pitchratio = powf(2.0f,
+						(station->center.y - baseelevation)
+								/ ACCESSIBILITY_CANE_PATH_PHRASE_OCTAVE_HEIGHT);
+				if (pitchratio < ACCESSIBILITY_CANE_PATH_PHRASE_MIN_PITCH_RATIO) {
+					pitchratio = ACCESSIBILITY_CANE_PATH_PHRASE_MIN_PITCH_RATIO;
+				} else if (pitchratio
+						> ACCESSIBILITY_CANE_PATH_PHRASE_MAX_PITCH_RATIO) {
+					pitchratio = ACCESSIBILITY_CANE_PATH_PHRASE_MAX_PITCH_RATIO;
+				}
+				frequencies[count] = (sideindex == 0
+						? ACCESSIBILITY_CANE_RUNWAY_FREQUENCY_HZ
+						: ACCESSIBILITY_CANE_RUNWAY_RIGHT_FREQUENCY_HZ)
+						* pitchratio;
+			}
+			volumes[count] = (f32)volume / (f32)AL_VOL_FULL
+					* accessibilityGetVirtualCaneVolume()
+					* ACCESSIBILITY_CANE_RUNWAY_VOLUME_SCALE;
+			pans[count] = ((f32)pan - (f32)AL_PAN_CENTER)
+					/ (f32)AL_PAN_CENTER;
+			if (volumes[count] > maximumvolume) maximumvolume = volumes[count];
+			count++;
+		}
+	}
+
+	if (count == 0) return;
+	accessibilityTonePlayCaneSlot(ACCESSIBILITY_CANE_CONTEXT_SLOT,
+			ACCESSIBILITY_CANE_RUNWAY_FREQUENCY_HZ,
+			ACCESSIBILITY_CANE_RUNWAY_FREQUENCY_HZ,
+			maximumvolume, 0.0f, count * ACCESSIBILITY_CANE_RUNWAY_STEP_MS,
+			ACCESSIBILITY_TONE_CANE_PATTERN_RUNWAY, count, count,
+			frequencies, volumes, pans);
+	sample->corridorrunwayplayed = true;
+	g_AccessibilityCaneRunwayPlayed = true;
+}
+
+static s32 accessibilityCaneCorridorAudibleSideCount(
+		const struct accessibilitycanesample *sample, s32 sideindex)
+{
+	s32 count = 0;
+	s32 i;
+
+	for (i = 0; i < sample->corridordiagnostic.stationcount; i++) {
+		const struct accessibilitycanecorridorstation *station
+				= &sample->corridordiagnostic.stations[i];
+		const struct accessibilitycanecorridorside *side = sideindex == 0
+				? &station->left : &station->right;
+
+		if (accessibilityCaneCorridorSideIsAudible(side)) count++;
+	}
+
+	return count;
+}
+
+static s32 accessibilityCaneCorridorPreferSideSample(
+		const struct accessibilitycanesample *candidate,
+		const struct accessibilitycanesample *current, s32 sideindex)
+{
+	s32 candidatecount = accessibilityCaneCorridorAudibleSideCount(
+			candidate, sideindex);
+	s32 currentcount;
+	s32 candidatestructured;
+	s32 currentstructured;
+
+	if (candidatecount == 0) return false;
+	if (!current) return true;
+	currentcount = accessibilityCaneCorridorAudibleSideCount(current, sideindex);
+	candidatestructured = accessibilityCaneCorridorIsStructuredRoute(candidate);
+	currentstructured = accessibilityCaneCorridorIsStructuredRoute(current);
+
+	if (candidatestructured != currentstructured) return candidatestructured;
+	if (candidatecount != currentcount) return candidatecount > currentcount;
+
+	/* The fan is ordered left-to-right. Equal evidence therefore comes from
+	 * the most outward ray on the requested side. */
+	return sideindex == 0
+			? candidate->angledegrees < current->angledegrees
+			: candidate->angledegrees > current->angledegrees;
+}
+
+static s32 accessibilityCaneCorridorSideIsAudible(
+		const struct accessibilitycanecorridorside *side)
+{
+	return side->evidence == ACCESSIBILITY_CANE_CORRIDOR_SIDE_BOUNDARY
+			&& (side->kind == ACCESSIBILITY_CANE_CORRIDOR_KIND_BARRIER
+				|| side->kind == ACCESSIBILITY_CANE_CORRIDOR_KIND_EDGE);
+}
+
+static s32 accessibilityCaneCorridorGroupCandidate(
+		const struct accessibilitycanesample *sample)
+{
+	return sample->state == ACCESSIBILITY_CANE_SAMPLE_TERRAIN
+			&& sample->terrain != 0
+			&& (sample->corridordiagnostic.classification
+					== ACCESSIBILITY_CANE_CORRIDOR_BOUNDED
+				|| sample->corridordiagnostic.classification
+						== ACCESSIBILITY_CANE_CORRIDOR_GUIDED
+				|| sample->corridordiagnostic.classification
+						== ACCESSIBILITY_CANE_CORRIDOR_UNCERTAIN);
+}
+
+static s32 accessibilityCaneCorridorIsStructuredRoute(
+		const struct accessibilitycanesample *sample)
+{
+	return sample->corridordiagnostic.classification
+			== ACCESSIBILITY_CANE_CORRIDOR_BOUNDED
+		|| sample->corridordiagnostic.classification
+			== ACCESSIBILITY_CANE_CORRIDOR_GUIDED;
+}
+
+static void accessibilityCaneSuppressHeldTerrain(
+		struct accessibilitycanesample *sample)
+{
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+	if (!sample->corridorsuppressed) {
+		g_AccessibilityCaneProfile.corridorsuppressed++;
+	}
+#endif
+	sample->corridoraudioscale = 0.0f;
+	sample->corridorsuppressed = true;
+}
+
+static void accessibilityCanePlayBestCorridorRunway(
+		const struct accessibilityobserver *observer)
+{
+	struct accessibilitycanecorridorroute
+			routes[ACCESSIBILITY_CANE_PROBE_COUNT] = {0};
+	s32 routecount = 0;
+	s32 selected;
+	s32 i;
+
+	/* Terrain audio is decided per contiguous direction group after every ray
+	 * has semantic evidence. This prevents early uncertain rays from playing
+	 * the legacy contour before a later ray proves that they belong to the
+	 * same structured route. */
+	for (i = 0; i < ACCESSIBILITY_CANE_PROBE_COUNT;) {
+		s32 first = i;
+		s32 end;
+		s32 direction;
+		s32 hasstructured = false;
+		s32 j;
+
+		if (!accessibilityCaneCorridorGroupCandidate(
+				&g_AccessibilityCaneSamples[i])) {
+			i++;
+			continue;
+		}
+		direction = g_AccessibilityCaneSamples[i].terrain;
+		for (end = i; end < ACCESSIBILITY_CANE_PROBE_COUNT
+				&& accessibilityCaneCorridorGroupCandidate(
+						&g_AccessibilityCaneSamples[end])
+				&& g_AccessibilityCaneSamples[end].terrain == direction;
+				end++) {
+			if (accessibilityCaneCorridorIsStructuredRoute(
+					&g_AccessibilityCaneSamples[end])) {
+				hasstructured = true;
+			}
+		}
+
+		if (hasstructured) {
+			s32 route = routecount++;
+			for (j = first; j < end; j++) {
+				struct accessibilitycanesample *sample
+						= &g_AccessibilityCaneSamples[j];
+				s32 angle = sample->angledegrees < 0
+						? -sample->angledegrees : sample->angledegrees;
+				s32 candidatestructured
+						= accessibilityCaneCorridorIsStructuredRoute(sample);
+				s32 routestructured = routes[route].representative
+						? accessibilityCaneCorridorIsStructuredRoute(
+								routes[route].representative) : false;
+				s32 routeangle = routes[route].representative
+						? (routes[route].representative->angledegrees < 0
+							? -routes[route].representative->angledegrees
+							: routes[route].representative->angledegrees) : 0;
+
+				sample->corridorroutegroup = route;
+				routes[route].members++;
+				if (!routes[route].representative
+						|| (candidatestructured && !routestructured)
+						|| (candidatestructured == routestructured
+							&& angle < routeangle)) {
+					routes[route].representative = sample;
+				}
+				if (accessibilityCaneCorridorPreferSideSample(sample,
+						routes[route].sides[0], 0)) {
+					routes[route].sides[0] = sample;
+				}
+				if (accessibilityCaneCorridorPreferSideSample(sample,
+						routes[route].sides[1], 1)) {
+					routes[route].sides[1] = sample;
+				}
+			}
+			for (j = first; j < end; j++) {
+				struct accessibilitycanesample *sample
+						= &g_AccessibilityCaneSamples[j];
+				sample->corridorroutemembers = routes[route].members;
+				sample->corridorroutesideangles[0] = routes[route].sides[0]
+						? routes[route].sides[0]->angledegrees : 999;
+				sample->corridorroutesideangles[1] = routes[route].sides[1]
+						? routes[route].sides[1]->angledegrees : 999;
+			}
+		} else {
+			s32 representative = first;
+			s32 representativeangle
+					= g_AccessibilityCaneSamples[first].angledegrees < 0
+					? -g_AccessibilityCaneSamples[first].angledegrees
+					: g_AccessibilityCaneSamples[first].angledegrees;
+
+			for (j = first + 1; j < end; j++) {
+				s32 angle = g_AccessibilityCaneSamples[j].angledegrees < 0
+						? -g_AccessibilityCaneSamples[j].angledegrees
+						: g_AccessibilityCaneSamples[j].angledegrees;
+				if (angle < representativeangle) {
+					representative = j;
+					representativeangle = angle;
+				}
+			}
+			for (j = first; j < end; j++) {
+				if (j != representative
+						&& g_AccessibilityCaneSamples[j].terrainaudioheld) {
+					accessibilityCaneSuppressHeldTerrain(
+							&g_AccessibilityCaneSamples[j]);
+				}
+			}
+		}
+		i = end;
+	}
+
+	for (i = 0; i < ACCESSIBILITY_CANE_PROBE_COUNT; i++) {
+		struct accessibilitycanesample *sample = &g_AccessibilityCaneSamples[i];
+
+		if (sample->corridorroutegroup >= 0) {
+			sample->corridorroutetotal = routecount;
+		}
+		if (sample->terrainaudioheld) {
+			if (sample->corridorroutegroup >= 0) {
+				accessibilityCaneSuppressHeldTerrain(sample);
+			}
+			accessibilityCanePlaySample(sample, sample->terraindistance,
+					sample->effectivereach, sample->nearfrequency,
+					sample->farfrequency, sample->fulldistance,
+					sample->fadedistance, sample->silentdistance);
+		}
+	}
+
+	if (routecount == 0) return;
+	selected = g_AccessibilityCaneRunwayRouteCursor % routecount;
+	/* A sweep that sees only one route must not reset the multi-route
+	 * round-robin. Otherwise an intermittent second route always loses to
+	 * route zero whenever single-route sweeps occur between detections. */
+	if (routecount > 1) {
+		g_AccessibilityCaneRunwayRouteCursor = selected + 1;
+	}
+	accessibilityCanePlayCorridorRunway(&routes[selected], observer);
+}
+
 static void accessibilityCaneBeginSweep(s32 mode, s32 starttick)
 {
 	s32 i;
@@ -1104,10 +1881,15 @@ static void accessibilityCaneBeginSweep(s32 mode, s32 starttick)
 		g_AccessibilityCaneSamples[i].crouchresult = -1;
 		g_AccessibilityCaneSamples[i].terrainclearanceresult = -1;
 		g_AccessibilityCaneSamples[i].stancestate = -1;
+		g_AccessibilityCaneSamples[i].corridoraudioscale = 1.0f;
+		g_AccessibilityCaneSamples[i].corridorroutegroup = -1;
+		g_AccessibilityCaneSamples[i].corridorroutesideangles[0] = 999;
+		g_AccessibilityCaneSamples[i].corridorroutesideangles[1] = 999;
 	}
 
 	g_AccessibilityCaneSweepId++;
 	g_AccessibilityCaneSweeps++;
+	g_AccessibilityCaneRunwayPlayed = false;
 	g_AccessibilityCaneSweepMode = mode;
 	g_AccessibilityCaneCycleStartTick = starttick;
 	g_AccessibilityCaneCursor = 0;
@@ -1877,8 +2659,13 @@ static s32 accessibilityCanePrepareQuery(
 	}
 
 	sample->effectivereach = query->reach;
+	sample->fulldistance = query->fulldistance;
+	sample->fadedistance = query->fadedistance;
+	sample->silentdistance = query->silentdistance;
 	accessibilityGetVirtualCanePitch(&query->nearfrequency,
 			&query->farfrequency);
+	sample->nearfrequency = query->nearfrequency;
+	sample->farfrequency = query->farfrequency;
 	query->end.x = query->start.x + sample->direction.x * query->reach;
 	query->end.y = query->start.y;
 	query->end.z = query->start.z + sample->direction.z * query->reach;
@@ -1967,8 +2754,20 @@ static s32 accessibilityCaneFindBarrier(
 	result = cdExamCylMove06(start, observer->prop->rooms,
 			end, dstrooms, sample->radius, types, 1,
 			sample->ymax - start->y, sample->ymin - start->y);
+	if (result == CDRESULT_ERROR) {
+		/* Destination-room inference can disagree at portal boundaries. The
+		 * engine's portal-walk variant preserves the same swept cylinder and
+		 * prevents one disagreement from blanking part of the cane fan. */
+		sample->barrierretries++;
+		result = cdExamCylMove08(start, observer->prop->rooms,
+				end, dstrooms, sample->radius, types, 1,
+				sample->ymax - start->y, sample->ymin - start->y);
+		if (result == CDRESULT_COLLISION) {
+			collisionpass = 3;
+		}
+	}
 
-	if (result == CDRESULT_COLLISION) {
+	if (result == CDRESULT_COLLISION && collisionpass == 0) {
 		collisionpass = 1;
 	} else if (result == CDRESULT_NOCOLLISION) {
 		result = cdExamCylMove02(start, end, sample->radius,
@@ -2066,7 +2865,8 @@ static void accessibilityCanePlaySample(
 			distance, false, NULL);
 	sample->normalizedvolume = (f32)sample->volume / (f32)AL_VOL_FULL;
 	sample->mastervolume = accessibilityGetVirtualCaneVolume();
-	sample->effectivevolume = sample->normalizedvolume * sample->mastervolume;
+		sample->effectivevolume = sample->normalizedvolume * sample->mastervolume;
+	sample->effectivevolume *= sample->corridoraudioscale;
 	sample->normalizedpan = ((f32)sample->pan - (f32)AL_PAN_CENTER)
 			/ (f32)AL_PAN_CENTER;
 	for (i = 0; i < sample->pathphrase.count; i++) {
@@ -2090,7 +2890,8 @@ static void accessibilityCanePlaySample(
 			sample->pathphrasefrequencies[i] = nearfrequency * pitchratio;
 		}
 		sample->pathphrasevolumes[i] = (f32)pathvolume
-				/ (f32)AL_VOL_FULL * sample->mastervolume;
+				/ (f32)AL_VOL_FULL * sample->mastervolume
+				* sample->corridoraudioscale;
 	}
 
 	accessibilityTonePlayCaneSlot(sample - g_AccessibilityCaneSamples,
@@ -2098,7 +2899,7 @@ static void accessibilityCanePlaySample(
 			sample->effectivevolume, sample->normalizedpan,
 			sample->durationms, sample->tonepattern,
 			sample->pathphrase.floorcount, sample->pathphrase.count,
-			sample->pathphrasefrequencies, sample->pathphrasevolumes);
+			sample->pathphrasefrequencies, sample->pathphrasevolumes, NULL);
 }
 
 static void accessibilityCaneEvaluateSample(struct accessibilitycanesample *sample,
@@ -2261,6 +3062,7 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 		g_AccessibilityCaneQueryMaxUs = sample->queryus;
 	}
 	g_AccessibilityCaneProfile.querycalls++;
+	g_AccessibilityCaneProfile.queryretries += sample->barrierretries;
 	g_AccessibilityCaneProfile.observationus += sample->queryus - sample->evaluationus;
 	g_AccessibilityCaneProfile.evaluationus += sample->evaluationus;
 	if (sample->evaluation.reasons & ACCESSIBILITY_CANE_REASON_QUERY_ERROR) {
@@ -2309,6 +3111,7 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 		g_AccessibilityCaneMisses++;
 		return result;
 	}
+	accessibilityCaneClassifyCorridor(sample, &query.observer);
 
 	switch (sample->evaluation.cue) {
 	case ACCESSIBILITY_CANE_CUE_TERRAIN:
@@ -2327,9 +3130,18 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 		sample->state = ACCESSIBILITY_CANE_SAMPLE_HIT;
 		break;
 	}
-	accessibilityCanePlaySample(sample, horizontal, query.reach,
-			query.nearfrequency, query.farfrequency, query.fulldistance,
-			query.fadedistance, query.silentdistance);
+	if (sample->state == ACCESSIBILITY_CANE_SAMPLE_TERRAIN
+			&& sample->corridordiagnostic.classification
+					== ACCESSIBILITY_CANE_CORRIDOR_UNCERTAIN) {
+		/* Hold fallback terrain until the complete contiguous direction group
+		 * can be reconciled with any bounded route discovered later. */
+		sample->terrainaudioheld = true;
+		sample->distance = horizontal;
+	} else {
+		accessibilityCanePlaySample(sample, horizontal, query.reach,
+				query.nearfrequency, query.farfrequency, query.fulldistance,
+				query.fadedistance, query.silentdistance);
+	}
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 	sample->publishus = sysGetMicroseconds() - querystart;
 	g_AccessibilityCaneProfile.publishus += sample->publishus;
@@ -2363,6 +3175,7 @@ static void accessibilityCaneStop(const char *reason, s32 logscope)
 	g_AccessibilityCaneObserverRemote = false;
 	g_AccessibilityCaneVehicleProp = 0;
 	g_AccessibilityCaneVehicleLastBlockedCueTick = -1;
+	g_AccessibilityCaneRunwayRouteCursor = 0;
 	memset(&g_AccessibilityCaneGrade, 0,
 			sizeof(g_AccessibilityCaneGrade));
 	g_AccessibilityCaneGrade.surface.room = -1;
@@ -2439,7 +3252,7 @@ void accessibilityCaneObserveHoverbikeMove(struct coord *requestedvelocity,
 			ACCESSIBILITY_CANE_VEHICLE_BLOCKED_END_HZ,
 			volume, normalizedpan,
 			ACCESSIBILITY_CANE_VEHICLE_BLOCKED_DURATION_MS,
-			ACCESSIBILITY_TONE_CANE_PATTERN_CONTOUR, 0, 0, NULL, NULL);
+			ACCESSIBILITY_TONE_CANE_PATTERN_CONTOUR, 0, 0, NULL, NULL, NULL);
 	g_AccessibilityCaneVehicleLastBlockedCueTick = now;
 	accessibilityLogEvent("cane", "vehicle_blocked",
 			"tick=%d stage=%d player=%d vehicle=%p requested_velocity=%.3f,%.3f,%.3f magnitude=%.3f source=%.3f,%.3f,%.3f radius=%.3f pan=%d normalized_pan=%.5f volume=%.5f start_frequency_hz=%.1f end_frequency_hz=%.1f duration_ms=%d repeat_ticks=%d slot=%d",
@@ -2482,7 +3295,8 @@ static void accessibilityCaneUpdateObserverIdentity(
 	g_AccessibilityCaneVehicleProp = (uintptr_t)vehicleprop;
 }
 
-static void accessibilityCaneAdvanceSweep(s32 mode, s32 now)
+static void accessibilityCaneAdvanceSweep(s32 mode, s32 now,
+		const struct accessibilityobserver *observer)
 {
 	s32 cycleticks;
 	s32 elapsed;
@@ -2536,6 +3350,9 @@ static void accessibilityCaneAdvanceSweep(s32 mode, s32 now)
 		g_AccessibilityCaneSweepSamples++;
 		g_AccessibilityCaneLastQueryTick = now;
 		g_AccessibilityCaneCursor++;
+		if (g_AccessibilityCaneCursor == ACCESSIBILITY_CANE_PROBE_COUNT) {
+			accessibilityCanePlayBestCorridorRunway(observer);
+		}
 	}
 
 }
@@ -2598,7 +3415,7 @@ static void accessibilityCaneTickInternal(void)
 	}
 
 	now = g_Vars.lvframe60;
-	accessibilityCaneAdvanceSweep(mode, now);
+	accessibilityCaneAdvanceSweep(mode, now, &observer);
 }
 
 void accessibilityCaneTick(void)

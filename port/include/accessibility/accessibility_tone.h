@@ -26,6 +26,7 @@ enum accessibilitytonecanepattern {
 	ACCESSIBILITY_TONE_CANE_PATTERN_CONTOUR,
 	ACCESSIBILITY_TONE_CANE_PATTERN_CROUCH_DOUBLE,
 	ACCESSIBILITY_TONE_CANE_PATTERN_PATH,
+	ACCESSIBILITY_TONE_CANE_PATTERN_RUNWAY,
 };
 
 enum accessibilitytoneradarkind {
@@ -114,7 +115,8 @@ void accessibilityToneStopHillBeacon(void);
 void accessibilityTonePlayCaneSlot(s32 slot, f32 startfrequencyhz,
 		f32 endfrequencyhz, f32 volume, f32 pan, s32 durationms,
 		s32 pattern, s32 pathfloorcount, s32 pathcount,
-		const f32 *pathfrequencieshz, const f32 *pathvolumes);
+		const f32 *pathfrequencieshz, const f32 *pathvolumes,
+		const f32 *pathpans);
 void accessibilityToneStopCane(void);
 void accessibilityToneSetMarkerSlot(s32 slot, s32 enabled,
 		f32 volume, f32 pan, s32 restart);

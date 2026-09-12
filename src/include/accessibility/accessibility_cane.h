@@ -24,14 +24,28 @@ struct accessibilitycaneprofile {
 	u64 unknownrises;
 	u64 blockedrises;
 	u64 clearrises;
+	u64 queryretries;
 	u64 queryerrors;
 	u64 pathcalls;
 	u64 pathus;
 	u64 pathmaxus;
 	u64 pathqueries;
+	u64 pathretries;
 	u64 pathbudgets;
 	u64 patherrors;
 	u64 pathdifferences;
+	u64 corridorcalls;
+	u64 corridorus;
+	u64 corridormaxus;
+	u64 corridorqueries;
+	u64 corridorretries;
+	u64 corridorbudgets;
+	u64 corridorerrors;
+	u64 corridorbounded;
+	u64 corridorguided;
+	u64 corridorbroad;
+	u64 corridoruncertain;
+	u64 corridorsuppressed;
 };
 
 void accessibilityCaneTakeProfile(struct accessibilitycaneprofile *profile);
