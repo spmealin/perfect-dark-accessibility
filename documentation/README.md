@@ -19,6 +19,8 @@ its established path.
 
 Current feature-specific engineering records include:
 
+- `ACCESSIBILITY_FEATURE_REFERENCE.md` — the detailed current-behavior and
+  implementation reference that formerly occupied the root player document;
 - `ACCESSIBILITY_CANE_ACCEPTANCE_EVIDENCE.md` — value-only blind-user cane
   results preserved independently of disposable local diagnostic logs.
 - `ACCESSIBILITY_CANE_QUERY_PROFILING.md` — structured cane observations,
@@ -27,10 +29,13 @@ Current feature-specific engineering records include:
   target-tag coverage, deliberate exclusions, and maintenance rules for
   special-device lock tones.
 
-The root accessibility documents describe current behavior and project status.
-Files in this directory preserve design decisions, implementation handoffs, and
-investigation history; their original requirements can therefore differ from
-later accepted behavior. When a historical plan and a root document disagree,
-use `ACCESSIBILITY.md` for current user-visible behavior,
+The root `ACCESSIBILITY.md` is the practical blind-player guide. Detailed
+implemented behavior is preserved in `ACCESSIBILITY_FEATURE_REFERENCE.md`.
+The other root accessibility documents describe project status and engineering
+boundaries. Files in this directory preserve design decisions, implementation
+handoffs, and investigation history; their original requirements can therefore
+differ from later accepted behavior. When a historical plan and a current
+document disagree, use `ACCESSIBILITY.md` for player operation,
+`ACCESSIBILITY_FEATURE_REFERENCE.md` for exact current user-visible behavior,
 `ACCESSIBILITY_ARCHITECTURE.md` for current engine boundaries, and
 `ACCESSIBILITY_ROADMAP.md` for current completion status.

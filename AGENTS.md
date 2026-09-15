@@ -7,7 +7,9 @@ This branch is preparing an accessibility layer for the Perfect Dark PC port. Pr
 Before accessibility work, read:
 
 - `README.md` for supported ROM versions, dependencies, and build commands.
-- `ACCESSIBILITY.md` for scope, users, and design principles.
+- `ACCESSIBILITY.md` for the practical player guide and feature overview.
+- `documentation/ACCESSIBILITY_FEATURE_REFERENCE.md` for detailed current
+  behavior, scope, users, and design principles.
 - `ACCESSIBILITY_ARCHITECTURE.md` for confirmed engine boundaries and proposed interfaces.
 - `ACCESSIBILITY_ROADMAP.md` for milestone order and acceptance criteria.
 - `ACCESSIBILITY_TESTING.md` for evidence and playtest requirements.
