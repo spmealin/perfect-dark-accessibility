@@ -1,13 +1,18 @@
 # Third-party notices
 
-## Tolk
+## Prism
 
-This project uses [Tolk](https://github.com/dkager/tolk), a screen-reader abstraction library by Davy Kager and contributors, pinned at commit `e5149f0cb6ef9b941673017e0e7b7c409e485fbe`.
+This project distributes the official x64 Windows runtime from
+[Prism](https://github.com/ethindp/prism) version 0.18.2. Prism provides the
+Windows screen-reader, OneCore, and SAPI speech backends used by the
+accessibility layer.
 
-Tolk is built as a replaceable shared library and loaded dynamically by the Perfect Dark accessibility backend. Tolk remains licensed under the GNU Lesser General Public License version 3. The complete upstream license is available at `third_party/tolk/LICENSE.txt`, and the pinned corresponding source is the `third_party/tolk` Git submodule.
+`prism.dll` is a replaceable shared library loaded dynamically from beside the
+game executable. Prism is licensed under the Mozilla Public License version
+2.0. The upstream notice and complete license collection from the official
+release archive are preserved under `third_party/prism/NOTICE` and
+`third_party/prism/LICENSES`. Artifact provenance and checksums are recorded in
+`third_party/prism/README.md`.
 
-## NVDA controller client
-
-The architecture-matching NVDA controller client DLL distributed in Tolk's `libs` directory is copied beside the game executable for development builds. It remains licensed under the GNU Lesser General Public License version 2.1. Its license is available at `third_party/tolk/LICENSE-NVDA.txt`.
-
-The repository's MIT license covers project-owned source. Tolk and the NVDA controller client retain their respective licenses. Official binary distribution requires a final review confirming that all applicable notices, corresponding source access, and replacement/relinking obligations are satisfied.
+The repository's MIT license covers project-owned source. Prism and its bundled
+third-party components retain their respective licenses.

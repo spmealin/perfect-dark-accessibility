@@ -2,3 +2,5 @@
 Enabled=@PD_PACKAGE_ACCESSIBILITY_VALUE@
 LoggingEnabled=@PD_PACKAGE_ACCESSIBILITY_VALUE@
 SpeechEnabled=@PD_PACKAGE_ACCESSIBILITY_VALUE@
+SpeechBackend=auto
+SpeechFallback=onecore

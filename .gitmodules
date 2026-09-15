@@ -1,6 +1,3 @@
 [submodule "tools/recomp"]
 	path = tools/recomp
 	url = https://github.com/Emill/ido-static-recomp.git
-[submodule "third_party/tolk"]
-	path = third_party/tolk
-	url = https://github.com/dkager/tolk.git

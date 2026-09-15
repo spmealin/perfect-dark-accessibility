@@ -106,8 +106,9 @@ int main(int argc, const char **argv)
 	sysInit();
 	fsInit();
 	configInit();
-	accessibilityInit();
 	videoInit();
+	/* Prism's UI Automation backend requires the game window to exist. */
+	accessibilityInit();
 	inputInit();
 	audioInit();
 	romdataInit();

@@ -38,7 +38,7 @@ For the default configuration, the resulting executable is
 `build/pd.x86_64.exe`. MinGW Windows builds copy `libwinpthread-1.dll`, the
 architecture-matching shared GCC runtime, `SDL2.dll`, and `zlib1.dll` from the
 active compiler's binary directory into `build/` with `copy_if_different`.
-Together with the existing Tolk/controller runtime target, this makes the
+Together with the pinned Prism runtime target, this makes the
 developer output directly launchable from Windows Explorer without relying on
 the MinGW shell's `PATH`. Missing runtime inputs fail configuration with their
 resolved path rather than producing an incomplete output silently.
@@ -166,7 +166,7 @@ src/include/accessibility/
 port/src/accessibility/
   accessibility_tone.c           fixed procedural mixer and atomic command bridge
   speech_null.c                   unavailable backend for non-Windows targets
-  speech_tolk.c                   dynamically loaded Windows Tolk backend
+  speech_prism.c                  dynamically loaded Windows Prism backend
 port/include/accessibility/
   accessibility_tone.h           platform mixer command/diagnostic contract
 ```
@@ -196,7 +196,7 @@ game semantic hook/query
 
 The game must not depend on a native speech implementation. Feature adapters
 must publish speech through `accessibility_announcement.c`, not call a platform
-backend or Tolk directly. Lifecycle diagnostics may call the core speech
+backend or Prism directly. Lifecycle diagnostics may call the core speech
 contract for its explicit backend test. Logging should observe normalized input
 and announcement outcomes, not intercept backend internals as its only evidence
 source.
@@ -213,8 +213,9 @@ void accessibilityShutdown(void);
 s32 accessibilityIsEnabled(void);
 ```
 
-`port/src/main.c` calls initialization after `configInit` and shutdown before
-configuration/video/crash cleanup. Both calls are idempotent. Disabled operation
+`port/src/main.c` calls initialization after `configInit` and `videoInit` so
+Prism's UI Automation backend can bind to the game window, and calls shutdown
+before configuration/video/crash cleanup. Both calls are idempotent. Disabled operation
 is a no-op except when the compile-time graphics diagnostics explicitly request
 an accessibility-disabled control log. `port/src/pdmain.c` owns the settled
 post-`lvTick` feature coordinator calls and pre-`lvStop` audio/state resets.
@@ -233,15 +234,16 @@ s32 accessibilitySpeechCancel(void);
 ```
 
 The core owns lifecycle and request logging. The backend owns native
-initialization, strict UTF-8/UTF-16 conversion, cancellation, and
-technology-specific error reporting. Windows dynamically loads a separately
-built `Tolk.dll` from the executable directory and uses Tolk's default
-screen-reader-only policy; SAPI fallback is not enabled. Non-Windows builds
-select the null backend. Tolk output is asynchronous internally, but its
-non-thread-safe API is invoked on the main thread and every call is timed.
-Initialization/detection occurs only at startup; no device enumeration or
-detection polling occurs in a frame tick. A worker-backed speech queue remains
-an experiment only after Tolk thread/COM ownership is proven.
+initialization, backend selection, cancellation, and technology-specific error
+reporting. Windows dynamically loads the pinned official `prism.dll` from the
+executable directory. In the default `auto` mode it probes Prism's native
+screen-reader backends, conditionally tries UI Automation when Windows reports
+an active screen reader, then tries OneCore and SAPI. `SpeechBackend` and
+`SpeechFallback` allow this policy to be restricted or overridden. Non-Windows
+builds select the null backend. Prism accepts UTF-8 directly. Its backend API is
+invoked on the main thread and every output call is timed. Detection occurs only
+at startup; Prism availability polling is deliberately disabled, so starting or
+stopping a screen reader while the game runs requires restarting the game.
 
 ### Announcements and future queue
 
@@ -250,8 +252,7 @@ weapon-change, direct-rendered weapon-function, and respawn-countdown output,
 generic feature status output, cancellation, elapsed
 backend timing, and a fixed 12,288-byte retained menu-repeat buffer. Feature
 adapters do not allocate retained speech text and do not call the platform
-backend. Tolk itself consumes or queues UTF-16 text during its asynchronous
-output call.
+backend. Prism consumes or queues UTF-8 text during its output call.
 
 A normalized event should carry only fields needed for policy and diagnosis:
 
@@ -284,6 +285,8 @@ Milestones 2 and 3 implement these `pd.ini` keys. They now default to on for bli
 Accessibility.Enabled=1
 Accessibility.LoggingEnabled=1
 Accessibility.SpeechEnabled=1
+Accessibility.SpeechBackend=auto
+Accessibility.SpeechFallback=onecore
 ```
 
 Implemented feature keys are also enabled by default for acceptance testing:
@@ -630,7 +633,7 @@ This table records implemented and anticipated changes to established files so f
 
 ## Known uncertainties and required experiments
 
-1. **Windows speech technology:** Milestone 3 implements pinned Tolk commit `e5149f0cb6ef9b941673017e0e7b7c409e485fbe` as a dynamically loaded shared library. NVDA 2026.1 runtime requests, Unicode conversion, cancellation, missing-dependency behavior, and clean unload passed; other readers and future compatibility remain unverified.
+1. **Windows speech technology:** Milestone 3 originally validated Tolk with NVDA 2026.1. The current experimental replacement dynamically loads the official Prism 0.18.2 x64 runtime and selects active screen readers before OneCore/SAPI fallback. Compilation and dependency inspection do not establish audible correctness; NVDA-active, NVDA-absent fallback, cancellation, Unicode, Narrator/UIA override, missing-DLL, and clean-shutdown behavior require renewed runtime and blind-user acceptance testing.
 2. **Threading:** determine whether native speech can be pumped without blocking and which calls must occur on the main thread or a COM-initialized worker.
 3. **Menu semantics:** Milestone 4 implements the stable post-input observer and current type/provider matrix. Compilation and lifecycle smoke evidence exist; callback lifetime, localization variants, compound-control usefulness, full input parity, first-focus timing, and the complete scripted interaction matrix still need runtime and blind-user verification.
 4. **Localization:** test all supported ROM configurations for string resolution and region-specific control codes. Existing game-derived menu, weapon, objective, and description text follows the normal language APIs. Accessibility-authored R-Tracker state phrases (`R-Tracker on`, `R-Tracker off`, and `No tracked targets`) remain centralized in the accessibility adapter but do not yet have language IDs or translations; add an accessibility string namespace and translation workflow before claiming non-English support rather than editing generated/ROM-derived assets.

@@ -20,7 +20,8 @@ player receives.
    already contain one.
 3. Put your legally obtained US revision 1 ROM in that directory as
    `pd.ntsc-final.z64`.
-4. Start your screen reader, then run `pd.x86_64.exe`.
+4. Start your screen reader, if you use one, then run `pd.x86_64.exe`. When no
+   supported screen reader is active, the game uses a built-in Windows voice.
 5. Use headphones. Stereo position is essential to the scanners, virtual cane,
    markers, radar, and combat cues.
 
@@ -75,9 +76,10 @@ clicks are one for North, two for East, three for South, and four for West.
 
 ## Screen-reader output
 
-The Windows build sends text through Tolk to a running screen reader. NVDA is
-the primary tested screen reader. Other Tolk-supported screen readers may work,
-but should be treated as unverified until tested.
+The Windows build sends text through Prism. It prefers a running supported
+screen reader, then falls back to Windows OneCore speech and finally SAPI.
+NVDA is the primary tested screen reader. Other Prism-supported screen readers
+and both built-in fallbacks should be treated as provisional until tested.
 
 Speech covers much more than the focused menu control. Current support includes:
 
@@ -266,6 +268,8 @@ are:
 [Accessibility]
 Enabled=1
 SpeechEnabled=1
+SpeechBackend=auto
+SpeechFallback=onecore
 LoggingEnabled=1
 MenuNarration=1
 HudMessages=1
@@ -279,6 +283,16 @@ Use `1` to enable a switch and `0` to disable it. `VirtualCaneMode` uses
 `0=off`, `1=slow`, and `2=fast`. `CompassMode` uses `0=off`, `1=speech and
 sound`, and `2=sound only`.
 
+`SpeechBackend=auto` tries active screen-reader integrations first, then the
+configured built-in fallback. Set it to `screenreader` to prohibit built-in
+speech, or force `nvda`, `jaws`, `uia`, `onecore`, `sapi`, or `none` when
+diagnosing output. Other supported explicit values are `pc_talker`, `zdsr`,
+`boy_pc_reader`, `zoomtext`, `sense_reader`, `system_access`, and
+`window_eyes`. `SpeechFallback` accepts `onecore`, `sapi`, or `none`; the
+default `onecore` setting tries SAPI if OneCore cannot initialize. Automatic
+UIA selection depends on Windows reporting an active screen reader. Narrator
+users can set `SpeechBackend=uia` if Windows fails to report it correctly.
+
 The file also exposes ranges, pitches, and independent volume controls for the
 virtual cane, hostile presence cues, solid targeting tone, interrupted
 non-hostile or breakable targeting tone, markers, and Combat Simulator radar.
@@ -291,9 +305,9 @@ safe and let the game create a fresh one on its next run.
 
 ### The game starts but nothing is spoken
 
-1. Confirm that the screen reader was running before the game started.
-2. Confirm that `Tolk.dll` and the supplied screen-reader controller DLLs remain
-   beside `pd.x86_64.exe`.
+1. If you expect screen-reader output, confirm that it was running before the
+   game started. Otherwise confirm that Windows has a OneCore or SAPI voice.
+2. Confirm that `prism.dll` remains beside `pd.x86_64.exe`.
 3. Open `pd.ini` and verify `Accessibility.Enabled=1`,
    `Accessibility.SpeechEnabled=1`, and `Accessibility.MenuNarration=1`.
 4. Restart the game after changing the file.
@@ -335,7 +349,7 @@ if you do not want to disclose that information.
 
 Restore the complete contents of the Windows package. Do not download random
 copies of `libwinpthread-1.dll`, `libgcc_s_seh-1.dll`, `SDL2.dll`, `zlib1.dll`,
-`Tolk.dll`, or screen-reader controller DLLs from unrelated sites. A source
+or `prism.dll` from unrelated sites. A source
 build made through this repository's MinGW64 process copies the matching runtime
 files beside the executable automatically.
 

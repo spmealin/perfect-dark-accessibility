@@ -264,13 +264,13 @@ list(APPEND LIBS "${EXTRA_LIBRARIES}")
 file(GLOB_RECURSE SRC_PORT "${CMAKE_SOURCE_DIR}/port/*.c")
 file(GLOB_RECURSE SRC_PORT_CXX "${CMAKE_SOURCE_DIR}/port/*.cpp")
 
-set(SRC_SPEECH_TOLK "${CMAKE_SOURCE_DIR}/port/src/accessibility/speech_tolk.c")
+set(SRC_SPEECH_PRISM "${CMAKE_SOURCE_DIR}/port/src/accessibility/speech_prism.c")
 set(SRC_SPEECH_NULL "${CMAKE_SOURCE_DIR}/port/src/accessibility/speech_null.c")
-list(REMOVE_ITEM SRC_PORT ${SRC_SPEECH_TOLK} ${SRC_SPEECH_NULL})
+list(REMOVE_ITEM SRC_PORT ${SRC_SPEECH_PRISM} ${SRC_SPEECH_NULL})
 
 if(WIN32)
-  list(APPEND SRC_PORT ${SRC_SPEECH_TOLK})
-  include(Tolk)
+  list(APPEND SRC_PORT ${SRC_SPEECH_PRISM})
+  include(Prism)
 else()
   list(APPEND SRC_PORT ${SRC_SPEECH_NULL})
 endif()
@@ -394,7 +394,8 @@ target_compile_definitions(pd PRIVATE
   ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS=$<BOOL:${ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS}>)
 add_dependencies(pd pd_headers)
 if(WIN32)
-  add_dependencies(pd tolk tolk_runtime_files)
+  add_dependencies(pd prism_runtime_files)
+  target_include_directories(pd PRIVATE "${PRISM_INCLUDE_DIRECTORY}")
 endif()
 target_link_libraries(pd ${LIBS})
 set_target_properties(pd PROPERTIES OUTPUT_NAME "${BIN_NAME}")
@@ -466,18 +467,17 @@ if(WIN32 AND MINGW)
       "-DPD_PACKAGE_BINARY=${CMAKE_BINARY_DIR}/${BIN_NAME}.exe"
       "-DPD_PACKAGE_RUNTIME_DIRECTORY=${CMAKE_BINARY_DIR}"
       "-DPD_PACKAGE_GCC_RUNTIME_NAME=${MINGW_GCC_RUNTIME_NAME}"
-      "-DPD_PACKAGE_CONTROLLER_NAME=${TOLK_CONTROLLER_NAME}"
       "-DPD_PACKAGE_CONFIG=${PD_PACKAGE_CONFIG_DIRECTORY}/pd.ini"
       "-DPD_PACKAGE_ROM_INSTRUCTIONS=${CMAKE_SOURCE_DIR}/dist/windows/put_your_rom_here.txt"
       "-DPD_PACKAGE_PROJECT_LICENSE=${CMAKE_SOURCE_DIR}/LICENSE"
-      "-DPD_PACKAGE_TOLK_LICENSE=${TOLK_ROOT}/LICENSE.txt"
-      "-DPD_PACKAGE_NVDA_LICENSE=${TOLK_ROOT}/LICENSE-NVDA.txt"
+      "-DPD_PACKAGE_PRISM_NOTICE=${PRISM_NOTICE_SOURCE}"
+      "-DPD_PACKAGE_PRISM_LICENSES=${PRISM_LICENSES_SOURCE}"
       "-DPD_PACKAGE_STAGING=${CMAKE_BINARY_DIR}/dist/staging"
       "-DPD_PACKAGE_ARCHIVE=${CMAKE_BINARY_DIR}/dist/pd.zip"
       -P "${CMAKE_SOURCE_DIR}/cmake/PackageWindows.cmake"
     DEPENDS
       pd
-      tolk_runtime_files
+      prism_runtime_files
       mingw_runtime_files
       "${CMAKE_SOURCE_DIR}/cmake/PackageWindows.cmake"
       "${CMAKE_SOURCE_DIR}/dist/windows/pd-package.ini.in"

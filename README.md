@@ -32,7 +32,9 @@ For the easiest Windows setup:
    together.
 3. Put a supported US revision 1 ROM in the package's `data` directory and
    name it `pd.ntsc-final.z64`.
-4. Start your screen reader before launching `pd.x86_64.exe`.
+4. Start your screen reader, if you use one, before launching
+   `pd.x86_64.exe`. Without an active screen reader, the Windows build falls
+   back to its built-in OneCore or SAPI voice.
 5. Headphones are strongly recommended because most navigation and targeting
    cues are spatial.
 
@@ -105,8 +107,8 @@ F1 through F12 commands.
 
 ## Building on Windows
 
-The accessibility build currently targets Windows because its speech backend
-uses [Tolk](https://github.com/dkager/tolk). Install MSYS2 and the MinGW64
+The accessibility build currently targets 64-bit Windows because its speech
+backend uses [Prism](https://github.com/ethindp/prism). Install MSYS2 and the MinGW64
 toolchain, SDL2, zlib, CMake, Python, Make, and Git. Then configure and build
 from the MSYS2 MinGW64 environment:
 
@@ -116,7 +118,7 @@ cmake --build build -j4 -- -O
 ```
 
 The executable is `build/pd.x86_64.exe`. The build copies its required MinGW,
-SDL2, zlib, Tolk, and NVDA Controller runtime DLLs beside the executable so it
+SDL2, zlib, and Prism runtime DLLs beside the executable so it
 can be launched from Windows Explorer.
 
 To create a clean accessibility-enabled Windows package from PowerShell:
