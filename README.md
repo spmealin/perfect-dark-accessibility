@@ -25,8 +25,9 @@ something goes wrong.
 
 For the easiest Windows setup:
 
-1. Download an accessibility-enabled Windows package from this fork's Releases
-   page, or ask the project maintainer for the latest test package.
+1. Download an accessibility-enabled Windows package from this fork's
+   [Releases page](https://github.com/spmealin/perfect-dark-accessibility/releases),
+   or ask the project maintainer for the latest test package.
 2. Extract the whole archive. Keep the executable and all supplied DLL files
    together.
 3. Put a supported US revision 1 ROM in the package's `data` directory and
@@ -141,7 +142,9 @@ the [architecture](ACCESSIBILITY_ARCHITECTURE.md),
 The most valuable contribution is a precise blind-player test report: include
 the level, difficulty, task, what cue or speech was expected, what happened,
 and a Shift+F2 diagnostic capture number when possible. The diagnostic log is
-local and comprehensive; review it before sharing if that matters to you.
+local and comprehensive; review it before sharing if that matters to you. File
+reports through the repository's
+[Issues page](https://github.com/spmealin/perfect-dark-accessibility/issues).
 
 ## Credits and license notices
 
