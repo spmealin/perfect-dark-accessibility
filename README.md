@@ -78,13 +78,15 @@ developed and tested mainly with `ntsc-final`:
 | Japanese final | `pd.jpn-final.z64` | `538d2b75945eae069b29c46193e74790` | Requires the matching custom executable |
 | PAL final | `pd.pal-final.z64` | `d9b5cd305d228424891ce38e71bc9213` | Requires the matching custom executable |
 
-Never commit or redistribute a ROM, extracted ROM data, save data, or generated
-game assets with this project.
-
 ## Standard controls
 
 The port supports keyboard and mouse, Xbox-style controllers, and N64-style
 controllers. Controls can be rebound in `pd.ini`.
+
+The best-supported setup is an Xbox-style controller and keyboard used
+together. Use the controller for ordinary movement, aiming, combat, menus, and
+interaction, and keep the keyboard available for changing accessibility
+settings and requesting accessibility information while you play.
 
 | Action | Keyboard and mouse | Xbox controller |
 | --- | --- | --- |
@@ -131,12 +133,9 @@ disabled.
 For other platforms, ROM versions, dependencies, and upstream port details,
 refer to the [upstream Perfect Dark port](https://github.com/fgsfdsfgs/perfect_dark).
 
-## Project status and contributing
+## Contributing
 
-Current scope and progress are tracked in the
-[accessibility roadmap](ACCESSIBILITY_ROADMAP.md). Developers should also read
-the [architecture](ACCESSIBILITY_ARCHITECTURE.md),
-[testing guide](ACCESSIBILITY_TESTING.md), and
+Developers should read the [architecture](ACCESSIBILITY_ARCHITECTURE.md) and
 [detailed feature reference](documentation/ACCESSIBILITY_FEATURE_REFERENCE.md).
 
 The most valuable contribution is a precise blind-player test report: include

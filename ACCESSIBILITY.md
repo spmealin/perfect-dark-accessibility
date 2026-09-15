@@ -53,7 +53,6 @@ work.
 | F5 | Gameplay | Toggle interactable-object beacons. The choice persists between levels and game sessions. |
 | F5 | Menus and dialogs | Repeat the current screen's title, important static text, and focused control. |
 | F6 | Gameplay | Toggle door beacons. The choice persists between levels and game sessions. |
-| F6 | Menus and dialogs | Cancel current and queued accessibility speech. |
 | F7 | Gameplay | Toggle friendly and neutral character beacons. The choice persists between levels and game sessions. |
 | F8 | Gameplay | Toggle pickup-item beacons. The choice persists between levels and game sessions. |
 | F9, F10, F11, or F12 | Gameplay | Place a temporary audible marker in slot 1, 2, 3, or 4. Pressing the same key again moves that marker to your current position. |
@@ -96,7 +95,7 @@ Speech covers much more than the focused menu control. Current support includes:
 - important device and training information in the Carrington Institute.
 
 Press F5 when a menu's static information was spoken too quickly or focus alone
-does not repeat it. Press F6 in a menu to silence speech.
+does not repeat it.
 
 ## World scanners
 
@@ -116,6 +115,13 @@ transparent breakable glass is treated like visible glass rather than an opaque
 wall. X-Ray vision can expose otherwise hidden semantic objects to their normal
 scanner category. Scanner sounds pause in menus, pause screens, cutscenes, and
 other non-gameplay states, then resume without changing your saved choices.
+
+An interactable-object cue means that something usable is visible, but the game
+may still require it to be centered vertically before the normal interact
+button works. If the cue is sounding and the interact button does nothing, move
+your view up or down while facing the object and try again. This is especially
+common in the Carrington Institute training areas, where laptops sit below the
+usual straight-ahead view on desks and tables.
 
 When controlling the CamSpy, supported scanners and navigation systems switch
 to its camera and return to Joanna when remote control ends. Interactable and
@@ -218,6 +224,19 @@ longer relevant. Coverage is intentionally semantic and is not yet exhaustive.
 Press End, or right stick click on an Xbox-style controller, to put the camera
 at horizontal. This is useful after looking down to interact or after losing
 vertical orientation in combat.
+
+### Learning levels and objectives
+
+The accessibility build currently provides no automatic pathfinding or
+automovement. The player must learn each level's layout, decide where to travel,
+and work out how to complete its objectives. The cane, compass, scanners, and
+markers provide information for doing that; they do not calculate or follow a
+route.
+
+If you become stuck, a mainstream written guide such as the
+[IGN Perfect Dark walkthrough](https://www.ign.com/wikis/perfect-dark/Walkthrough)
+can provide objective instructions and level context that you can follow using
+the accessibility tools.
 
 ## Other automatic cues
 
@@ -327,8 +346,8 @@ files beside the executable automatically.
 - Full-campaign, every-difficulty, and multiplayer accessibility validation is
   incomplete. Combat Simulator audio features currently assume one local
   player.
-- Navigation is assistance rather than automatic route finding. The game does
-  not generally announce a complete path to the next objective.
+- There is no automatic pathfinding or automovement. Players must learn level
+  layouts and determine how to complete objectives.
 - Some mission landmarks and special-device targets require semantic entries;
   undiscovered edge cases may still need to be added.
 - Visual accessibility options such as scalable text, contrast themes, and
@@ -339,6 +358,4 @@ files beside the executable automatically.
 
 For engineering details and exact current behavior, see the
 [feature reference](documentation/ACCESSIBILITY_FEATURE_REFERENCE.md),
-[architecture](ACCESSIBILITY_ARCHITECTURE.md),
-[roadmap](ACCESSIBILITY_ROADMAP.md), and
-[testing guide](ACCESSIBILITY_TESTING.md).
+and [architecture](ACCESSIBILITY_ARCHITECTURE.md).

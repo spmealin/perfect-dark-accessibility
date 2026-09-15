@@ -11,8 +11,6 @@ Before accessibility work, read:
 - `documentation/ACCESSIBILITY_FEATURE_REFERENCE.md` for detailed current
   behavior, scope, users, and design principles.
 - `ACCESSIBILITY_ARCHITECTURE.md` for confirmed engine boundaries and proposed interfaces.
-- `ACCESSIBILITY_ROADMAP.md` for milestone order and acceptance criteria.
-- `ACCESSIBILITY_TESTING.md` for evidence and playtest requirements.
 - The matching `documentation/milestones/ACCESSIBILITY_MILESTONE_XX_PLAN.md`, when one exists, before implementing that milestone.
 
 Treat statements marked **Confirmed** as repository observations. Treat **Proposed** and **Question** as design work that still needs implementation or validation.
@@ -76,4 +74,5 @@ Every handoff should state:
 - relevant accessibility log session ID and the diagnostic fields used to reach the conclusion;
 - rollback steps and known regressions.
 
-Do not describe a feature as complete when its acceptance criteria in `ACCESSIBILITY_ROADMAP.md` have not been met.
+Do not describe a feature as accessibility-validated without recorded blind or
+screen-reader-dependent acceptance evidence.

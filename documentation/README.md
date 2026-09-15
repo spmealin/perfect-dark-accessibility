@@ -9,8 +9,6 @@ The root directory retains the documents needed for immediate repository use:
 - `AGENTS.md`
 - `ACCESSIBILITY.md`
 - `ACCESSIBILITY_ARCHITECTURE.md`
-- `ACCESSIBILITY_ROADMAP.md`
-- `ACCESSIBILITY_TESTING.md`
 - `THIRD_PARTY_NOTICES.md`
 
 Completed milestone records are stored in `documentation/milestones/`.
@@ -37,5 +35,8 @@ handoffs, and investigation history; their original requirements can therefore
 differ from later accepted behavior. When a historical plan and a current
 document disagree, use `ACCESSIBILITY.md` for player operation,
 `ACCESSIBILITY_FEATURE_REFERENCE.md` for exact current user-visible behavior,
-`ACCESSIBILITY_ARCHITECTURE.md` for current engine boundaries, and
-`ACCESSIBILITY_ROADMAP.md` for current completion status.
+and `ACCESSIBILITY_ARCHITECTURE.md` for current engine boundaries.
+
+Some historical implementation plans refer to the retired root roadmap and
+testing guide. Those documents remain available in Git history but are no
+longer maintained as current project guidance.
