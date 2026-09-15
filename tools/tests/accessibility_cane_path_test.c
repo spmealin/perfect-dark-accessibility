@@ -245,6 +245,16 @@ int main(void)
 	input.reach = 5000;
 	accessibilityCaneTracePath(&input, &queries, &result);
 	assert(result.stop == ACCESSIBILITY_CANE_PATH_CAPACITY && result.count == 32);
+	assert(result.cue == ACCESSIBILITY_CANE_CUE_NONE);
+	assert(accessibilityCaneValidateTerrain(&result, 120)
+			== ACCESSIBILITY_CANE_TERRAIN_CONNECTED_FLAT);
+	f.stair = -17;
+	accessibilityCaneTracePath(&input, &queries, &result);
+	assert(result.stop == ACCESSIBILITY_CANE_PATH_CAPACITY && result.count == 32);
+	assert(result.cue == ACCESSIBILITY_CANE_CUE_TERRAIN);
+	assert(accessibilityCaneValidateTerrain(&result, 120)
+			== ACCESSIBILITY_CANE_TERRAIN_CONFIRMED);
+	f.stair = 0;
 	f.edge = 0;
 	accessibilityCaneTracePath(&input, &queries, &result);
 	assert(result.stop == ACCESSIBILITY_CANE_PATH_UNCERTAIN && result.count == 0);

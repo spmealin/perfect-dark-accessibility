@@ -41,7 +41,12 @@ enum accessibilitycaneterrainvalidation accessibilityCaneValidateTerrain(
 			&& result->cue == ACCESSIBILITY_CANE_CUE_DROP) {
 		return ACCESSIBILITY_CANE_TERRAIN_EDGE;
 	}
-	if (result->stop == ACCESSIBILITY_CANE_PATH_RANGE) {
+	/* Reaching fixed node capacity is also a completed connected trace. The
+	 * final node can fall just short of a long configured reach, but all stored
+	 * segments have already passed the same floor and movement checks as a
+	 * range-complete path. Do not fall back to the legacy per-ray contour. */
+	if (result->stop == ACCESSIBILITY_CANE_PATH_RANGE
+			|| result->stop == ACCESSIBILITY_CANE_PATH_CAPACITY) {
 		if (result->cue == ACCESSIBILITY_CANE_CUE_TERRAIN) {
 			return ACCESSIBILITY_CANE_TERRAIN_CONFIRMED;
 		}

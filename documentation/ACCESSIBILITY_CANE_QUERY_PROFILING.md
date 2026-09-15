@@ -209,9 +209,12 @@ connected terrain is confirmed. Terrain followed by a wall is confirmed only
 when at least two live player radii were successfully traversed beyond its cue
 point; otherwise the wall wins. A validated descent takes precedence when the
 legacy probe looked beyond it and reported that later wall as a drop. A
-connected flat route suppresses a legacy
-terrain candidate, and a connected edge upgrades one to a drop. Uncertain,
-capacity-limited, budget-limited, unsupported, and crouch-first results retain
+connected flat route suppresses a legacy terrain candidate, and a connected
+edge upgrades one to a drop. A trace that fills all 32 fixed nodes is treated
+like a completed range trace because every stored segment has already passed
+the connected floor and movement checks: a flat capacity trace suppresses
+legacy terrain, while a terrain-bearing capacity trace uses its connected
+contour. Uncertain, budget-limited, unsupported, and crouch-first results retain
 legacy terrain output.
 
 Crouch adoption runs after drop and terrain arbitration. A lower-clearance path

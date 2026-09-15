@@ -1706,6 +1706,8 @@ static s32 accessibilityCaneCorridorGroupCandidate(
 				|| sample->corridordiagnostic.classification
 						== ACCESSIBILITY_CANE_CORRIDOR_GUIDED
 				|| sample->corridordiagnostic.classification
+						== ACCESSIBILITY_CANE_CORRIDOR_BROAD
+				|| sample->corridordiagnostic.classification
 						== ACCESSIBILITY_CANE_CORRIDOR_UNCERTAIN);
 }
 
@@ -1742,7 +1744,8 @@ static void accessibilityCanePlayBestCorridorRunway(
 	/* Terrain audio is decided per contiguous direction group after every ray
 	 * has semantic evidence. This prevents early uncertain rays from playing
 	 * the legacy contour before a later ray proves that they belong to the
-	 * same structured route. */
+	 * same structured route, and prevents broad terrain from recreating the
+	 * old left-to-right elevation sweep on several adjacent rays. */
 	for (i = 0; i < ACCESSIBILITY_CANE_PROBE_COUNT;) {
 		s32 first = i;
 		s32 end;
@@ -3131,10 +3134,13 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 		break;
 	}
 	if (sample->state == ACCESSIBILITY_CANE_SAMPLE_TERRAIN
-			&& sample->corridordiagnostic.classification
-					== ACCESSIBILITY_CANE_CORRIDOR_UNCERTAIN) {
-		/* Hold fallback terrain until the complete contiguous direction group
-		 * can be reconciled with any bounded route discovered later. */
+			&& (sample->corridordiagnostic.classification
+					== ACCESSIBILITY_CANE_CORRIDOR_UNCERTAIN
+				|| sample->corridordiagnostic.classification
+					== ACCESSIBILITY_CANE_CORRIDOR_BROAD)) {
+		/* Hold non-structured terrain until the complete contiguous direction
+		 * group can be reconciled. One representative may remain audible, but
+		 * adjacent rays must not recreate the obsolete elevation sweep. */
 		sample->terrainaudioheld = true;
 		sample->distance = horizontal;
 	} else {
