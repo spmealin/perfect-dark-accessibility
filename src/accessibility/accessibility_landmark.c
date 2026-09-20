@@ -86,22 +86,19 @@ static s32 g_AccessibilityLandmarkStage = -1;
 static const struct accessibilitylandmarkspec *accessibilityLandmarkFindSpec(
 		struct prop *prop)
 {
-	s32 tag;
 	s32 i;
 
 	if (!prop || !prop->obj || prop->obj->prop != prop) {
 		return NULL;
 	}
 
-	tag = objGetTagNum(prop->obj);
-
 	for (i = 0; i < ARRAYCOUNT(g_AccessibilityLandmarkSpecs); i++) {
 		const struct accessibilitylandmarkspec *spec
 				= &g_AccessibilityLandmarkSpecs[i];
 
 		if (spec->stage == g_Vars.stagenum
-				&& spec->tag == tag
-				&& spec->proptype == prop->type) {
+				&& spec->proptype == prop->type
+				&& objFindByTagId(spec->tag) == prop->obj) {
 			return spec;
 		}
 	}
@@ -210,7 +207,10 @@ static s32 accessibilityLandmarkObjectEligible(
 		}
 	}
 
-	if (!obj || !obj->prop || objGetTagNum(obj) != spec->tag) {
+	/* Compare against the engine's current tag mapping, not objGetTagNum.
+	 * Skedar Ruins remaps destination tags 1-3 onto randomly chosen pillars;
+	 * those objects retain their original source tags as aliases. */
+	if (!obj || !obj->prop || objFindByTagId(spec->tag) != obj) {
 		*reason = "tagged_object_unavailable";
 		return false;
 	}

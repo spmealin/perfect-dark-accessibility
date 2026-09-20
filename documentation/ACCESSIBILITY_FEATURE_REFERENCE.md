@@ -379,7 +379,9 @@ when destroyed, and enter audibility 250 ms apart so colocated consoles remain
 spatially distinguishable. Each Skedar Ruins pillar sounds while "Identify
 temple targets" remains incomplete and its corresponding authoritative
 per-pillar stage flag is clear. A pillar stops individually as soon as the
-level accepts its Target Amplifier. The accessibility R-Tracker also suppresses
+level accepts its Target Amplifier. Pillar identity follows the level's live
+destination-tag remapping rather than the chosen object's original source tag,
+so all random selections use the same behavior. The accessibility R-Tracker also suppresses
 that completed pillar even though the solo level script leaves its native
 yellow-tracker object flag set. For a tagged object whose setup origin is embedded
 in its mounting geometry, the LOS query tests the nearest model-box face and

@@ -570,6 +570,10 @@ their existing slot identity where possible so another landmark's completion doe
 not reshuffle every remaining source. Registry entries cover Rescue's tagged
 intact silver-X wall, Air Base's suitcase-deposit conveyor, Attack Ship's three
 shield consoles, and the Skedar Ruins target pillars and final-boss spikes.
+Registry identity follows the engine's current tag-to-object mapping rather than
+asking an object for one tag. This is significant in Skedar Ruins, where the
+stage script remaps destination tags `0x01`-`0x03` onto three randomly selected
+pillars while each chosen object retains its original source-tag alias.
 The conveyor and shield consoles are gated to their applicable, incomplete
 objectives; multi-object objective entries start their independent voices at
 250 ms slot offsets rather than masking localization with simultaneous onset.
