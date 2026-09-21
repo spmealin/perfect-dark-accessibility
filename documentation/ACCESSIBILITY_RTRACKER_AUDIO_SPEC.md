@@ -49,21 +49,22 @@ before upstreaming; gameplay hooks must not contain copies of the English text.
 
 ## Simultaneous target audio
 
-Ten dedicated, preallocated mixer voices are reserved for R-Tracker markers.
+Ten dedicated, preallocated mixer slots are reserved for R-Tracker markers.
 The audited base-game maximum is eight simultaneous markers, including blue
 cheat markers. Each semantic identity retains its slot until it becomes
 ineligible. New identities fill empty slots in active-prop order. The adapter
 logs overflow and suppresses excess markers rather than allocating or stealing
 another accessibility feature's lane.
 
-All occupied slots sound concurrently. Starts use deterministic golden-ratio
-phase offsets so targets do not chirp at the same instant.
+All occupied slots feed one serialized round-robin oscillator lane. Only one
+contact phrase can sound at a time, so contacts cannot drift into overlap after
+an initially staggered start.
 
 ### Category
 
-- Yellow mission/training object: 700 Hz.
-- Red tracked character: 520 Hz.
-- Blue cheat item: 1000 Hz.
+- Yellow mission/training object: 1450 Hz.
+- Red tracked character: 1200 Hz.
+- Blue cheat item: 1800 Hz.
 
 Category changes update the assigned voice without changing its identity or
 phase.
@@ -86,12 +87,19 @@ Horizontal distance controls cadence continuously:
 
 ```text
 clamped = min(horizontal_distance, 4000)
-period_ms = 200 + 1000 * clamped / 4000
+distance_fraction = clamped / 4000
+period_ms = 150 + 1250 * distance_fraction^2
+volume = 0.35 + 0.65 * (1 - distance_fraction)^2
 ```
 
-Thus a marker at the player is approximately 200 ms and a marker at or beyond
-the radar edge is 1200 ms. Pulse volume is independent of distance so the
-visual radar's always-visible edge marker remains audible.
+Thus a marker at the player requests approximately 150 ms and a marker at or
+beyond the radar edge requests 1400 ms. Gain reaches full tracker volume at the
+player and falls to 35 percent at the radar edge. Each slot retains its own due
+time. When more than one contact is due, the scheduler advances through them in
+round-robin order. A 120 ms event floor leaves room for the longest vertical
+phrase and guarantees that phrases do not overlap; contention can delay a due
+contact but cannot replace it or make a distant contact inherit a near one's
+cadence.
 
 ### Relative height
 
@@ -152,15 +160,16 @@ growth in memory or sound-channel counts.
 1. In CI device training, activate the R-Tracker. Confirm `R-Tracker on`, then a
    single yellow marker for the IR Scanner.
 2. Turn in place and verify left/right pan and the clean-front/modulated-rear
-   distinction. Approach and retreat to verify smooth 1200-to-200 ms cadence.
+   distinction. Approach and retreat to verify the nonlinear 1400-to-150 ms
+   cadence and increasing proximity volume.
 3. Change floors or use controlled vertical positions to verify rising,
    single, and falling patterns near the native +/-250-unit threshold.
 4. Collect the IR Scanner and confirm its voice stops immediately. Deactivate
    the device and confirm `R-Tracker off`.
 5. Activate the device where no marker exists and confirm one delayed
    `No tracked targets` announcement with no repetition.
-6. In Skedar Ruins, confirm all three yellow pillars sound concurrently and
-   each disappears when its target amplifier is placed.
+6. In Skedar Ruins, confirm all three yellow pillars sound in round-robin order
+   without overlap and each disappears when its target amplifier is placed.
 7. On Attack Ship, confirm simultaneous tracked characters and yellow objects,
    and confirm dead or cloaked tracked characters are removed under native
    rules.

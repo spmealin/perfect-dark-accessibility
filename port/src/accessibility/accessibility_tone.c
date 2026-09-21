@@ -57,13 +57,14 @@
 #define ACCESSIBILITY_THREAT_ALERT_DURATION_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.12f))
 #define ACCESSIBILITY_THREAT_ALERT_ATTACK_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.004f))
 #define ACCESSIBILITY_THREAT_ALERT_RELEASE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.018f))
-#define ACCESSIBILITY_TRACKER_VOLUME 0.065f
+#define ACCESSIBILITY_TRACKER_VOLUME 0.09f
 #define ACCESSIBILITY_TRACKER_LEVEL_BEEP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.045f))
 #define ACCESSIBILITY_TRACKER_DOUBLE_BEEP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.035f))
 #define ACCESSIBILITY_TRACKER_DOUBLE_GAP_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.025f))
 #define ACCESSIBILITY_TRACKER_ATTACK_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.003f))
 #define ACCESSIBILITY_TRACKER_RELEASE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.008f))
 #define ACCESSIBILITY_TRACKER_REAR_MODULATION_HZ 30.0f
+#define ACCESSIBILITY_TRACKER_MIN_EVENT_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.12f))
 #define ACCESSIBILITY_FRIENDLY_BASE_FREQUENCY_HZ 440.0f
 #define ACCESSIBILITY_FRIENDLY_THIRD_FREQUENCY_HZ 550.0f
 #define ACCESSIBILITY_FRIENDLY_VOLUME 0.10f
@@ -273,10 +274,13 @@ static f32 g_AccessibilityCombatPhase[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static f32 g_AccessibilityCombatPan[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static f32 g_AccessibilityCombatGain[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static s32 g_AccessibilityTrackerObservedSequence[ACCESSIBILITY_TONE_TRACKER_SLOT_COUNT];
-static s32 g_AccessibilityTrackerCycleSample[ACCESSIBILITY_TONE_TRACKER_SLOT_COUNT];
 static f32 g_AccessibilityTrackerPhase[ACCESSIBILITY_TONE_TRACKER_SLOT_COUNT];
 static f32 g_AccessibilityTrackerModulationPhase[ACCESSIBILITY_TONE_TRACKER_SLOT_COUNT];
 static f32 g_AccessibilityTrackerPan[ACCESSIBILITY_TONE_TRACKER_SLOT_COUNT];
+static s32 g_AccessibilityTrackerRoundRobinSlot = -1;
+static s32 g_AccessibilityTrackerLastSlot = -1;
+static s32 g_AccessibilityTrackerEventSample = ACCESSIBILITY_TRACKER_MIN_EVENT_SAMPLES;
+static s32 g_AccessibilityTrackerDueSamples[ACCESSIBILITY_TONE_TRACKER_SLOT_COUNT];
 static s32 g_AccessibilityFriendlyObservedSequence[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
 static f32 g_AccessibilityFriendlyPhaseBase[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
 static f32 g_AccessibilityFriendlyPhaseThird[ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT];
@@ -1314,7 +1318,6 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 	for (slot = 0; slot < ACCESSIBILITY_TONE_TRACKER_SLOT_COUNT; slot++) {
 		s32 sequence = SDL_AtomicGet(&g_AccessibilityTrackerSequence[slot]);
-		s32 offset;
 
 		trackerenabled[slot] = SDL_AtomicGet(
 				&g_AccessibilityTrackerEnabled[slot]);
@@ -1338,18 +1341,18 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 		if (sequence != g_AccessibilityTrackerObservedSequence[slot]) {
 			g_AccessibilityTrackerObservedSequence[slot] = sequence;
-			offset = ((slot * 618) % 1000)
-					* trackerperiodsamples[slot] / 1000;
-			g_AccessibilityTrackerCycleSample[slot] = offset == 0 ? 0
-					: trackerperiodsamples[slot] - offset;
+			g_AccessibilityTrackerDueSamples[slot] = 0;
 			g_AccessibilityTrackerPhase[slot] = 0.0f;
 			g_AccessibilityTrackerModulationPhase[slot] = 0.0f;
 			g_AccessibilityTrackerPan[slot] = trackerpan[slot];
-		} else if (g_AccessibilityTrackerCycleSample[slot]
-				>= trackerperiodsamples[slot]) {
-			g_AccessibilityTrackerCycleSample[slot] = 0;
-			g_AccessibilityTrackerPhase[slot] = 0.0f;
 		}
+	}
+
+	if (!anytrackerenabled) {
+		g_AccessibilityTrackerRoundRobinSlot = -1;
+		g_AccessibilityTrackerLastSlot = -1;
+		g_AccessibilityTrackerEventSample
+				= ACCESSIBILITY_TRACKER_MIN_EVENT_SAMPLES;
 	}
 
 	for (slot = 0; slot < ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT; slot++) {
@@ -2212,16 +2215,47 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		}
 
 		for (slot = 0; slot < ACCESSIBILITY_TONE_TRACKER_SLOT_COUNT; slot++) {
-			s32 sample = g_AccessibilityTrackerCycleSample[slot];
+			if (trackerenabled[slot]
+					&& g_AccessibilityTrackerDueSamples[slot] > 0) {
+				g_AccessibilityTrackerDueSamples[slot]--;
+			}
+
+			g_AccessibilityTrackerPan[slot] += (trackerpan[slot]
+					- g_AccessibilityTrackerPan[slot]) / (f32)(frames - i);
+		}
+
+		if (g_AccessibilityTrackerEventSample
+				>= ACCESSIBILITY_TRACKER_MIN_EVENT_SAMPLES) {
+			s32 offset;
+
+			for (offset = 1; offset <= ACCESSIBILITY_TONE_TRACKER_SLOT_COUNT;
+					offset++) {
+				s32 nextslot = (g_AccessibilityTrackerLastSlot + offset)
+						% ACCESSIBILITY_TONE_TRACKER_SLOT_COUNT;
+
+				if (trackerenabled[nextslot]
+						&& g_AccessibilityTrackerDueSamples[nextslot] <= 0) {
+					g_AccessibilityTrackerRoundRobinSlot = nextslot;
+					g_AccessibilityTrackerLastSlot = nextslot;
+					g_AccessibilityTrackerEventSample = 0;
+					g_AccessibilityTrackerDueSamples[nextslot]
+							= trackerperiodsamples[nextslot];
+					g_AccessibilityTrackerPhase[nextslot] = 0.0f;
+					g_AccessibilityTrackerModulationPhase[nextslot] = 0.0f;
+					break;
+				}
+			}
+		}
+
+		if (g_AccessibilityTrackerRoundRobinSlot >= 0) {
+			s32 trackerslot = g_AccessibilityTrackerRoundRobinSlot;
+			s32 sample = g_AccessibilityTrackerEventSample;
 			s32 beepsample = -1;
 			s32 beeplength = ACCESSIBILITY_TRACKER_LEVEL_BEEP_SAMPLES;
 			f32 frequencymultiplier = 1.0f;
 
-			g_AccessibilityTrackerPan[slot] += (trackerpan[slot]
-					- g_AccessibilityTrackerPan[slot]) / (f32)(frames - i);
-
-			if (trackerenabled[slot]) {
-				if (trackerheight[slot] == 0) {
+			if (trackerenabled[trackerslot]) {
+				if (trackerheight[trackerslot] == 0) {
 					if (sample < ACCESSIBILITY_TRACKER_LEVEL_BEEP_SAMPLES) {
 						beepsample = sample;
 					}
@@ -2230,7 +2264,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 					if (sample < ACCESSIBILITY_TRACKER_DOUBLE_BEEP_SAMPLES) {
 						beepsample = sample;
-						frequencymultiplier = trackerheight[slot] == 1
+						frequencymultiplier = trackerheight[trackerslot] == 1
 								? 0.9f : 1.1f;
 					} else if (sample >= ACCESSIBILITY_TRACKER_DOUBLE_BEEP_SAMPLES
 							+ ACCESSIBILITY_TRACKER_DOUBLE_GAP_SAMPLES
@@ -2240,7 +2274,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 						beepsample = sample
 								- ACCESSIBILITY_TRACKER_DOUBLE_BEEP_SAMPLES
 								- ACCESSIBILITY_TRACKER_DOUBLE_GAP_SAMPLES;
-						frequencymultiplier = trackerheight[slot] == 1
+						frequencymultiplier = trackerheight[trackerslot] == 1
 								? 1.1f : 0.9f;
 					}
 				}
@@ -2248,18 +2282,18 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 			if (beepsample >= 0) {
 				f32 envelope = 1.0f;
-				f32 leftpan = g_AccessibilityTrackerPan[slot] > 0.0f
-						? 1.0f - g_AccessibilityTrackerPan[slot] : 1.0f;
-				f32 rightpan = g_AccessibilityTrackerPan[slot] < 0.0f
-						? 1.0f + g_AccessibilityTrackerPan[slot] : 1.0f;
-				f32 modulation = trackerrear[slot]
+				f32 leftpan = g_AccessibilityTrackerPan[trackerslot] > 0.0f
+						? 1.0f - g_AccessibilityTrackerPan[trackerslot] : 1.0f;
+				f32 rightpan = g_AccessibilityTrackerPan[trackerslot] < 0.0f
+						? 1.0f + g_AccessibilityTrackerPan[trackerslot] : 1.0f;
+				f32 modulation = trackerrear[trackerslot]
 						? 0.75f + 0.25f * sinf(
-								g_AccessibilityTrackerModulationPhase[slot])
+								g_AccessibilityTrackerModulationPhase[trackerslot])
 						: 1.0f;
 				f32 tracker;
 
 				if (beepsample == 0) {
-					g_AccessibilityTrackerPhase[slot] = 0.0f;
+					g_AccessibilityTrackerPhase[trackerslot] = 0.0f;
 				}
 
 				if (beepsample < ACCESSIBILITY_TRACKER_ATTACK_SAMPLES) {
@@ -2271,34 +2305,27 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 							/ (f32)ACCESSIBILITY_TRACKER_RELEASE_SAMPLES;
 				}
 
-				tracker = sinf(g_AccessibilityTrackerPhase[slot]) * envelope
-						* modulation * trackervolume[slot]
+				tracker = sinf(g_AccessibilityTrackerPhase[trackerslot]) * envelope
+						* modulation * trackervolume[trackerslot]
 						* ACCESSIBILITY_TRACKER_VOLUME * 32767.0f;
 				trackerleft += (s32)(tracker * leftpan);
 				trackerright += (s32)(tracker * rightpan);
-				g_AccessibilityTrackerPhase[slot] += TWO_PI
-						* trackerfrequency[slot] * frequencymultiplier
+				g_AccessibilityTrackerPhase[trackerslot] += TWO_PI
+						* trackerfrequency[trackerslot] * frequencymultiplier
 						/ ACCESSIBILITY_TONE_SAMPLE_RATE;
-				g_AccessibilityTrackerModulationPhase[slot] += TWO_PI
+				g_AccessibilityTrackerModulationPhase[trackerslot] += TWO_PI
 						* ACCESSIBILITY_TRACKER_REAR_MODULATION_HZ
 						/ ACCESSIBILITY_TONE_SAMPLE_RATE;
 
-				if (g_AccessibilityTrackerPhase[slot] >= TWO_PI) {
-					g_AccessibilityTrackerPhase[slot] -= TWO_PI;
+				if (g_AccessibilityTrackerPhase[trackerslot] >= TWO_PI) {
+					g_AccessibilityTrackerPhase[trackerslot] -= TWO_PI;
 				}
-				if (g_AccessibilityTrackerModulationPhase[slot] >= TWO_PI) {
-					g_AccessibilityTrackerModulationPhase[slot] -= TWO_PI;
+				if (g_AccessibilityTrackerModulationPhase[trackerslot] >= TWO_PI) {
+					g_AccessibilityTrackerModulationPhase[trackerslot] -= TWO_PI;
 				}
 			}
 
-			if (trackerenabled[slot]) {
-				g_AccessibilityTrackerCycleSample[slot]++;
-				if (g_AccessibilityTrackerCycleSample[slot]
-						>= trackerperiodsamples[slot]) {
-					g_AccessibilityTrackerCycleSample[slot] = 0;
-					g_AccessibilityTrackerPhase[slot] = 0.0f;
-				}
-			}
+			g_AccessibilityTrackerEventSample++;
 		}
 
 		for (slot = 0; slot < ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT; slot++) {

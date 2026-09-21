@@ -20,13 +20,14 @@
 
 #define ACCESSIBILITY_TRACKER_SLOT_COUNT ACCESSIBILITY_TONE_TRACKER_SLOT_COUNT
 #define ACCESSIBILITY_TRACKER_RADAR_DISTANCE 4000.0f
-#define ACCESSIBILITY_TRACKER_NEAR_PERIOD_MS 200
-#define ACCESSIBILITY_TRACKER_FAR_PERIOD_MS 1200
+#define ACCESSIBILITY_TRACKER_NEAR_PERIOD_MS 150
+#define ACCESSIBILITY_TRACKER_FAR_PERIOD_MS 1400
 #define ACCESSIBILITY_TRACKER_HEIGHT_THRESHOLD 250.0f
 #define ACCESSIBILITY_TRACKER_HEIGHT_HYSTERESIS 25.0f
 #define ACCESSIBILITY_TRACKER_REAR_HYSTERESIS 0.1f
 #define ACCESSIBILITY_TRACKER_EMPTY_DELAY_TICKS 6
-#define ACCESSIBILITY_TRACKER_VOLUME 0.8f
+#define ACCESSIBILITY_TRACKER_NEAR_VOLUME 1.0f
+#define ACCESSIBILITY_TRACKER_FAR_VOLUME 0.35f
 
 enum accessibilitytrackerheight {
 	ACCESSIBILITY_TRACKER_HEIGHT_LEVEL,
@@ -56,6 +57,7 @@ struct accessibilitytrackercandidate {
 	f32 pan;
 	f32 forwarddot;
 	f32 frequencyhz;
+	f32 volume;
 	s32 periodms;
 };
 
@@ -130,13 +132,13 @@ static f32 accessibilityTrackerCategoryFrequency(s32 category)
 {
 	switch (category) {
 	case RADAR_TRACKED_CHARACTER:
-		return 520.0f;
+		return 1200.0f;
 	case RADAR_TRACKED_BLUE:
-		return 1000.0f;
+		return 1800.0f;
 	case RADAR_TRACKED_YELLOW:
 	case ACCESSIBILITY_TRACKER_CATEGORY_INFRARED:
 	default:
-		return 700.0f;
+		return 1450.0f;
 	}
 }
 
@@ -393,6 +395,9 @@ static void accessibilityTrackerScan(s32 source)
 			}
 
 			if (candidate) {
+				f32 distancefraction;
+				f32 proximity;
+
 				memset(candidate, 0, sizeof(*candidate));
 				candidate->identity = (uintptr_t)prop;
 				candidate->prop = prop;
@@ -419,11 +424,17 @@ static void accessibilityTrackerScan(s32 source)
 				}
 				candidate->frequencyhz
 						= accessibilityTrackerCategoryFrequency(category);
+				distancefraction = candidate->clampeddistance
+						/ ACCESSIBILITY_TRACKER_RADAR_DISTANCE;
+				proximity = 1.0f - distancefraction;
 				candidate->periodms = ACCESSIBILITY_TRACKER_NEAR_PERIOD_MS
 						+ (s32)((ACCESSIBILITY_TRACKER_FAR_PERIOD_MS
 								- ACCESSIBILITY_TRACKER_NEAR_PERIOD_MS)
-								* candidate->clampeddistance
-								/ ACCESSIBILITY_TRACKER_RADAR_DISTANCE);
+								* distancefraction * distancefraction);
+				candidate->volume = ACCESSIBILITY_TRACKER_FAR_VOLUME
+						+ (ACCESSIBILITY_TRACKER_NEAR_VOLUME
+								- ACCESSIBILITY_TRACKER_FAR_VOLUME)
+								* proximity * proximity;
 			}
 		}
 
@@ -531,14 +542,14 @@ static void accessibilityTrackerUpdateSlots(s32 source)
 		}
 
 		accessibilityToneSetTrackerSlot(slotnum, true,
-				candidate->frequencyhz, ACCESSIBILITY_TRACKER_VOLUME,
+				candidate->frequencyhz, candidate->volume,
 				candidate->pan, candidate->periodms, slot->height, slot->rear,
 				restart);
 
 		if (restart || oldheight != slot->height || oldrear != slot->rear
 				|| g_AccessibilityTrackerScanCount % 60 == 0) {
 			accessibilityLogEvent("rtracker", "candidate",
-					"frame=%d scan=%" PRIu64 " source=%s slot=%d identity=%p propnum=%d prop_type=%d category=%s position=%.3f,%.3f,%.3f distance=%.3f source_distance=%.3f clamped_distance=%.3f height_delta=%.3f height=%s native_pan=%d pan=%.5f forward_dot=%.5f rear=%d frequency_hz=%.1f period_ms=%d restart=%d",
+					"frame=%d scan=%" PRIu64 " source=%s slot=%d identity=%p propnum=%d prop_type=%d category=%s position=%.3f,%.3f,%.3f distance=%.3f source_distance=%.3f clamped_distance=%.3f height_delta=%.3f height=%s native_pan=%d pan=%.5f forward_dot=%.5f rear=%d frequency_hz=%.1f volume=%.3f period_ms=%d restart=%d",
 					g_Vars.lvframe60,
 					(uint64_t)g_AccessibilityTrackerScanCount,
 					accessibilityTrackerSourceName(source), slotnum,
@@ -552,7 +563,8 @@ static void accessibilityTrackerUpdateSlots(s32 source)
 					accessibilityTrackerHeightName(slot->height),
 					candidate->nativepan, candidate->pan,
 					candidate->forwarddot, slot->rear,
-					candidate->frequencyhz, candidate->periodms, restart);
+					candidate->frequencyhz, candidate->volume,
+					candidate->periodms, restart);
 		}
 	}
 }
