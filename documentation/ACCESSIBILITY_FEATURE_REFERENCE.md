@@ -58,7 +58,7 @@ Inactive, fully faded, open, or non-colliding lasers are excluded. Turning away,
 
 `Accessibility.RTrackerAudio` defaults to `1` and is subordinate to `Accessibility.Enabled`. Activating or deactivating the native R-Tracker speaks `R-Tracker on` or `R-Tracker off`. If activation produces no native marker after a six-logical-tick settling delay, `No tracked targets` is spoken once.
 
-The audio adapter shares one classification function with the native radar. It therefore admits exactly the yellow mission/training objects, red tracked characters, and blue cheat items that the visual R-Tracker admits. It deliberately does not add line-of-sight, render, room, or path restrictions. Native death, cloak, device, and cheat state remain authoritative, and horizontal distance is capped at the visual radar's 4,000-world-unit edge.
+The audio adapter shares one classification function with the native radar. It therefore admits the yellow mission/training objects, red tracked characters, and blue cheat items that the visual R-Tracker admits. Its sole completion-state exception is Skedar Ruins: a chosen Target Amplifier pillar is removed after the matching authoritative placement flag is set, because the solo script leaves its native yellow-tracker flag behind. It deliberately does not add line-of-sight, render, room, or path restrictions. Native death, cloak, device, and cheat state remain authoritative, and horizontal distance is capped at the visual radar's 4,000-world-unit edge.
 
 Ten preallocated slots retain all audited base-game markers without consuming game sound channels. A single procedural lane schedules due slots in round-robin order, so tracker contacts never sound simultaneously. Yellow, red, and blue markers use 1450, 1200, and 1800 Hz respectively, keeping the tracker above most virtual-cane terrain cues. The engine's established property-sound pan calculation communicates left/right bearing; a light 30 Hz amplitude modulation distinguishes markers behind the player. Nonlinear per-contact distance curves shorten the requested interval from approximately 1.4 seconds at the radar edge to 0.15 seconds nearby and raise gain from 35 percent to full tracker volume as the player approaches. A 120 ms no-overlap floor preserves the full vertical phrase; a due contact may be delayed under contention but never replaces or overlaps another contact. A level marker uses one chirp, an above marker uses a rising double chirp, and a below marker uses a falling double chirp. Identities remain stable until the native marker disappears.
 
@@ -368,22 +368,19 @@ chirp: no chirps consistently means a level-authored landmark.
 Registry entries currently cover Area 51: Rescue's intact silver-X wall, where
 the hovercrate is intended to be positioned, Air Base's baggage conveyor,
 where the equipped suitcase is deposited, the three shield-system consoles
-on the Attack Ship, and the three shuffled target-amplifier pillars in Skedar
-Ruins. They follow the shared active
+on the Attack Ship and the final-boss spikes in Skedar Ruins. They follow the
+shared active
 observer, use `Accessibility.MarkerRange` and `Accessibility.MarkerVolume`,
 and require a direct visual line of sight. The wall stops when destroyed; the
 conveyor sounds only while the difficulty includes the "Check in equipment"
 objective and that objective remains incomplete. The three shield consoles
 sound only while "Disable shield system" remains incomplete, stop individually
 when destroyed, and enter audibility 250 ms apart so colocated consoles remain
-spatially distinguishable. Each Skedar Ruins pillar sounds while "Identify
-temple targets" remains incomplete and its corresponding authoritative
-per-pillar stage flag is clear. A pillar stops individually as soon as the
-level accepts its Target Amplifier. Pillar identity follows the level's live
-destination-tag remapping rather than the chosen object's original source tag,
-so all random selections use the same behavior. The accessibility R-Tracker also suppresses
-that completed pillar even though the solo level script leaves its native
-yellow-tracker object flag set. For a tagged object whose setup origin is embedded
+spatially distinguishable. The three shuffled Target Amplifier pillars do not
+use authored mission-marker audio; the R-Tracker provides their navigation cue,
+and equipping the Target Amplifier provides exact alignment feedback. Completed
+pillars are removed from the accessible R-Tracker using the level's authoritative
+placement flags. For a tagged object whose setup origin is embedded
 in its mounting geometry, the LOS query tests the nearest model-box face and
 four inset surface points; render state by itself is never sufficient.
 Registry ownership also excludes these props from

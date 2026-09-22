@@ -7,12 +7,12 @@
 #include "bss.h"
 #include "data.h"
 #include "game/lv.h"
+#include "game/objectives.h"
 #include "game/propobj.h"
 #include "game/propsnd.h"
 #include "game/radar.h"
 #include "system.h"
 #include "accessibility/accessibility.h"
-#include "accessibility/accessibility_landmark.h"
 #include "accessibility/accessibility_announcement.h"
 #include "accessibility/accessibility_log.h"
 #include "accessibility/accessibility_tone.h"
@@ -28,6 +28,9 @@
 #define ACCESSIBILITY_TRACKER_EMPTY_DELAY_TICKS 6
 #define ACCESSIBILITY_TRACKER_NEAR_VOLUME 1.0f
 #define ACCESSIBILITY_TRACKER_FAR_VOLUME 0.35f
+#define ACCESSIBILITY_TRACKER_SKEDAR_PILLAR1_MARKED 0x00000100u
+#define ACCESSIBILITY_TRACKER_SKEDAR_PILLAR2_MARKED 0x00000200u
+#define ACCESSIBILITY_TRACKER_SKEDAR_PILLAR3_MARKED 0x00000400u
 
 enum accessibilitytrackerheight {
 	ACCESSIBILITY_TRACKER_HEIGHT_LEVEL,
@@ -337,6 +340,32 @@ static s32 accessibilityTrackerFindSlot(uintptr_t identity)
 	return -1;
 }
 
+static s32 accessibilityTrackerIsCompletedSkedarPillar(struct prop *prop)
+{
+	static const s32 tags[] = { 0x01, 0x02, 0x03 };
+	static const u32 flags[] = {
+		ACCESSIBILITY_TRACKER_SKEDAR_PILLAR1_MARKED,
+		ACCESSIBILITY_TRACKER_SKEDAR_PILLAR2_MARKED,
+		ACCESSIBILITY_TRACKER_SKEDAR_PILLAR3_MARKED,
+	};
+	s32 i;
+
+	if (g_Vars.stagenum != STAGE_SKEDARRUINS || !prop || !prop->obj) {
+		return false;
+	}
+
+	/* Destination tags 1-3 are remapped to the chosen pillars at runtime.
+	 * Preserve the R-Tracker's native candidates, but remove a chosen pillar
+	 * after the matching placement flag confirms its Target Amplifier. */
+	for (i = 0; i < ARRAYCOUNT(tags); i++) {
+		if ((g_StageFlags & flags[i]) && objFindByTagId(tags[i]) == prop->obj) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static void accessibilityTrackerScan(s32 source)
 {
 	struct prop *prop = g_Vars.activeprops;
@@ -367,7 +396,7 @@ static void accessibilityTrackerScan(s32 source)
 		if (source == ACCESSIBILITY_TRACKER_SOURCE_RTRACKER) {
 			category = radarGetRTrackedType(prop);
 			if (category != RADAR_TRACKED_NONE
-					&& accessibilityLandmarkIsCompletedProp(prop)) {
+					&& accessibilityTrackerIsCompletedSkedarPillar(prop)) {
 				category = RADAR_TRACKED_NONE;
 			}
 		} else if (source == ACCESSIBILITY_TRACKER_SOURCE_INFRARED

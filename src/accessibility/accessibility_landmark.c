@@ -21,12 +21,6 @@
 #define ACCESSIBILITY_LANDMARK_HYSTERESIS 75.0f
 #define ACCESSIBILITY_LANDMARK_LOG_TICKS TICKS(60)
 #define ACCESSIBILITY_LANDMARK_START_SPACING TICKS(15)
-/* setupsho.c owns these stage-script values. They are recorded here because
- * each shuffled tag remains stable while the corresponding completion flag
- * is the authoritative per-pillar placement state. */
-#define ACCESSIBILITY_LANDMARK_SKEDAR_PILLAR1_MARKED 0x00000100u
-#define ACCESSIBILITY_LANDMARK_SKEDAR_PILLAR2_MARKED 0x00000200u
-#define ACCESSIBILITY_LANDMARK_SKEDAR_PILLAR3_MARKED 0x00000400u
 
 struct accessibilitylandmarkspec {
 	s32 stage;
@@ -64,12 +58,6 @@ static const struct accessibilitylandmarkspec g_AccessibilityLandmarkSpecs[] = {
 	{ STAGE_ATTACKSHIP, 0x04, PROPTYPE_OBJ, 0, 0, false, "shield_console_1" },
 	{ STAGE_ATTACKSHIP, 0x05, PROPTYPE_OBJ, 0, 0, false, "shield_console_2" },
 	{ STAGE_ATTACKSHIP, 0x06, PROPTYPE_OBJ, 0, 0, false, "shield_console_3" },
-	{ STAGE_SKEDARRUINS, 0x01, PROPTYPE_OBJ, 0,
-		ACCESSIBILITY_LANDMARK_SKEDAR_PILLAR1_MARKED, false, "target_pillar_1" },
-	{ STAGE_SKEDARRUINS, 0x02, PROPTYPE_OBJ, 0,
-		ACCESSIBILITY_LANDMARK_SKEDAR_PILLAR2_MARKED, false, "target_pillar_2" },
-	{ STAGE_SKEDARRUINS, 0x03, PROPTYPE_OBJ, 0,
-		ACCESSIBILITY_LANDMARK_SKEDAR_PILLAR3_MARKED, false, "target_pillar_3" },
 	{ STAGE_SKEDARRUINS, 0x13, PROPTYPE_OBJ, 4, 0, true, "king_spike_middle_left" },
 	{ STAGE_SKEDARRUINS, 0x14, PROPTYPE_OBJ, 4, 0, true, "king_spike_middle_right" },
 	{ STAGE_SKEDARRUINS, 0x15, PROPTYPE_OBJ, 4, 0, true, "king_spike_bottom_left" },
@@ -109,15 +97,6 @@ static const struct accessibilitylandmarkspec *accessibilityLandmarkFindSpec(
 s32 accessibilityLandmarkOwnsProp(struct prop *prop)
 {
 	return accessibilityLandmarkFindSpec(prop) != NULL;
-}
-
-s32 accessibilityLandmarkIsCompletedProp(struct prop *prop)
-{
-	const struct accessibilitylandmarkspec *spec
-			= accessibilityLandmarkFindSpec(prop);
-
-	return spec && spec->completionflag
-			&& (g_StageFlags & spec->completionflag) != 0;
 }
 
 static const char *accessibilityLandmarkScopeReason(void)

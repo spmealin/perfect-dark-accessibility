@@ -219,7 +219,7 @@ line. They clear when the level ends and are not stored in a player profile.
 Some objectives that are visually obvious but are neither ordinary pickups nor
 normal interactables have authored landmarks. They use the same crossing base
 sound as a player marker but no numbered identity chirps. Examples include a
-placement point, objective conveyor, mission consoles, and selected pillars.
+placement point, objective conveyor, mission consoles, and selected boss targets.
 The cue disappears when the associated object is completed, destroyed, or no
 longer relevant. Coverage is intentionally semantic and is not yet exhaustive.
 
