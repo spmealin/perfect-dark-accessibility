@@ -182,7 +182,9 @@ change as a wall. Its cue vocabulary includes:
 - solid barriers and the end of open space;
 - floor contours, meaningful stairs and ramps, and the boundaries of a narrow
   ascending or descending route;
-- sudden drops, placed at the floor-to-drop transition;
+- sudden drops, placed at the floor-to-drop transition; when adjacent rays
+  confirm a substantial exposed edge, a separate warning sound travels back
+  and forth along it without stopping the regular cane sweep;
 - crouch-height passages that continue into usable space;
 - climbable ladders with a larger upward pitch sweep;
 - side openings, including wide peripheral rays intended to catch passages as

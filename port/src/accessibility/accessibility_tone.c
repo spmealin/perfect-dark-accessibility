@@ -45,6 +45,8 @@
 #define ACCESSIBILITY_WEAPON_FUNCTION_ATTACK_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.002f))
 #define ACCESSIBILITY_WEAPON_FUNCTION_RELEASE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.005f))
 #define ACCESSIBILITY_HAZARD_VOLUME 0.14f
+#define ACCESSIBILITY_CANE_EDGE_FREQUENCY_HZ 390.0f
+#define ACCESSIBILITY_CANE_EDGE_VOLUME 0.8f
 #define ACCESSIBILITY_COMBAT_CHIRP_ATTACK_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.004f))
 #define ACCESSIBILITY_COMBAT_CHIRP_RELEASE_SAMPLES ((s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * 0.012f))
 #define ACCESSIBILITY_COMBAT_FUNDAMENTAL_GAIN 0.78f
@@ -149,6 +151,9 @@ static SDL_atomic_t g_AccessibilityHazardEnabled;
 static SDL_atomic_t g_AccessibilityHazardFrequencyMilliHz;
 static SDL_atomic_t g_AccessibilityHazardVolumeMillionths;
 static SDL_atomic_t g_AccessibilityHazardPanMillionths;
+static SDL_atomic_t g_AccessibilityCaneEdgeEnabled;
+static SDL_atomic_t g_AccessibilityCaneEdgeVolumeMillionths;
+static SDL_atomic_t g_AccessibilityCaneEdgePanMillionths;
 static SDL_atomic_t g_AccessibilityCombatEnabled[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityCombatSequence[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityCombatTriggerSequence[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
@@ -267,6 +272,9 @@ static f32 g_AccessibilityHazardPhase;
 static f32 g_AccessibilityHazardFrequencyHz;
 static f32 g_AccessibilityHazardGain;
 static f32 g_AccessibilityHazardPan;
+static f32 g_AccessibilityCaneEdgePhase;
+static f32 g_AccessibilityCaneEdgeGain;
+static f32 g_AccessibilityCaneEdgePan;
 static s32 g_AccessibilityCombatObservedSequence[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static s32 g_AccessibilityCombatObservedTriggerSequence[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static s32 g_AccessibilityCombatCycleSample[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
@@ -611,6 +619,20 @@ void accessibilityToneSetHazard(s32 enabled, f32 frequencyhz, f32 volume, f32 pa
 	}
 
 	SDL_AtomicSet(&g_AccessibilityHazardEnabled, enabled != 0 && volume > 0.0f);
+}
+
+void accessibilityToneSetCaneEdge(s32 enabled, f32 volume, f32 pan)
+{
+	if (volume < 0.0f) volume = 0.0f;
+	if (volume > 1.0f) volume = 1.0f;
+	if (pan < -1.0f) pan = -1.0f;
+	if (pan > 1.0f) pan = 1.0f;
+	SDL_AtomicSet(&g_AccessibilityCaneEdgeVolumeMillionths,
+			(s32)(volume * 1000000.0f));
+	SDL_AtomicSet(&g_AccessibilityCaneEdgePanMillionths,
+			(s32)(pan * 1000000.0f));
+	SDL_AtomicSet(&g_AccessibilityCaneEdgeEnabled,
+			enabled != 0 && volume > 0.0f);
 }
 
 void accessibilityToneSetCombatSlot(s32 slot, s32 enabled,
@@ -1175,6 +1197,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 	s32 hillscoring = SDL_AtomicGet(&g_AccessibilityHillScoring);
 	s32 hillrear = SDL_AtomicGet(&g_AccessibilityHillRear);
 	s32 hazardenabled = SDL_AtomicGet(&g_AccessibilityHazardEnabled);
+	s32 caneedgeenabled = SDL_AtomicGet(&g_AccessibilityCaneEdgeEnabled);
 	s32 combatenabled[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 	f32 combatfrequency[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 	f32 combatendfrequency[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
@@ -1220,6 +1243,12 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			: 0.0f;
 	f32 hazardtargetpan = (f32)SDL_AtomicGet(
 			&g_AccessibilityHazardPanMillionths) / 1000000.0f;
+	f32 caneedgetargetgain = caneedgeenabled
+			? (f32)SDL_AtomicGet(&g_AccessibilityCaneEdgeVolumeMillionths)
+					/ 1000000.0f * ACCESSIBILITY_CANE_EDGE_VOLUME
+			: 0.0f;
+	f32 caneedgetargetpan = (f32)SDL_AtomicGet(
+			&g_AccessibilityCaneEdgePanMillionths) / 1000000.0f;
 	f32 hilltargetgain = hillenabled
 			? (f32)SDL_AtomicGet(&g_AccessibilityHillVolumeMillionths)
 					/ 1000000.0f * ACCESSIBILITY_MARKER_BASE_VOLUME
@@ -1232,6 +1261,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 	f32 frequencystep;
 	f32 hazardfrequencystep;
 	f32 hazardpanstep;
+	f32 caneedgepanstep;
 	u32 i;
 	s32 slot;
 
@@ -1706,6 +1736,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 	if (!enabled && g_AccessibilityToneGain <= 0.0f
 			&& !hazardenabled && g_AccessibilityHazardGain <= 0.0f
+			&& !caneedgeenabled && g_AccessibilityCaneEdgeGain <= 0.0f
 			&& g_AccessibilityChirpSamplesRemaining <= 0
 			&& g_AccessibilityTargetPresenceSamplesRemaining <= 0
 			&& g_AccessibilityThreatAlertSamplesRemaining <= 0
@@ -1747,6 +1778,8 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 	hazardfrequencystep = (hazardtargetfrequency
 			- g_AccessibilityHazardFrequencyHz) / (f32)frames;
 	hazardpanstep = (hazardtargetpan - g_AccessibilityHazardPan) / (f32)frames;
+	caneedgepanstep = (caneedgetargetpan - g_AccessibilityCaneEdgePan)
+			/ (f32)frames;
 
 	for (i = 0; i < frames; i++) {
 		s32 tone;
@@ -1759,6 +1792,8 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		s32 threatalertright = 0;
 		s32 hazardleft = 0;
 		s32 hazardright = 0;
+		s32 caneedgeleft = 0;
+		s32 caneedgeright = 0;
 		s32 toggletone = 0;
 		s32 compasstone = 0;
 		s32 weaponfunctiontone = 0;
@@ -1783,6 +1818,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		g_AccessibilityToneFrequencyHz += frequencystep;
 		g_AccessibilityHazardFrequencyHz += hazardfrequencystep;
 		g_AccessibilityHazardPan += hazardpanstep;
+		g_AccessibilityCaneEdgePan += caneedgepanstep;
 
 		if (g_AccessibilityToneGain < targetgain) {
 			g_AccessibilityToneGain += ACCESSIBILITY_TONE_GAIN_STEP;
@@ -1876,6 +1912,28 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 			hazardleft = (s32)(hazard * leftpan);
 			hazardright = (s32)(hazard * rightpan);
+		}
+		if (g_AccessibilityCaneEdgeGain < caneedgetargetgain) {
+			g_AccessibilityCaneEdgeGain += ACCESSIBILITY_TONE_GAIN_STEP;
+			if (g_AccessibilityCaneEdgeGain > caneedgetargetgain) {
+				g_AccessibilityCaneEdgeGain = caneedgetargetgain;
+			}
+		} else if (g_AccessibilityCaneEdgeGain > caneedgetargetgain) {
+			g_AccessibilityCaneEdgeGain -= ACCESSIBILITY_TONE_GAIN_STEP;
+			if (g_AccessibilityCaneEdgeGain < caneedgetargetgain) {
+				g_AccessibilityCaneEdgeGain = caneedgetargetgain;
+			}
+		}
+		if (g_AccessibilityCaneEdgeGain > 0.0f) {
+			f32 leftpan = g_AccessibilityCaneEdgePan > 0.0f
+					? 1.0f - g_AccessibilityCaneEdgePan : 1.0f;
+			f32 rightpan = g_AccessibilityCaneEdgePan < 0.0f
+					? 1.0f + g_AccessibilityCaneEdgePan : 1.0f;
+			f32 edge = (sinf(g_AccessibilityCaneEdgePhase) * 0.8f
+					+ sinf(g_AccessibilityCaneEdgePhase * 2.0f) * 0.2f)
+					* g_AccessibilityCaneEdgeGain * 32767.0f;
+			caneedgeleft = (s32)(edge * leftpan);
+			caneedgeright = (s32)(edge * rightpan);
 		}
 
 		if (g_AccessibilityChirpSamplesRemaining > 0) {
@@ -3046,7 +3104,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		g_AccessibilityToneMixBuffer[index] = accessibilityToneClamp(
 				(s32)g_AccessibilityToneMixBuffer[index] + tone + chirpleft
 						+ targetpresenceleft + threatalertleft
-						+ hazardleft + combatleft
+					+ hazardleft + caneedgeleft + combatleft
 						+ trackerleft + friendlyleft + doorleft + radarleft
 						+ hillleft + caneleft
 						+ markerleft + toggletone + compasstone
@@ -3054,7 +3112,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		g_AccessibilityToneMixBuffer[index + 1] = accessibilityToneClamp(
 				(s32)g_AccessibilityToneMixBuffer[index + 1] + tone + chirpright
 						+ targetpresenceright + threatalertright
-						+ hazardright + combatright
+					+ hazardright + caneedgeright + combatright
 						+ trackerright + friendlyright + doorright + radarright
 						+ hillright + caneright
 						+ markerright + toggletone + compasstone
@@ -3072,6 +3130,12 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 		if (g_AccessibilityHazardPhase >= TWO_PI) {
 			g_AccessibilityHazardPhase -= TWO_PI;
+		}
+		g_AccessibilityCaneEdgePhase += TWO_PI
+				* ACCESSIBILITY_CANE_EDGE_FREQUENCY_HZ
+				/ ACCESSIBILITY_TONE_SAMPLE_RATE;
+		if (g_AccessibilityCaneEdgePhase >= TWO_PI) {
+			g_AccessibilityCaneEdgePhase -= TWO_PI;
 		}
 	}
 

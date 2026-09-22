@@ -40,6 +40,9 @@
 #define ACCESSIBILITY_CANE_WALL_DURATION_MS 35
 #define ACCESSIBILITY_CANE_TERRAIN_DURATION_MS 140
 #define ACCESSIBILITY_CANE_DROP_DURATION_MS 260
+#define ACCESSIBILITY_CANE_EDGE_MIN_DEPTH 120.0f
+#define ACCESSIBILITY_CANE_EDGE_DEPTH_MULTIPLIER 1.5f
+#define ACCESSIBILITY_CANE_EDGE_CYCLE_TICKS TICKS(36)
 #define ACCESSIBILITY_CANE_CROUCH_DURATION_MS 135
 #define ACCESSIBILITY_CANE_LADDER_DURATION_MS 220
 #define ACCESSIBILITY_CANE_LADDER_START_RATIO 1.2f
@@ -296,6 +299,11 @@ static const s32 g_AccessibilityCaneFastOffsets[ACCESSIBILITY_CANE_PROBE_COUNT] 
 
 static struct accessibilitycanesample
 		g_AccessibilityCaneSamples[ACCESSIBILITY_CANE_PROBE_COUNT];
+static struct coord g_AccessibilityCaneEdgePoints[ACCESSIBILITY_CANE_PROBE_COUNT];
+static s32 g_AccessibilityCaneEdgeCount;
+static s32 g_AccessibilityCaneEdgeFirstAngle;
+static s32 g_AccessibilityCaneEdgeLastAngle;
+static f32 g_AccessibilityCaneEdgePhase;
 static char g_AccessibilityCaneLogBuffer[ACCESSIBILITY_CANE_LOG_BUFFER_SIZE];
 static s32 g_AccessibilityCaneScopeActive;
 #ifndef PLATFORM_N64
@@ -1898,6 +1906,7 @@ static void accessibilityCaneBeginSweep(s32 mode, s32 starttick)
 	g_AccessibilityCaneCursor = 0;
 	g_AccessibilityCaneSweepSamples = 0;
 	g_AccessibilityCaneSweepSkipped = 0;
+	g_AccessibilityCaneEdgeCount = 0;
 	memset(&g_AccessibilityCaneGrade.surface, 0,
 			sizeof(g_AccessibilityCaneGrade.surface));
 	g_AccessibilityCaneGrade.surface.room = -1;
@@ -1918,6 +1927,174 @@ static void accessibilityCaneMarkSkipped(s32 slot, s32 actualtick)
 	sample->lateness = actualtick - sample->scheduledtick;
 	g_AccessibilityCaneSkipped++;
 	g_AccessibilityCaneSweepSkipped++;
+}
+
+static s32 accessibilityCaneIsEdgeSample(
+		const struct accessibilitycanesample *sample)
+{
+	f32 minimumdepth = fmaxf(ACCESSIBILITY_CANE_EDGE_MIN_DEPTH,
+			sample->dropheightthreshold
+				* ACCESSIBILITY_CANE_EDGE_DEPTH_MULTIPLIER);
+	return sample->state == ACCESSIBILITY_CANE_SAMPLE_DROP
+			&& sample->dropvalidation == ACCESSIBILITY_CANE_DROP_CONFIRMED_EDGE
+			&& (sample->terrainroom < 0
+				|| sample->terrainheight <= -minimumdepth);
+}
+
+static s32 accessibilityCaneEdgePointsConnect(
+		const struct accessibilitycanesample *left,
+		const struct accessibilitycanesample *right)
+{
+	f32 dx = left->audiosource.x - right->audiosource.x;
+	f32 dz = left->audiosource.z - right->audiosource.z;
+	f32 limit = fminf(left->terraindistance, right->terraindistance)
+			* 1.75f + fmaxf(left->radius, right->radius) * 2.0f;
+	return dx * dx + dz * dz <= limit * limit;
+}
+
+static void accessibilityCaneCollectEdge(void)
+{
+	s32 i;
+	s32 bestfirst = -1;
+	s32 bestlast = -1;
+	f32 bestdistance = 0.0f;
+	s32 oldfirst = g_AccessibilityCaneEdgeFirstAngle;
+	s32 oldlast = g_AccessibilityCaneEdgeLastAngle;
+	s32 oldcount = g_AccessibilityCaneEdgeCount;
+
+	for (i = 0; i < g_AccessibilityCaneCursor; ) {
+		s32 first = i;
+		s32 last;
+		f32 nearest;
+
+		if (!accessibilityCaneIsEdgeSample(&g_AccessibilityCaneSamples[i])) {
+			i++;
+			continue;
+		}
+		last = i++;
+		nearest = g_AccessibilityCaneSamples[last].terraindistance;
+		while (i < g_AccessibilityCaneCursor
+				&& accessibilityCaneIsEdgeSample(&g_AccessibilityCaneSamples[i])
+				&& accessibilityCaneEdgePointsConnect(
+					&g_AccessibilityCaneSamples[i - 1],
+					&g_AccessibilityCaneSamples[i])) {
+			last = i++;
+			if (g_AccessibilityCaneSamples[last].terraindistance < nearest) {
+				nearest = g_AccessibilityCaneSamples[last].terraindistance;
+			}
+		}
+		if (last > first && (bestfirst < 0 || nearest < bestdistance)) {
+			bestfirst = first;
+			bestlast = last;
+			bestdistance = nearest;
+		}
+	}
+
+	g_AccessibilityCaneEdgeCount = 0;
+	if (bestfirst < 0) {
+		return;
+	}
+	for (i = bestfirst; i <= bestlast; i++) {
+		g_AccessibilityCaneEdgePoints[g_AccessibilityCaneEdgeCount++]
+				= g_AccessibilityCaneSamples[i].audiosource;
+	}
+	g_AccessibilityCaneEdgeFirstAngle
+			= g_AccessibilityCaneSamples[bestfirst].angledegrees;
+	g_AccessibilityCaneEdgeLastAngle
+			= g_AccessibilityCaneSamples[bestlast].angledegrees;
+	if (oldcount == 0) {
+		g_AccessibilityCaneEdgePhase = 0.0f;
+	}
+	if (oldcount == 0 || oldfirst != g_AccessibilityCaneEdgeFirstAngle
+			|| oldlast != g_AccessibilityCaneEdgeLastAngle) {
+		accessibilityLogEvent("cane", "drop_edge",
+				"id=%d tick=%d first_angle=%d last_angle=%d points=%d first=%.2f,%.2f last=%.2f,%.2f nearest=%.2f minimum_depth=%.2f lane=dedicated",
+				g_AccessibilityCaneSweepId, g_Vars.lvframe60,
+				g_AccessibilityCaneEdgeFirstAngle,
+				g_AccessibilityCaneEdgeLastAngle,
+				g_AccessibilityCaneEdgeCount,
+				g_AccessibilityCaneEdgePoints[0].x,
+				g_AccessibilityCaneEdgePoints[0].z,
+				g_AccessibilityCaneEdgePoints[g_AccessibilityCaneEdgeCount - 1].x,
+				g_AccessibilityCaneEdgePoints[g_AccessibilityCaneEdgeCount - 1].z,
+				bestdistance,
+				fmaxf(ACCESSIBILITY_CANE_EDGE_MIN_DEPTH,
+					g_AccessibilityCaneSamples[bestfirst].dropheightthreshold
+						* ACCESSIBILITY_CANE_EDGE_DEPTH_MULTIPLIER));
+	}
+}
+
+static void accessibilityCaneUpdateEdgeSound(
+		const struct accessibilityobserver *observer)
+{
+	struct coord source;
+	f32 distances[ACCESSIBILITY_CANE_PROBE_COUNT - 1];
+	f32 length = 0.0f;
+	f32 progress;
+	f32 distance;
+	f32 full;
+	f32 fade;
+	f32 silent;
+	f32 reach;
+	f32 volume;
+	f32 pan;
+	s32 nativevolume;
+	s32 nativepan;
+	s32 i;
+
+	if (g_AccessibilityCaneEdgeCount < 2) {
+		accessibilityToneSetCaneEdge(false, 0.0f, 0.0f);
+		return;
+	}
+	if (g_Vars.lvupdate60 > 0) {
+		g_AccessibilityCaneEdgePhase += g_Vars.lvupdate60freal
+				/ (f32)ACCESSIBILITY_CANE_EDGE_CYCLE_TICKS;
+		while (g_AccessibilityCaneEdgePhase >= 1.0f) {
+			g_AccessibilityCaneEdgePhase -= 1.0f;
+		}
+	}
+	for (i = 0; i < g_AccessibilityCaneEdgeCount - 1; i++) {
+		f32 dx = g_AccessibilityCaneEdgePoints[i + 1].x
+				- g_AccessibilityCaneEdgePoints[i].x;
+		f32 dz = g_AccessibilityCaneEdgePoints[i + 1].z
+				- g_AccessibilityCaneEdgePoints[i].z;
+		distances[i] = sqrtf(dx * dx + dz * dz);
+		length += distances[i];
+	}
+	if (length < 1.0f) {
+		accessibilityToneSetCaneEdge(false, 0.0f, 0.0f);
+		return;
+	}
+	progress = g_AccessibilityCaneEdgePhase < 0.5f
+			? g_AccessibilityCaneEdgePhase * 2.0f
+			: (1.0f - g_AccessibilityCaneEdgePhase) * 2.0f;
+	progress *= length;
+	for (i = 0; i < g_AccessibilityCaneEdgeCount - 2
+			&& progress > distances[i]; i++) {
+		progress -= distances[i];
+	}
+	progress = distances[i] > 0.0f ? progress / distances[i] : 0.0f;
+	source.x = g_AccessibilityCaneEdgePoints[i].x
+			+ (g_AccessibilityCaneEdgePoints[i + 1].x
+					- g_AccessibilityCaneEdgePoints[i].x) * progress;
+	source.y = observer->camera.y;
+	source.z = g_AccessibilityCaneEdgePoints[i].z
+			+ (g_AccessibilityCaneEdgePoints[i + 1].z
+					- g_AccessibilityCaneEdgePoints[i].z) * progress;
+	distance = sqrtf((source.x - observer->origin.x)
+				* (source.x - observer->origin.x)
+			+ (source.z - observer->origin.z)
+				* (source.z - observer->origin.z));
+	accessibilityGetVirtualCaneTuning(&reach, &full, &fade, &silent);
+	(void)reach;
+	nativevolume = psCalculateVolumeFromDistance(distance, full, fade,
+			silent, AL_VOL_FULL);
+	nativepan = psCalculatePan(&source, full, fade, silent, distance,
+			false, NULL);
+	volume = (f32)nativevolume / (f32)AL_VOL_FULL
+			* accessibilityGetVirtualCaneVolume();
+	pan = ((f32)nativepan - (f32)AL_PAN_CENTER) / (f32)AL_PAN_CENTER;
+	accessibilityToneSetCaneEdge(true, volume, pan);
 }
 
 static void accessibilityCaneClosestPointOnEdge(const struct coord *point,
@@ -3143,7 +3320,10 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 		 * adjacent rays must not recreate the obsolete elevation sweep. */
 		sample->terrainaudioheld = true;
 		sample->distance = horizontal;
-	} else {
+	} else if (!(accessibilityCaneIsEdgeSample(sample)
+			&& sample > g_AccessibilityCaneSamples
+			&& accessibilityCaneIsEdgeSample(sample - 1)
+			&& accessibilityCaneEdgePointsConnect(sample - 1, sample))) {
 		accessibilityCanePlaySample(sample, horizontal, query.reach,
 				query.nearfrequency, query.farfrequency, query.fulldistance,
 				query.fadedistance, query.silentdistance);
@@ -3158,6 +3338,8 @@ static s32 accessibilityCaneQuery(struct accessibilitycanesample *sample)
 
 static void accessibilityCaneStop(const char *reason, s32 logscope)
 {
+	accessibilityToneSetCaneEdge(false, 0.0f, 0.0f);
+	g_AccessibilityCaneEdgeCount = 0;
 	if (g_AccessibilityCaneSweepActive) {
 		accessibilityCaneLogSweep(reason ? reason : "stopped");
 	}
@@ -3356,6 +3538,7 @@ static void accessibilityCaneAdvanceSweep(s32 mode, s32 now,
 		g_AccessibilityCaneSweepSamples++;
 		g_AccessibilityCaneLastQueryTick = now;
 		g_AccessibilityCaneCursor++;
+		accessibilityCaneCollectEdge();
 		if (g_AccessibilityCaneCursor == ACCESSIBILITY_CANE_PROBE_COUNT) {
 			accessibilityCanePlayBestCorridorRunway(observer);
 		}
@@ -3422,6 +3605,7 @@ static void accessibilityCaneTickInternal(void)
 
 	now = g_Vars.lvframe60;
 	accessibilityCaneAdvanceSweep(mode, now, &observer);
+	accessibilityCaneUpdateEdgeSound(&observer);
 }
 
 void accessibilityCaneTick(void)
