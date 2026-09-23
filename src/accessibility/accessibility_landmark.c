@@ -7,6 +7,7 @@
 #include "data.h"
 #include "game/lv.h"
 #include "game/objectives.h"
+#include "game/pad.h"
 #include "game/propobj.h"
 #include "game/propsnd.h"
 #include "lib/vars.h"
@@ -21,6 +22,9 @@
 #define ACCESSIBILITY_LANDMARK_HYSTERESIS 75.0f
 #define ACCESSIBILITY_LANDMARK_LOG_TICKS TICKS(60)
 #define ACCESSIBILITY_LANDMARK_START_SPACING TICKS(15)
+#define ACCESSIBILITY_LANDMARK_SKEDAR_PUZZLE_ROCK_TAG 0x4c
+#define ACCESSIBILITY_LANDMARK_SKEDAR_PAD_RANGE 500.0f
+#define ACCESSIBILITY_LANDMARK_SKEDAR_PAD_VERTICAL_RANGE 200.0f
 
 struct accessibilitylandmarkspec {
 	s32 stage;
@@ -29,6 +33,8 @@ struct accessibilitylandmarkspec {
 	s32 objective;
 	u32 completionflag;
 	s32 requirevulnerable;
+	s32 pad;
+	s32 completiontag;
 	const char *name;
 };
 
@@ -53,16 +59,29 @@ struct accessibilitylandmarkstate {
  * entries in the current stage receive independent preallocated voices.
  */
 static const struct accessibilitylandmarkspec g_AccessibilityLandmarkSpecs[] = {
-	{ STAGE_RESCUE, 0x18, PROPTYPE_DOOR, -1, 0, false, "crate_placement_marker" },
-	{ STAGE_AIRBASE, 0x04, PROPTYPE_OBJ, 1, 0, false, "suitcase_deposit_conveyor" },
-	{ STAGE_ATTACKSHIP, 0x04, PROPTYPE_OBJ, 0, 0, false, "shield_console_1" },
-	{ STAGE_ATTACKSHIP, 0x05, PROPTYPE_OBJ, 0, 0, false, "shield_console_2" },
-	{ STAGE_ATTACKSHIP, 0x06, PROPTYPE_OBJ, 0, 0, false, "shield_console_3" },
-	{ STAGE_SKEDARRUINS, 0x13, PROPTYPE_OBJ, 4, 0, true, "king_spike_middle_left" },
-	{ STAGE_SKEDARRUINS, 0x14, PROPTYPE_OBJ, 4, 0, true, "king_spike_middle_right" },
-	{ STAGE_SKEDARRUINS, 0x15, PROPTYPE_OBJ, 4, 0, true, "king_spike_bottom_left" },
-	{ STAGE_SKEDARRUINS, 0x16, PROPTYPE_OBJ, 4, 0, true, "king_spike_bottom_right" },
-	{ STAGE_SKEDARRUINS, 0x17, PROPTYPE_OBJ, 4, 0, true, "king_spike_top" },
+	{ STAGE_RESCUE, 0x18, PROPTYPE_DOOR, -1, 0, false, -1, -1,
+		"crate_placement_marker" },
+	{ STAGE_AIRBASE, 0x04, PROPTYPE_OBJ, 1, 0, false, -1, -1,
+		"suitcase_deposit_conveyor" },
+	{ STAGE_ATTACKSHIP, 0x04, PROPTYPE_OBJ, 0, 0, false, -1, -1,
+		"shield_console_1" },
+	{ STAGE_ATTACKSHIP, 0x05, PROPTYPE_OBJ, 0, 0, false, -1, -1,
+		"shield_console_2" },
+	{ STAGE_ATTACKSHIP, 0x06, PROPTYPE_OBJ, 0, 0, false, -1, -1,
+		"shield_console_3" },
+	{ STAGE_SKEDARRUINS, -1, -1, -1, 0, false, PAD_SHO_00D4,
+		ACCESSIBILITY_LANDMARK_SKEDAR_PUZZLE_ROCK_TAG,
+		"puzzle_rock_pressure_pad" },
+	{ STAGE_SKEDARRUINS, 0x13, PROPTYPE_OBJ, 4, 0, true, -1, -1,
+		"king_spike_middle_left" },
+	{ STAGE_SKEDARRUINS, 0x14, PROPTYPE_OBJ, 4, 0, true, -1, -1,
+		"king_spike_middle_right" },
+	{ STAGE_SKEDARRUINS, 0x15, PROPTYPE_OBJ, 4, 0, true, -1, -1,
+		"king_spike_bottom_left" },
+	{ STAGE_SKEDARRUINS, 0x16, PROPTYPE_OBJ, 4, 0, true, -1, -1,
+		"king_spike_bottom_right" },
+	{ STAGE_SKEDARRUINS, 0x17, PROPTYPE_OBJ, 4, 0, true, -1, -1,
+		"king_spike_top" },
 };
 
 static struct accessibilitylandmarkstate
@@ -84,7 +103,7 @@ static const struct accessibilitylandmarkspec *accessibilityLandmarkFindSpec(
 		const struct accessibilitylandmarkspec *spec
 				= &g_AccessibilityLandmarkSpecs[i];
 
-		if (spec->stage == g_Vars.stagenum
+		if (spec->stage == g_Vars.stagenum && spec->pad < 0
 				&& spec->proptype == prop->type
 				&& objFindByTagId(spec->tag) == prop->obj) {
 			return spec;
@@ -224,22 +243,85 @@ static s32 accessibilityLandmarkObjectEligible(
 	return true;
 }
 
+static s32 accessibilityLandmarkPadEligible(
+		const struct accessibilitylandmarkspec *spec, struct coord *position,
+		RoomNum *rooms, const char **reason)
+{
+	struct defaultobj *completionobj;
+	struct pad pad;
+	f32 xdiff;
+	f32 ydiff;
+	f32 zdiff;
+
+	if (spec->pad < 0) {
+		*reason = "pad_not_configured";
+		return false;
+	}
+
+	completionobj = objFindByTagId(spec->completiontag);
+
+	if (!completionobj || !completionobj->prop) {
+		*reason = "completion_object_unavailable";
+		return false;
+	}
+
+	padUnpack(spec->pad, PADFIELD_POS | PADFIELD_ROOM, &pad);
+
+	if (pad.room <= 0) {
+		*reason = "pad_room_unavailable";
+		return false;
+	}
+
+	/* Mirror setupsho.c's if_object_distance_to_pad_lt(..., 50, ...).
+	 * That command encodes 50 as a 500-unit X/Z box and uses a fixed
+	 * 200-unit vertical tolerance. Reevaluate every tick so moving the rock
+	 * away restores the landmark along with the retracting bridge. */
+	xdiff = completionobj->prop->pos.x - pad.pos.x;
+	ydiff = completionobj->prop->pos.y - pad.pos.y;
+	zdiff = completionobj->prop->pos.z - pad.pos.z;
+
+	if (xdiff < ACCESSIBILITY_LANDMARK_SKEDAR_PAD_RANGE
+			&& xdiff > -ACCESSIBILITY_LANDMARK_SKEDAR_PAD_RANGE
+			&& ydiff < ACCESSIBILITY_LANDMARK_SKEDAR_PAD_VERTICAL_RANGE
+			&& ydiff > -ACCESSIBILITY_LANDMARK_SKEDAR_PAD_VERTICAL_RANGE
+			&& zdiff < ACCESSIBILITY_LANDMARK_SKEDAR_PAD_RANGE
+			&& zdiff > -ACCESSIBILITY_LANDMARK_SKEDAR_PAD_RANGE) {
+		*reason = "completion_object_on_pad";
+		return false;
+	}
+
+	*position = pad.pos;
+	rooms[0] = pad.room;
+	rooms[1] = -1;
+	*reason = "eligible_pad";
+	return true;
+}
+
 static s32 accessibilityLandmarkHasLineOfSight(
 		const struct accessibilityobserver *observer,
-		struct defaultobj *obj, s32 *sample, s32 *queries)
+		struct defaultobj *obj, struct coord *position, RoomNum *targetrooms,
+		s32 *sample, s32 *queries)
 {
 	struct coord from = observer->camera;
 	RoomNum fromrooms[2];
 
-	if (observer->room <= 0 || obj->prop->rooms[0] <= 0) {
+	if (observer->room <= 0 || !position || !targetrooms
+			|| targetrooms[0] <= 0) {
 		return false;
 	}
 
 	fromrooms[0] = observer->room;
 	fromrooms[1] = -1;
 
-	return accessibilityVisibilityHasObjectSurfaceLineOfSight(
-			&from, fromrooms, obj->prop, true, sample, queries);
+	if (obj && obj->prop) {
+		return accessibilityVisibilityHasObjectSurfaceLineOfSight(
+				&from, fromrooms, obj->prop, true, sample, queries);
+	}
+
+	*sample = 0;
+	*queries = 1;
+	return accessibilityVisibilityHasVisualLineOfSight(
+			&from, fromrooms, position, targetrooms, NULL);
 }
 
 static void accessibilityLandmarkStopVoices(void)
@@ -260,6 +342,8 @@ static void accessibilityLandmarkUpdate(
 	struct accessibilitylandmarkcandidate {
 		const struct accessibilitylandmarkspec *spec;
 		struct defaultobj *obj;
+		struct coord position;
+		RoomNum rooms[2];
 		s32 slot;
 	};
 	struct accessibilitylandmarkcandidate candidates[
@@ -287,20 +371,28 @@ static void accessibilityLandmarkUpdate(
 			continue;
 		}
 
-		obj = objFindByTagId(spec->tag);
+		obj = spec->pad >= 0 ? NULL : objFindByTagId(spec->tag);
 
-		if (accessibilityLandmarkObjectEligible(spec, obj, &reason)) {
+		if ((spec->pad >= 0
+				&& accessibilityLandmarkPadEligible(spec,
+						&candidates[candidatecount].position,
+						candidates[candidatecount].rooms, &reason))
+				|| (spec->pad < 0
+					&& accessibilityLandmarkObjectEligible(spec, obj, &reason))) {
 			candidates[candidatecount].spec = spec;
 			candidates[candidatecount].obj = obj;
+			if (obj) {
+				candidates[candidatecount].position = obj->prop->pos;
+				candidates[candidatecount].rooms[0] = obj->prop->rooms[0];
+				candidates[candidatecount].rooms[1] = -1;
+			}
 			candidates[candidatecount].slot = -1;
 			candidatecount++;
 		} else {
 			for (slot = 0;
 					slot < ACCESSIBILITY_TONE_LANDMARK_SLOT_COUNT;
 					slot++) {
-				if (g_AccessibilityLandmarkStates[slot].spec == spec
-						&& (g_AccessibilityLandmarkStates[slot].obj
-								|| g_AccessibilityLandmarkStates[slot].audible)) {
+				if (g_AccessibilityLandmarkStates[slot].spec == spec) {
 					accessibilityLogEvent("landmark", "state",
 							"slot=%d name=%s state=inactive reason=%s tick=%d stage=%d",
 							slot, spec->name, reason, g_Vars.lvframe60,
@@ -346,9 +438,10 @@ static void accessibilityLandmarkUpdate(
 
 		if (candidates[candidateindex].slot < 0) {
 			accessibilityLogEvent("landmark", "capacity",
-					"name=%s tag=%d eligible=%d capacity=%d tick=%d stage=%d",
+					"name=%s tag=%d pad=%d eligible=%d capacity=%d tick=%d stage=%d",
 					candidates[candidateindex].spec->name,
-					candidates[candidateindex].spec->tag, candidatecount,
+					candidates[candidateindex].spec->tag,
+					candidates[candidateindex].spec->pad, candidatecount,
 					ACCESSIBILITY_TONE_LANDMARK_SLOT_COUNT,
 					g_Vars.lvframe60, g_Vars.stagenum);
 		}
@@ -359,6 +452,8 @@ static void accessibilityLandmarkUpdate(
 		struct accessibilitylandmarkstate *state
 				= &g_AccessibilityLandmarkStates[slot];
 		struct defaultobj *obj = NULL;
+		struct coord targetpos;
+		RoomNum targetrooms[2] = { -1, -1 };
 		f32 limit;
 		s32 inrange;
 		s32 lineofsight;
@@ -372,6 +467,8 @@ static void accessibilityLandmarkUpdate(
 			if (candidates[candidateindex].slot == slot) {
 				spec = candidates[candidateindex].spec;
 				obj = candidates[candidateindex].obj;
+				targetpos = candidates[candidateindex].position;
+				targetrooms[0] = candidates[candidateindex].rooms[0];
 				break;
 			}
 		}
@@ -390,7 +487,7 @@ static void accessibilityLandmarkUpdate(
 		}
 
 		state->distance = accessibilityLandmarkDistance(
-				&observer->camera, &obj->prop->pos);
+				&observer->camera, &targetpos);
 		limit = state->inrange ? range + ACCESSIBILITY_LANDMARK_HYSTERESIS
 				: range;
 		inrange = state->distance <= limit;
@@ -398,6 +495,7 @@ static void accessibilityLandmarkUpdate(
 		state->losqueries = 0;
 		lineofsight = inrange
 				&& accessibilityLandmarkHasLineOfSight(observer, obj,
+						&targetpos, targetrooms,
 						&state->lossample, &state->losqueries);
 		waslineofsight = state->lineofsight;
 
@@ -418,7 +516,7 @@ static void accessibilityLandmarkUpdate(
 				? accessibilityLandmarkDistanceGain(state->distance, range)
 						* mastervolume
 				: 0.0f;
-		pan = psCalculatePan(&obj->prop->pos,
+		pan = psCalculatePan(&targetpos,
 				ACCESSIBILITY_LANDMARK_INNER_DISTANCE, range, range,
 				state->distance, false, NULL);
 		normalizedpan = ((f32)pan - (f32)AL_PAN_CENTER)
@@ -427,10 +525,11 @@ static void accessibilityLandmarkUpdate(
 
 		if (state->inrange != inrange || state->lineofsight != lineofsight) {
 			accessibilityLogEvent("landmark", "visibility",
-					"slot=%d name=%s tick=%d stage=%d tag=%d prop=%p propnum=%d in_range=%d line_of_sight=%d los_sample=%d los_queries=%d start_pending=%d start_tick=%d distance=%.3f observer_remote=%d",
+					"slot=%d name=%s tick=%d stage=%d tag=%d pad=%d prop=%p propnum=%d position=%.3f,%.3f,%.3f in_range=%d line_of_sight=%d los_sample=%d los_queries=%d start_pending=%d start_tick=%d distance=%.3f observer_remote=%d",
 					slot, spec->name, g_Vars.lvframe60, g_Vars.stagenum,
-					spec->tag, (void *)obj->prop,
-					(s32)(obj->prop - g_Vars.props), inrange, lineofsight,
+					spec->tag, spec->pad, obj ? (void *)obj->prop : NULL,
+					obj ? (s32)(obj->prop - g_Vars.props) : -1,
+					targetpos.x, targetpos.y, targetpos.z, inrange, lineofsight,
 					state->lossample, state->losqueries,
 					state->startpending, state->starttick, state->distance,
 					observer->isremote);

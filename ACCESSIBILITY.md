@@ -105,7 +105,7 @@ Four player-controlled scanners provide spatial sounds during gameplay:
 
 | Key | Category | Sound concept |
 | --- | --- | --- |
-| F5 | Interactable objects, computers, switches, and usable panels | A high chirp |
+| F5 | Interactable objects, computers, switches, usable panels, and specifically authored movable puzzle objects | A high chirp; the Skedar Ruins movable puzzle rock uses three rapid chirps |
 | F6 | Doors | A lower, prominent repeating chirp |
 | F7 | Friendly and neutral characters | A continuous two-note drone; friendly combat characters pulse the upper note |
 | F8 | Weapons, devices, ammunition, and other collectible items | Three rapid high chirps |
@@ -221,7 +221,9 @@ normal interactables have authored landmarks. They use the same crossing base
 sound as a player marker but no numbered identity chirps. Examples include a
 placement point, objective conveyor, mission consoles, and selected boss targets.
 The cue disappears when the associated object is completed, destroyed, or no
-longer relevant. Coverage is intentionally semantic and is not yet exhaustive.
+longer relevant. In Skedar Ruins, the bridge-puzzle pressure pad uses this cue
+until the movable rock is positioned on it; moving the rock away restores the
+cue. Coverage is intentionally semantic and is not yet exhaustive.
 
 ### Resetting your view
 

@@ -868,26 +868,67 @@ static s32 accessibilityTargetingGameCurrentAttackCanDamageObject(
 		const struct prop *prop)
 {
 	struct weaponfunc *func = currentPlayerGetWeaponFunction(HAND_RIGHT);
+	struct defaultobj *obj;
+	s32 conditionalexplosive;
+	s32 explosive;
 	s32 type;
+	s32 weaponnum;
 
-	if (!func || !prop || prop->type != PROPTYPE_OBJ || !prop->obj
-			|| !objIsHealthy(prop->obj) || !objIsMortal(prop->obj)) {
+	if (!func || !prop
+			|| (prop->type != PROPTYPE_OBJ && prop->type != PROPTYPE_DOOR)
+			|| !prop->obj || !objIsHealthy(prop->obj)) {
 		return false;
 	}
 
+	obj = prop->obj;
 	type = func->type & 0xff;
-
-	if (type == INVENTORYFUNCTYPE_THROW
+	weaponnum = bgunGetWeaponNum(HAND_RIGHT);
+	explosive = type == INVENTORYFUNCTYPE_THROW
 			|| func->type == INVENTORYFUNCTYPE_SHOOT_PROJECTILE
 			|| (func->flags & (FUNCFLAG_EXPLOSIVESHELLS
-				| FUNCFLAG_20000000))) {
-		return (prop->obj->flags2 & OBJFLAG2_IMMUNETOGUNFIRE) == 0
-				|| (prop->obj->flags2 & OBJFLAG2_IMMUNETOEXPLOSIONS) == 0;
+				| FUNCFLAG_20000000));
+	conditionalexplosive = (func->flags & (FUNCFLAG_EXPLOSIVESHELLS
+				| FUNCFLAG_20000000)) != 0;
+
+	switch (weaponnum) {
+	case WEAPON_DRAGON:
+	case WEAPON_ROCKETLAUNCHER:
+	case WEAPON_GRENADE:
+	case WEAPON_TIMEDMINE:
+	case WEAPON_PROXIMITYMINE:
+	case WEAPON_REMOTEMINE:
+	case WEAPON_NBOMB:
+	case WEAPON_DEVASTATOR:
+	case WEAPON_SLAYER:
+	case WEAPON_ROCKETLAUNCHER_34:
+		conditionalexplosive = true;
+		break;
+	}
+
+	/*
+	 * Explosion processing calls objUpdateLinkedScenery before applying the
+	 * ordinary explosion-immunity damage check. Conditional-scenery triggers
+	 * therefore break open from an explosion even when the trigger is a door
+	 * or deliberately carries both immunity flags. Mirror that native rule so
+	 * scripted rock/wall entrances receive truthful interrupted aim feedback.
+	 */
+	if (conditionalexplosive
+			&& (obj->hidden & OBJHFLAG_CONDITIONALSCENERY)) {
+		return true;
+	}
+
+	if (!objIsMortal(obj)) {
+		return false;
+	}
+
+	if (explosive) {
+		return (obj->flags2 & OBJFLAG2_IMMUNETOGUNFIRE) == 0
+				|| (obj->flags2 & OBJFLAG2_IMMUNETOEXPLOSIONS) == 0;
 	}
 
 	return (type == INVENTORYFUNCTYPE_SHOOT
 				|| type == INVENTORYFUNCTYPE_MELEE)
-			&& (prop->obj->flags2 & OBJFLAG2_IMMUNETOGUNFIRE) == 0;
+			&& (obj->flags2 & OBJFLAG2_IMMUNETOGUNFIRE) == 0;
 }
 
 static s32 accessibilityTargetingGameIsDestroyableObject(
@@ -895,7 +936,8 @@ static s32 accessibilityTargetingGameIsDestroyableObject(
 {
 	struct defaultobj *obj;
 
-	if (!prop || prop->type != PROPTYPE_OBJ || !prop->obj
+	if (!prop || (prop->type != PROPTYPE_OBJ && prop->type != PROPTYPE_DOOR)
+			|| !prop->obj
 			|| !prop->active || (prop->flags & PROPFLAG_ENABLED) == 0) {
 		return false;
 	}
@@ -903,11 +945,13 @@ static s32 accessibilityTargetingGameIsDestroyableObject(
 	obj = prop->obj;
 
 	return obj->prop == prop
-			&& (obj->flags & OBJFLAG_DEACTIVATED) == 0
+			&& ((obj->flags & OBJFLAG_DEACTIVATED) == 0
+				|| (obj->hidden & OBJHFLAG_CONDITIONALSCENERY))
 			&& (obj->flags2 & OBJFLAG2_INVISIBLE) == 0
 			&& (obj->hidden & (OBJHFLAG_DELETING | OBJHFLAG_GONE)) == 0
 			&& objIsHealthy(obj)
-			&& objIsMortal(obj);
+			&& (objIsMortal(obj)
+				|| (obj->hidden & OBJHFLAG_CONDITIONALSCENERY));
 }
 
 static s32 accessibilityTargetingGameLootContainerChildType(

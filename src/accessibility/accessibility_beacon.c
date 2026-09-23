@@ -65,6 +65,7 @@
 #define ACCESSIBILITY_BEACON_DIAGNOSTIC_FOCUS_DOT 0.75f
 #define ACCESSIBILITY_BEACON_PROJECTION_CAPACITY 256
 #define ACCESSIBILITY_BEACON_PROJECTION_MAX_AGE_TICKS TICKS(2)
+#define ACCESSIBILITY_BEACON_SKEDAR_PUZZLE_ROCK_TAG 0x4c
 
 enum accessibilitybeaconcategory {
 	ACCESSIBILITY_BEACON_CATEGORY_NONE = 0,
@@ -81,6 +82,7 @@ enum accessibilitybeaconkind {
 	ACCESSIBILITY_BEACON_KIND_DOOR = 2,
 	ACCESSIBILITY_BEACON_KIND_PICKUP = 3,
 	ACCESSIBILITY_BEACON_KIND_NON_HOSTILE = 4,
+	ACCESSIBILITY_BEACON_KIND_MOVABLE_PUZZLE = 5,
 };
 
 struct accessibilitybeaconresult {
@@ -315,6 +317,8 @@ static const char *accessibilityBeaconKindName(s32 kind)
 		return "pickup_item";
 	case ACCESSIBILITY_BEACON_KIND_NON_HOSTILE:
 		return "non_hostile_character";
+	case ACCESSIBILITY_BEACON_KIND_MOVABLE_PUZZLE:
+		return "movable_puzzle_object";
 	default:
 		return "none";
 	}
@@ -554,6 +558,14 @@ static s32 accessibilityBeaconRoomValid(RoomNum room)
 	return room > 0 && room < g_Vars.roomcount;
 }
 
+static s32 accessibilityBeaconIsMovablePuzzleObject(struct prop *prop)
+{
+	return g_Vars.stagenum == STAGE_SKEDARRUINS
+			&& prop && prop->type == PROPTYPE_OBJ && prop->obj
+			&& objFindByTagId(ACCESSIBILITY_BEACON_SKEDAR_PUZZLE_ROCK_TAG)
+					== prop->obj;
+}
+
 static s32 accessibilityBeaconRoomsRelated(RoomNum *playerrooms, RoomNum *targetrooms)
 {
 	s32 i;
@@ -626,6 +638,17 @@ static s32 accessibilityBeaconObjectEligible(struct prop *prop, u32 *citag, cons
 	}
 
 	/*
+	 * This rock is moved by walking into it rather than by pressing the normal
+	 * interaction button. Keep it on F5, but identify that distinct action
+	 * with the pickup-style three-chirp rhythm.
+	 */
+	if (accessibilityBeaconIsMovablePuzzleObject(prop)) {
+		*citag = 0;
+		*reason = "movable_puzzle_object";
+		return true;
+	}
+
+	/*
 	 * Match objTestForInteract here. Setup data uses OBJFLAG_DEACTIVATED on
 	 * objects that remain player-activatable, including the CI Night Vision
 	 * light switch. OBJFLAG_CANNOT_ACTIVATE is the authoritative exclusion.
@@ -675,7 +698,8 @@ void accessibilityBeaconCaptureGame(void)
 				|| prop->type == PROPTYPE_WEAPON)
 				&& obj && obj->prop == prop && obj->model
 				&& (prop->type == PROPTYPE_DOOR
-					|| objIsPotentiallyInteractable(prop))) {
+					|| objIsPotentiallyInteractable(prop)
+					|| accessibilityBeaconIsMovablePuzzleObject(prop))) {
 			struct accessibilitybeaconprojection *projection;
 
 			if (g_AccessibilityBeaconProjectionCount
@@ -1504,7 +1528,9 @@ static s32 accessibilityBeaconScan(s32 detailed)
 						ACCESSIBILITY_BEACON_CATEGORY_OBJECT]) {
 					eligible = accessibilityBeaconObjectEligible(
 							prop, &citag, &reason);
-					result.kind = ACCESSIBILITY_BEACON_KIND_OBJECT;
+					result.kind = accessibilityBeaconIsMovablePuzzleObject(prop)
+							? ACCESSIBILITY_BEACON_KIND_MOVABLE_PUZZLE
+							: ACCESSIBILITY_BEACON_KIND_OBJECT;
 					result.category = ACCESSIBILITY_BEACON_CATEGORY_OBJECT;
 				}
 			}
@@ -2564,7 +2590,9 @@ static void accessibilityBeaconPulse(s32 category,
 	f32 normalizedvolume = (f32)volume / (f32)AL_VOL_FULL;
 	f32 normalizedpan = ((f32)pan - (f32)AL_PAN_CENTER)
 			/ (f32)AL_PAN_CENTER;
-	s32 pulses = selected->kind == ACCESSIBILITY_BEACON_KIND_PICKUP ? 3 : 1;
+	s32 pulses = selected->kind == ACCESSIBILITY_BEACON_KIND_PICKUP
+			|| selected->kind == ACCESSIBILITY_BEACON_KIND_MOVABLE_PUZZLE
+		? 3 : 1;
 	f32 gain = 1.0f;
 
 	accessibilityTonePlayChirpPattern(frequencyhz, normalizedvolume,
@@ -3111,7 +3139,9 @@ static void accessibilityBeaconDumpDiagnosticCandidate(u64 captureid,
 			semanticeligible = accessibilityBeaconObjectEligible(
 					prop, &citag, &semanticreason);
 			result.category = ACCESSIBILITY_BEACON_CATEGORY_OBJECT;
-			result.kind = ACCESSIBILITY_BEACON_KIND_OBJECT;
+			result.kind = accessibilityBeaconIsMovablePuzzleObject(prop)
+					? ACCESSIBILITY_BEACON_KIND_MOVABLE_PUZZLE
+					: ACCESSIBILITY_BEACON_KIND_OBJECT;
 			categoryactive = g_AccessibilityBeaconCategoryActive[
 					ACCESSIBILITY_BEACON_CATEGORY_OBJECT];
 		}
