@@ -11,6 +11,7 @@
 #include "game/propobj.h"
 #include "game/propsnd.h"
 #include "game/radar.h"
+#include "lib/vi.h"
 #include "system.h"
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_announcement.h"
@@ -31,6 +32,8 @@
 #define ACCESSIBILITY_TRACKER_SKEDAR_PILLAR1_MARKED 0x00000100u
 #define ACCESSIBILITY_TRACKER_SKEDAR_PILLAR2_MARKED 0x00000200u
 #define ACCESSIBILITY_TRACKER_SKEDAR_PILLAR3_MARKED 0x00000400u
+#define ACCESSIBILITY_TRACKER_PROJECTION_CAPACITY 64
+#define ACCESSIBILITY_TRACKER_PROJECTION_MAX_AGE_TICKS TICKS(2)
 
 enum accessibilitytrackerheight {
 	ACCESSIBILITY_TRACKER_HEIGHT_LEVEL,
@@ -72,11 +75,34 @@ struct accessibilitytrackerslot {
 	s32 rear;
 };
 
+struct accessibilitytrackerprojection {
+	uintptr_t prop;
+	uintptr_t obj;
+	s32 propnum;
+	s32 rendered;
+	s32 projected;
+	s32 finite;
+	s32 intersectsviewport;
+	f32 x1;
+	f32 y1;
+	f32 x2;
+	f32 y2;
+};
+
 static struct accessibilitytrackercandidate
 		g_AccessibilityTrackerCandidates[ACCESSIBILITY_TRACKER_SLOT_COUNT];
 static struct accessibilitytrackerslot
 		g_AccessibilityTrackerSlots[ACCESSIBILITY_TRACKER_SLOT_COUNT];
+static struct accessibilitytrackerprojection
+		g_AccessibilityTrackerProjections[
+				ACCESSIBILITY_TRACKER_PROJECTION_CAPACITY];
 static s32 g_AccessibilityTrackerCandidateCount;
+static s32 g_AccessibilityTrackerProjectionCount;
+static s32 g_AccessibilityTrackerProjectionFrame60 = -1;
+static s32 g_AccessibilityTrackerProjectionStage = -1;
+static s32 g_AccessibilityTrackerProjectionPlayer = -1;
+static s32 g_AccessibilityTrackerProjectionTruncated;
+static s32 g_AccessibilityTrackerViewportRejected;
 static s32 g_AccessibilityTrackerDeviceActive;
 static s32 g_AccessibilityTrackerInfraredActive;
 static s32 g_AccessibilityTrackerXrayActive;
@@ -233,6 +259,113 @@ static s32 accessibilityTrackerInfraredNativeActive(void)
 					& DEVICE_IRSCANNER);
 }
 
+static s32 accessibilityTrackerProjectionCacheIsCurrent(void)
+{
+	s32 age = g_Vars.lvframe60 - g_AccessibilityTrackerProjectionFrame60;
+
+	return g_AccessibilityTrackerProjectionFrame60 >= 0
+			&& g_AccessibilityTrackerProjectionStage == g_Vars.stagenum
+			&& g_AccessibilityTrackerProjectionPlayer == g_Vars.currentplayernum
+			&& age >= 0 && age <= ACCESSIBILITY_TRACKER_PROJECTION_MAX_AGE_TICKS;
+}
+
+static const struct accessibilitytrackerprojection *
+accessibilityTrackerFindProjection(struct prop *prop)
+{
+	struct defaultobj *obj = prop ? prop->obj : NULL;
+	s32 propnum = accessibilityTrackerPropNum(prop);
+	s32 i;
+
+	if (!accessibilityTrackerProjectionCacheIsCurrent()
+			|| propnum < 0 || !obj) {
+		return NULL;
+	}
+
+	for (i = 0; i < g_AccessibilityTrackerProjectionCount; i++) {
+		const struct accessibilitytrackerprojection *projection
+				= &g_AccessibilityTrackerProjections[i];
+
+		if (projection->propnum == propnum
+				&& projection->prop == (uintptr_t)prop
+				&& projection->obj == (uintptr_t)obj) {
+			return projection;
+		}
+	}
+
+	return NULL;
+}
+
+void accessibilityTrackerCaptureGame(void)
+{
+	struct prop *prop = g_Vars.activeprops;
+	f32 viewleft = (f32)viGetViewLeft() / g_ScaleX;
+	f32 viewtop = viGetViewTop();
+	f32 viewright = viewleft + (f32)viGetViewWidth() / g_ScaleX;
+	f32 viewbottom = viewtop + viGetViewHeight();
+	s32 traversed = 0;
+
+	g_AccessibilityTrackerProjectionCount = 0;
+	g_AccessibilityTrackerProjectionTruncated = 0;
+	g_AccessibilityTrackerProjectionFrame60 = g_Vars.lvframe60;
+	g_AccessibilityTrackerProjectionStage = g_Vars.stagenum;
+	g_AccessibilityTrackerProjectionPlayer = g_Vars.currentplayernum;
+
+	if (PLAYERCOUNT() != 1 || !g_Vars.currentplayer
+			|| !accessibilityTrackerInfraredNativeActive()
+			|| !accessibilityIsIrScannerAudioEnabled()) {
+		return;
+	}
+
+	while (prop && traversed <= g_Vars.maxprops) {
+		struct defaultobj *obj = prop->obj;
+
+		traversed++;
+
+		if ((prop->type == PROPTYPE_OBJ
+				|| prop->type == PROPTYPE_DOOR
+				|| prop->type == PROPTYPE_WEAPON)
+				&& obj && obj->prop == prop && obj->model
+				&& objIsHighlightedByInfrared(obj)) {
+			struct accessibilitytrackerprojection *projection;
+
+			if (g_AccessibilityTrackerProjectionCount
+					>= ARRAYCOUNT(g_AccessibilityTrackerProjections)) {
+				g_AccessibilityTrackerProjectionTruncated++;
+				prop = prop->next;
+				continue;
+			}
+
+			projection = &g_AccessibilityTrackerProjections[
+					g_AccessibilityTrackerProjectionCount++];
+			memset(projection, 0, sizeof(*projection));
+			projection->prop = (uintptr_t)prop;
+			projection->obj = (uintptr_t)obj;
+			projection->propnum = accessibilityTrackerPropNum(prop);
+			projection->rendered
+					= (prop->flags & PROPFLAG_ONTHISSCREENTHISTICK) != 0;
+
+			if (projection->propnum >= 0 && projection->rendered
+					&& obj->model->matrices && obj->model->definition) {
+				projection->projected = modelGetScreenCoords(obj->model,
+						&projection->x2, &projection->x1,
+						&projection->y2, &projection->y1);
+				projection->finite = projection->projected
+						&& isfinite(projection->x1)
+						&& isfinite(projection->y1)
+						&& isfinite(projection->x2)
+						&& isfinite(projection->y2);
+				projection->intersectsviewport = projection->finite
+						&& projection->x2 >= viewleft
+						&& projection->x1 <= viewright
+						&& projection->y2 >= viewtop
+						&& projection->y1 <= viewbottom;
+			}
+		}
+
+		prop = prop->next;
+	}
+}
+
 static s32 accessibilityTrackerXrayNativeActive(void)
 {
 	return g_Vars.currentplayer
@@ -379,6 +512,7 @@ static void accessibilityTrackerScan(s32 source)
 #endif
 
 	g_AccessibilityTrackerCandidateCount = 0;
+	g_AccessibilityTrackerViewportRejected = 0;
 	g_AccessibilityTrackerScanCount++;
 
 	if (looklength < 0.0001f) {
@@ -400,12 +534,20 @@ static void accessibilityTrackerScan(s32 source)
 				category = RADAR_TRACKED_NONE;
 			}
 		} else if (source == ACCESSIBILITY_TRACKER_SOURCE_INFRARED
-				&& (prop->flags & PROPFLAG_ONANYSCREENPREVTICK)
 				&& (prop->type == PROPTYPE_OBJ
 					|| prop->type == PROPTYPE_DOOR
 					|| prop->type == PROPTYPE_WEAPON)
-				&& objIsHighlightedByInfrared(prop->obj)) {
-			category = ACCESSIBILITY_TRACKER_CATEGORY_INFRARED;
+				&& prop->obj && objIsHighlightedByInfrared(prop->obj)) {
+			const struct accessibilitytrackerprojection *projection
+					= accessibilityTrackerFindProjection(prop);
+
+			if (projection && projection->rendered
+					&& projection->projected && projection->finite
+					&& projection->intersectsviewport) {
+				category = ACCESSIBILITY_TRACKER_CATEGORY_INFRARED;
+			} else {
+				g_AccessibilityTrackerViewportRejected++;
+			}
 		}
 
 		if (category != RADAR_TRACKED_NONE) {
@@ -724,19 +866,25 @@ void accessibilityTrackerTick(void)
 
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 		accessibilityLogEvent("rtracker", "scan_summary",
-				"frame=%d source=%s scans=%" PRIu64 " candidates=%d occupied=%d scan_us=%" PRIu64 " scan_total_us=%" PRIu64 " scan_max_us=%" PRIu64,
+				"frame=%d source=%s scans=%" PRIu64 " candidates=%d occupied=%d projection_entries=%d projection_truncated=%d viewport_rejected=%d scan_us=%" PRIu64 " scan_total_us=%" PRIu64 " scan_max_us=%" PRIu64,
 				g_Vars.lvframe60, accessibilityTrackerSourceName(source),
 				(uint64_t)g_AccessibilityTrackerScanCount,
 				g_AccessibilityTrackerCandidateCount, occupied,
+				g_AccessibilityTrackerProjectionCount,
+				g_AccessibilityTrackerProjectionTruncated,
+				g_AccessibilityTrackerViewportRejected,
 				(uint64_t)g_AccessibilityTrackerScanCurrentUs,
 				(uint64_t)g_AccessibilityTrackerScanTotalUs,
 				(uint64_t)g_AccessibilityTrackerScanMaxUs);
 #else
 		accessibilityLogEvent("rtracker", "scan_summary",
-				"frame=%d source=%s scans=%" PRIu64 " candidates=%d occupied=%d",
+				"frame=%d source=%s scans=%" PRIu64 " candidates=%d occupied=%d projection_entries=%d projection_truncated=%d viewport_rejected=%d",
 				g_Vars.lvframe60, accessibilityTrackerSourceName(source),
 				(uint64_t)g_AccessibilityTrackerScanCount,
-				g_AccessibilityTrackerCandidateCount, occupied);
+				g_AccessibilityTrackerCandidateCount, occupied,
+				g_AccessibilityTrackerProjectionCount,
+				g_AccessibilityTrackerProjectionTruncated,
+				g_AccessibilityTrackerViewportRejected);
 #endif
 	}
 
@@ -757,6 +905,14 @@ void accessibilityTrackerReset(const char *reason)
 	memset(g_AccessibilityTrackerCandidates, 0,
 			sizeof(g_AccessibilityTrackerCandidates));
 	g_AccessibilityTrackerCandidateCount = 0;
+	memset(g_AccessibilityTrackerProjections, 0,
+			sizeof(g_AccessibilityTrackerProjections));
+	g_AccessibilityTrackerProjectionCount = 0;
+	g_AccessibilityTrackerProjectionFrame60 = -1;
+	g_AccessibilityTrackerProjectionStage = -1;
+	g_AccessibilityTrackerProjectionPlayer = -1;
+	g_AccessibilityTrackerProjectionTruncated = 0;
+	g_AccessibilityTrackerViewportRejected = 0;
 	g_AccessibilityTrackerDeviceActive = false;
 	g_AccessibilityTrackerInfraredActive = false;
 	g_AccessibilityTrackerXrayActive = false;
