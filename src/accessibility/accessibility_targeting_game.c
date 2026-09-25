@@ -864,6 +864,36 @@ static s32 accessibilityTargetingGameCctvCombatCapable(
 			&& objIsHealthy(obj);
 }
 
+static s32 accessibilityTargetingGameChopperCombatCapable(
+		struct chopperobj *chopper)
+{
+	struct defaultobj *obj;
+
+	if (!chopper || !g_Vars.currentplayer
+			|| !g_Vars.currentplayer->prop) {
+		return false;
+	}
+
+	obj = &chopper->base;
+
+	/*
+	 * Choppers are scripted world objects rather than characters. Use their
+	 * live combat state so inactive scenery aircraft and a chopper targeting
+	 * somebody else are not presented as threats to the current player.
+	 */
+	return obj->type == OBJTYPE_CHOPPER
+			&& (obj->flags & (OBJFLAG_DEACTIVATED
+				| OBJFLAG_CHOPPER_INACTIVE)) == 0
+			&& (obj->flags2 & OBJFLAG2_INVISIBLE) == 0
+			&& objIsHealthy(obj)
+			&& !chopper->dead
+			&& chopper->attackmode != CHOPPERMODE_FALL
+			&& chopper->attackmode != CHOPPERMODE_DEAD
+			&& chopper->weaponsarmed
+			&& chopperGetTargetProp(chopper)
+				== g_Vars.currentplayer->prop;
+}
+
 static s32 accessibilityTargetingGameCurrentAttackCanDamageObject(
 		const struct prop *prop)
 {
@@ -1570,12 +1600,15 @@ static void accessibilityTargetingCaptureCombat(void)
 					: ACCESSIBILITY_TARGETING_CATEGORY_CHARACTER;
 		} else if (prop->type == PROPTYPE_OBJ && prop->obj
 				&& (prop->obj->type == OBJTYPE_AUTOGUN
-					|| prop->obj->type == OBJTYPE_CCTV)) {
+					|| prop->obj->type == OBJTYPE_CCTV
+					|| prop->obj->type == OBJTYPE_CHOPPER)) {
 			obj = prop->obj;
 			model = obj->model;
 			category = obj->type == OBJTYPE_AUTOGUN
 					? ACCESSIBILITY_TARGETING_CATEGORY_TURRET
-					: ACCESSIBILITY_TARGETING_CATEGORY_SECURITY_CAMERA;
+					: obj->type == OBJTYPE_CCTV
+						? ACCESSIBILITY_TARGETING_CATEGORY_SECURITY_CAMERA
+						: ACCESSIBILITY_TARGETING_CATEGORY_VEHICLE;
 		} else {
 			continue;
 		}
@@ -1630,7 +1663,10 @@ static void accessibilityTargetingCaptureCombat(void)
 							(struct autogunobj *)obj))
 					|| (obj->type == OBJTYPE_CCTV
 						&& accessibilityTargetingGameCctvCombatCapable(
-							(struct cctvobj *)obj)))))) {
+							(struct cctvobj *)obj))
+					|| (obj->type == OBJTYPE_CHOPPER
+						&& accessibilityTargetingGameChopperCombatCapable(
+							(struct chopperobj *)obj)))))) {
 			if (accessibilityVisibilityIsFarsightExposed(prop)) {
 				/* Native FarSight rendering is the visibility authority here. */
 				projection->lineofsight = false;
@@ -2058,7 +2094,10 @@ static void accessibilityTargetingObserveCombat(
 				== ACCESSIBILITY_TARGETING_CATEGORY_TURRET;
 		s32 camera = projection->category
 				== ACCESSIBILITY_TARGETING_CATEGORY_SECURITY_CAMERA;
-		s32 objecttarget = turret || camera;
+		s32 chopper = projection->category
+				== ACCESSIBILITY_TARGETING_CATEGORY_VEHICLE
+				&& obj && obj->type == OBJTYPE_CHOPPER;
+		s32 objecttarget = turret || camera || chopper;
 		s32 eligible = true;
 		s32 aimedbyraw = prop && prop == rawaimedprop;
 		s32 aimedbytolerance = prop && turret
@@ -2110,7 +2149,9 @@ static void accessibilityTargetingObserveCombat(
 				? prop->type != PROPTYPE_OBJ
 					|| (turret
 						? obj->type != OBJTYPE_AUTOGUN
-						: obj->type != OBJTYPE_CCTV)
+						: camera
+							? obj->type != OBJTYPE_CCTV
+							: obj->type != OBJTYPE_CHOPPER)
 				: prop->type != PROPTYPE_CHR
 					&& prop->type != PROPTYPE_PLAYER) {
 			eligible = false;
@@ -2128,6 +2169,11 @@ static void accessibilityTargetingObserveCombat(
 					(struct cctvobj *)obj)) {
 			eligible = false;
 			reason = "camera_inactive_disabled_or_destroyed";
+		} else if (chopper
+				&& !accessibilityTargetingGameChopperCombatCapable(
+					(struct chopperobj *)obj)) {
+			eligible = false;
+			reason = "chopper_inactive_unarmed_or_non_hostile";
 		} else if (!objecttarget
 				&& !accessibilityTargetingGameCharacterCombatCapable(chr)) {
 			eligible = false;
