@@ -2590,22 +2590,26 @@ static void accessibilityBeaconPulse(s32 category,
 	f32 normalizedvolume = (f32)volume / (f32)AL_VOL_FULL;
 	f32 normalizedpan = ((f32)pan - (f32)AL_PAN_CENTER)
 			/ (f32)AL_PAN_CENTER;
-	s32 pulses = selected->kind == ACCESSIBILITY_BEACON_KIND_PICKUP
-			|| selected->kind == ACCESSIBILITY_BEACON_KIND_MOVABLE_PUZZLE
-		? 3 : 1;
+	s32 pulses = selected->kind == ACCESSIBILITY_BEACON_KIND_PICKUP ? 3 : 1;
 	f32 gain = 1.0f;
+	const char *pattern = "chirp";
 
-	accessibilityTonePlayChirpPattern(frequencyhz, normalizedvolume,
-			normalizedpan, pulses, gain);
+	if (selected->kind == ACCESSIBILITY_BEACON_KIND_MOVABLE_PUZZLE) {
+		accessibilityTonePlayMovableLandmark(normalizedvolume, normalizedpan);
+		pattern = "crossing_sweep_low_tail";
+	} else {
+		accessibilityTonePlayChirpPattern(frequencyhz, normalizedvolume,
+				normalizedpan, pulses, gain);
+	}
 	g_AccessibilityBeaconPulseCount++;
 
 	accessibilityLogEvent("beacon", "pulse",
-			"pulse=%llu tick=%d next_tick=%d index=%d category=%s kind=%s pulse_count=%d frequency_hz=%.1f lane=procedural_chirp prop=%p propnum=%d position=%.3f,%.3f,%.3f distance=%.3f bearing=%.3f vertical=%.3f volume=%d normalized_volume=%.4f gain=%.3f pan=%d normalized_pan=%.4f ranges=%.1f,%.1f,%.1f result=started",
+			"pulse=%llu tick=%d next_tick=%d index=%d category=%s kind=%s pattern=%s pulse_count=%d category_frequency_hz=%.1f lane=procedural_chirp prop=%p propnum=%d position=%.3f,%.3f,%.3f distance=%.3f bearing=%.3f vertical=%.3f volume=%d normalized_volume=%.4f gain=%.3f pan=%d normalized_pan=%.4f ranges=%.1f,%.1f,%.1f result=started",
 			(unsigned long long)g_AccessibilityBeaconPulseCount,
 			g_Vars.lvframe60, g_AccessibilityBeaconNextScheduledPulse60,
 			g_AccessibilityBeaconSelectedIndex[category],
 			accessibilityBeaconCategoryName(selected->category),
-			accessibilityBeaconKindName(selected->kind), pulses, frequencyhz,
+			accessibilityBeaconKindName(selected->kind), pattern, pulses, frequencyhz,
 			(void *)prop, selected->propnum, prop->pos.x, prop->pos.y, prop->pos.z,
 			selected->distance, selected->bearing, selected->vertical,
 			volume, normalizedvolume, gain, pan, normalizedpan,

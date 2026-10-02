@@ -105,7 +105,7 @@ Four player-controlled scanners provide spatial sounds during gameplay:
 
 | Key | Category | Sound concept |
 | --- | --- | --- |
-| F5 | Interactable objects, computers, switches, usable panels, and specifically authored movable puzzle objects | A high chirp; the Skedar Ruins movable puzzle rock uses three rapid chirps |
+| F5 | Interactable objects, computers, switches, usable panels, and specifically authored movable puzzle objects | A high chirp; the Skedar Ruins movable puzzle rock uses a short crossing sweep followed by a low pulse |
 | F6 | Doors | A lower, prominent repeating chirp |
 | F7 | Friendly and neutral characters | A continuous two-note drone; friendly combat characters pulse the upper note |
 | F8 | Weapons, devices, ammunition, and other collectible items | Three rapid high chirps |

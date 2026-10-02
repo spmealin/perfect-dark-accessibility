@@ -23,7 +23,7 @@
 #define ACCESSIBILITY_LANDMARK_LOG_TICKS TICKS(60)
 #define ACCESSIBILITY_LANDMARK_START_SPACING TICKS(15)
 #define ACCESSIBILITY_LANDMARK_SKEDAR_PUZZLE_ROCK_TAG 0x4c
-#define ACCESSIBILITY_LANDMARK_SKEDAR_PAD_RANGE 500.0f
+#define ACCESSIBILITY_LANDMARK_SKEDAR_PAD_RANGE 50.0f
 #define ACCESSIBILITY_LANDMARK_SKEDAR_PAD_VERTICAL_RANGE 200.0f
 
 struct accessibilitylandmarkspec {
@@ -179,6 +179,7 @@ static f32 accessibilityLandmarkDistanceGain(f32 distance, f32 range)
 
 	progress = (range - distance)
 			/ (range - ACCESSIBILITY_LANDMARK_INNER_DISTANCE);
+
 	return progress * progress;
 }
 
@@ -272,9 +273,9 @@ static s32 accessibilityLandmarkPadEligible(
 		return false;
 	}
 
-	/* Mirror setupsho.c's if_object_distance_to_pad_lt(..., 50, ...).
-	 * That command encodes 50 as a 500-unit X/Z box and uses a fixed
-	 * 200-unit vertical tolerance. Reevaluate every tick so moving the rock
+	/* Mirror setupsho.c's if_object_distance_to_pad_lt(..., 50, ...): the
+	 * command compares a 50-unit X/Z box with a fixed 200-unit vertical
+	 * tolerance. Reevaluate every tick so moving the rock
 	 * away restores the landmark along with the retracting bridge. */
 	xdiff = completionobj->prop->pos.x - pad.pos.x;
 	ydiff = completionobj->prop->pos.y - pad.pos.y;
