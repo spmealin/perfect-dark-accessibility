@@ -8,7 +8,7 @@ shortcuts, cue summaries, and troubleshooting written for players, see the root
 
 This work aims to make the Perfect Dark PC port meaningfully playable by blind and low-vision players, starting with nonvisual access to menus and essential game state and progressing through small, testable gameplay slices.
 
-The current branch contains the accessibility coordinator/logger, Prism screen-reader/OneCore/SAPI speech backend, menu-agnostic focus narration, non-subtitle HUD-message speech, single-player interaction/door/pickup beacons, non-hostile-character beacons, damaging-laser hazard cues, firing-range, hostile-character/autogun/security-camera, FarSight-visible hostile targeting, and initial device-target feedback, weapon-function state cues, a nine-direction virtual-cane prototype, four player-authored audible landmarks, a nonvisual R-Tracker interface, a Combat Simulator audio-radar prototype, IR Scanner highlight audio, and X-Ray-aware semantic scanner visibility. All implemented feature backends default to enabled for blind-user acceptance testing; the cane defaults to Slow mode. Menu narration has passed project-owner blind-user acceptance, while newer gameplay slices retain the narrower evidence and pending tests documented below and in their historical milestone and feature records. Automatic route and goal guidance, other non-character combat categories, and full-game accessibility are not implemented.
+The current branch contains the accessibility coordinator/logger, Prism screen-reader/OneCore/SAPI speech backend, menu-agnostic focus narration, non-subtitle HUD-message speech, single-player interaction/door/pickup beacons, non-hostile-character beacons, damaging-laser and hostile-rocket hazard cues, firing-range, hostile-character/autogun/security-camera, FarSight-visible hostile targeting, and initial device-target feedback, weapon-function state cues, a nine-direction virtual-cane prototype, four player-authored audible landmarks, a nonvisual R-Tracker interface, a Combat Simulator audio-radar prototype, IR Scanner highlight audio, and X-Ray-aware semantic scanner visibility. All implemented feature backends default to enabled for blind-user acceptance testing; the cane defaults to Slow mode. Menu narration has passed project-owner blind-user acceptance, while newer gameplay slices retain the narrower evidence and pending tests documented below and in their historical milestone and feature records. Automatic route and goal guidance, other non-character combat categories, and full-game accessibility are not implemented.
 
 The firing-range weapon list announces the same completed bronze, silver, and gold proficiency stars rendered beside each weapon. It reads only the filled stars represented by the saved score and does not infer incomplete progress or expose state absent from the visual row.
 
@@ -53,6 +53,41 @@ Combat Simulator's death overlay is drawn directly rather than admitted to the c
 The nearest eligible beam produces an independent 220 Hz sine tone only while its closest point is within 500 world units, inside a 25-degree camera-facing cone, and visible through background geometry. Eligibility refreshes every three logical ticks while the virtual source traverses the longest centerline of the beam and returns over a 90-tick cycle. Existing prop-sound attenuation and stereo-pan calculations follow that moving source; the mixer interpolates frequency and pan per audio buffer and applies a 10 ms gain ramp. A 75-unit selection margin keeps adjacent bars from rapidly replacing one another. Only one hazard voice plays at once.
 
 Inactive, fully faded, open, or non-colliding lasers are excluded. Turning away, losing line of sight, leaving range, opening a menu, pausing, entering a cutscene, dying, changing stage, disabling the feature, or shutting down stops the voice. The hazard lane is separate from the centered fine-aim tone and beacon chirp lane, uses the existing fixed mix buffer, and allocates no memory or game sound channel at runtime.
+
+### Hostile projectile hazard cue
+
+`Accessibility.ProjectileHazards` defaults to `1` and is subordinate to
+`Accessibility.Enabled`. Ordinary, homing, and Skedar rockets fired by a
+character whom the native team rules classify as hostile are eligible. Rockets
+from a live armed chopper currently targeting the player are also eligible. A
+rocket whose native homing target is the current player is also eligible when
+owner information is incomplete. Player-fired and friendly rockets are
+excluded.
+
+Up to four rockets marked on screen by the current-frame renderer and within
+`Accessibility.ProjectileHazardRange`
+(default 3,000 world units) receive stable, dedicated procedural voices. Each
+voice is a rough 260--520 Hz three-harmonic buzz, deliberately unlike the
+clean cane, targeting, and beacon tones. At long range it pulses for roughly
+160 ms every 500 ms. Distance and a bounded closest-approach prediction raise
+the pitch and urgency, reaching roughly 90 ms every 110 ms nearby. Existing
+prop-sound attenuation and stereo-pan calculations position the sound, then
+`Accessibility.ProjectileHazardVolume` (default `0.25`) applies an independent
+master gain. The closest or most immediately approaching candidates take
+priority when more than four rockets are eligible.
+
+Eligibility is evaluated after the normal game tick from semantic projectile
+state and requires both the native current-frame on-screen flag and a direct
+visual line of sight; it never alters rocket
+creation, targeting, collision, damage, or movement. Menus, pause, cutscenes,
+death, stage transitions, unsupported player counts, and remote CamSpy views
+silence and release all voices. The CamSpy restriction prevents a rocket near
+Joanna from being spatialized relative to a remote camera. Four fixed voices
+and fixed candidate storage are allocated statically; the game and audio
+threads perform no runtime allocation. Rate-limited `projectile_hazard` log
+records expose weapon type, owner relationship, homing target, distance,
+closing speed, predicted closest approach, selected voice, frequency, cadence,
+volume, and pan for prototype evaluation.
 
 ### R-Tracker audio interface
 
@@ -314,13 +349,16 @@ TargetingVolume=0.150000
 InterruptedTargetingVolume=0.120000
 EnemyVolume=0.250000
 EnemyFrequency=900.000000
+ProjectileHazards=1
+ProjectileHazardRange=3000.000000
+ProjectileHazardVolume=0.250000
 AudibleMarkers=1
 AuthoredLandmarks=1
 MarkerRange=1200.000000
 MarkerVolume=1.000000
 ```
 
-Distances are world units. The effective full/fade/maximum values are normalized into nondecreasing order; the cane maximum-audible distance is also raised to at least its reach. Cane reach is bounded to 100–5,000, cane attenuation values to 0–10,000, and cane, solid-targeting, interrupted-targeting, and enemy volume to 0–0.4. Ordinary enemy distances are bounded to 6,000, scoped enemy distances to 20,000, and enemy frequency to 100–4,000 Hz. Non-finite values fall back to the documented defaults. The effective startup values are recorded in the accessibility session log.
+Distances are world units. The effective full/fade/maximum values are normalized into nondecreasing order; the cane maximum-audible distance is also raised to at least its reach. Cane reach is bounded to 100–5,000, cane attenuation values to 0–10,000, and cane, solid-targeting, interrupted-targeting, and enemy volume to 0–0.4. Ordinary enemy distances are bounded to 6,000, scoped enemy distances to 20,000, and enemy frequency to 100–4,000 Hz. Projectile range is bounded to 250–10,000 units and projectile volume to 0–0.5. Non-finite values fall back to the documented defaults. The effective startup values are recorded in the accessibility session log.
 
 Cane frequencies are bounded to 20–4,000 Hz. If the configured near frequency is lower than the far frequency, the effective endpoints are exchanged so closer obstacles remain higher pitched. Terrain reach is bounded to 50–2,000 units and its height threshold to 1–100 units. Marker range is bounded to 100–10,000 world units and its linear master multiplier to 0–4.
 

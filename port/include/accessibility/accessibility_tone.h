@@ -10,6 +10,7 @@
 #define ACCESSIBILITY_TONE_LANDMARK_SLOT_COUNT 4
 #define ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT 3
 #define ACCESSIBILITY_TONE_DOOR_SLOT_COUNT 3
+#define ACCESSIBILITY_TONE_PROJECTILE_SLOT_COUNT 4
 
 enum accessibilitytonecombatcontour {
 	ACCESSIBILITY_TONE_COMBAT_CONTOUR_LINEAR,
@@ -56,6 +57,7 @@ struct accessibilitytonediagnostics {
 	s32 trackerenabledslots;
 	s32 friendlyenabledslots;
 	s32 doorenabledslots;
+	s32 projectileenabledslots;
 	s32 radarenabled;
 	s32 radarsequence;
 	s32 hillenabled;
@@ -103,6 +105,10 @@ void accessibilityToneSetCombatSlot(s32 slot, s32 enabled,
 		s32 periodms, s32 durationms, s32 frequencycontour, s32 continuous,
 		s32 restart, s32 triggernow);
 void accessibilityToneStopCombat(void);
+void accessibilityToneSetProjectileSlot(s32 slot, s32 enabled,
+		f32 frequencyhz, f32 volume, f32 pan, s32 periodms,
+		s32 durationms, s32 restart);
+void accessibilityToneStopProjectiles(void);
 void accessibilityToneSetTrackerSlot(s32 slot, s32 enabled, f32 frequencyhz,
 		f32 volume, f32 pan, s32 periodms, s32 height, s32 rear,
 		s32 restart);

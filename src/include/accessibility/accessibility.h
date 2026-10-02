@@ -20,6 +20,7 @@ void accessibilityPerformanceRecordGameplayTime(u64 elapsed);
 #endif
 s32 accessibilityIsEnabled(void);
 s32 accessibilityIsEnvironmentalHazardsEnabled(void);
+s32 accessibilityIsProjectileHazardsEnabled(void);
 s32 accessibilityIsHudMessagesEnabled(void);
 s32 accessibilityIsInteractableBeaconsEnabled(void);
 s32 accessibilityIsIrScannerAudioEnabled(void);
@@ -61,5 +62,6 @@ void accessibilityGetEnemyScopedTuning(f32 *fulldistance, f32 *fadedistance,
 		f32 *silentdistance);
 f32 accessibilityGetEnemyFrequency(void);
 void accessibilityGetMarkerTuning(f32 *range, f32 *volume);
+void accessibilityGetProjectileHazardTuning(f32 *range, f32 *volume);
 
 #endif

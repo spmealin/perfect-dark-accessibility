@@ -257,6 +257,9 @@ the accessibility tools.
   that text is also spoken.
 - Damaging horizontal laser barriers produce a short-range spatial sweep when
   the player faces them.
+- Hostile rockets produce a rough spatial warning buzz while they are on
+  screen, in range, and unobstructed. The buzz becomes higher and repeats more
+  quickly as a rocket gets closer or approaches the player.
 - The R-Tracker announces its state and renders tracked contacts as spatial
   audio. IR and X-Ray modes expose the objects highlighted by their native
   visual systems.
@@ -280,6 +283,9 @@ SpeechFallback=onecore
 LoggingEnabled=1
 MenuNarration=1
 HudMessages=1
+ProjectileHazards=1
+ProjectileHazardRange=3000
+ProjectileHazardVolume=0.25
 InteractableBeacons=1
 TargetingFeedback=1
 VirtualCaneMode=1

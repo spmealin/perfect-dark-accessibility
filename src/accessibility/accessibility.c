@@ -17,6 +17,7 @@
 #include "accessibility/accessibility_incident.h"
 #include "accessibility/accessibility_log.h"
 #include "accessibility/accessibility_marker.h"
+#include "accessibility/accessibility_projectile.h"
 #include "accessibility/accessibility_landmark.h"
 #include "accessibility/accessibility_menu.h"
 #include "accessibility/accessibility_speech.h"
@@ -32,6 +33,7 @@ static s32 g_AccessibilitySpeechEnabledConfig = 1;
 static s32 g_AccessibilityMenuNarrationEnabledConfig = 1;
 static s32 g_AccessibilityHudMessagesEnabledConfig = 1;
 static s32 g_AccessibilityEnvironmentalHazardsEnabledConfig = 1;
+static s32 g_AccessibilityProjectileHazardsEnabledConfig = 1;
 static s32 g_AccessibilityInteractableBeaconsEnabledConfig = 1;
 static s32 g_AccessibilityInteractableScannerActiveConfig = 1;
 static s32 g_AccessibilityDoorScannerActiveConfig = 1;
@@ -78,6 +80,8 @@ static f32 g_AccessibilityMarkerVolumeConfig = 1.0f;
 static f32 g_AccessibilityCombatRadarMediumDistanceConfig = 2000.0f;
 static f32 g_AccessibilityCombatRadarCloseDistanceConfig = 750.0f;
 static f32 g_AccessibilityCombatRadarVolumeConfig = 0.20f;
+static f32 g_AccessibilityProjectileHazardRangeConfig = 3000.0f;
+static f32 g_AccessibilityProjectileHazardVolumeConfig = 0.25f;
 static s32 g_AccessibilityInitialized = 0;
 static s32 g_AccessibilityEnabled = 0;
 static s32 g_AccessibilityCombatRadarContactAlerts = 1;
@@ -207,6 +211,20 @@ f32 accessibilityGetInterruptedTargetingVolume(void)
 	return accessibilityValidatedFloat(
 			g_AccessibilityInterruptedTargetingVolumeConfig,
 			0.12f, 0.0f, 0.4f);
+}
+
+void accessibilityGetProjectileHazardTuning(f32 *range, f32 *volume)
+{
+	if (range) {
+		*range = accessibilityValidatedFloat(
+				g_AccessibilityProjectileHazardRangeConfig,
+				3000.0f, 250.0f, 10000.0f);
+	}
+	if (volume) {
+		*volume = accessibilityValidatedFloat(
+				g_AccessibilityProjectileHazardVolumeConfig,
+				0.25f, 0.0f, 0.5f);
+	}
 }
 
 void accessibilityGetEnemyTuning(f32 *fulldistance, f32 *fadedistance,
@@ -353,6 +371,8 @@ void accessibilityInit(void)
 	f32 combatRadarVolume;
 	f32 targetingVolume;
 	f32 interruptedTargetingVolume;
+	f32 projectileHazardRange;
+	f32 projectileHazardVolume;
 
 	if (g_AccessibilityInitialized) {
 		return;
@@ -373,6 +393,7 @@ void accessibilityInit(void)
 	accessibilityHudReset("init");
 	accessibilityIncidentReset("init");
 	accessibilityMarkerReset("init");
+	accessibilityProjectileReset("init");
 	accessibilityLandmarkReset("init");
 	accessibilityStatusReset("init");
 	accessibilityStanceReset("init");
@@ -408,13 +429,17 @@ void accessibilityInit(void)
 			&combatRadarClose, &combatRadarVolume);
 	targetingVolume = accessibilityGetTargetingVolume();
 	interruptedTargetingVolume = accessibilityGetInterruptedTargetingVolume();
+	accessibilityGetProjectileHazardTuning(&projectileHazardRange,
+			&projectileHazardVolume);
 
-	sysLogPrintf(LOG_NOTE, "accessibility: enabled (logging %s, speech %s, HUD messages %s, player status %s, environmental hazards %s, interactable beacons %s, audible markers %s, authored landmarks %s, IR Scanner audio %s, non-hostile beacons %s, R-Tracker audio %s, combat radar audio %s, combat radar alerts %s, King of the Hill beacon %s, targeting feedback %s, targeting volume %.3f, interrupted targeting volume %.3f, weapon change announcements %s, weapon function cues %s, stance cues %s, X-Ray Scanner audio %s, virtual cane mode %d, compass mode %d, cane reach %.1f, cane pitch %.1f-%.1f Hz, cane volume %.3f, terrain reach %.1f, drop threshold %.1f, enemy maximum %.1f, scoped enemy maximum %.1f, enemy frequency %.1f Hz, enemy volume %.3f, marker range %.1f, marker volume %.3f, radar medium %.1f, radar close %.1f, radar volume %.3f)",
+	sysLogPrintf(LOG_NOTE, "accessibility: enabled (logging %s, speech %s, HUD messages %s, player status %s, environmental hazards %s, projectile hazards %s, projectile range %.1f, projectile volume %.3f, interactable beacons %s, audible markers %s, authored landmarks %s, IR Scanner audio %s, non-hostile beacons %s, R-Tracker audio %s, combat radar audio %s, combat radar alerts %s, King of the Hill beacon %s, targeting feedback %s, targeting volume %.3f, interrupted targeting volume %.3f, weapon change announcements %s, weapon function cues %s, stance cues %s, X-Ray Scanner audio %s, virtual cane mode %d, compass mode %d, cane reach %.1f, cane pitch %.1f-%.1f Hz, cane volume %.3f, terrain reach %.1f, drop threshold %.1f, enemy maximum %.1f, scoped enemy maximum %.1f, enemy frequency %.1f Hz, enemy volume %.3f, marker range %.1f, marker volume %.3f, radar medium %.1f, radar close %.1f, radar volume %.3f)",
 			g_AccessibilityLoggingEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilitySpeechEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityHudMessagesEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityPlayerStatusEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityEnvironmentalHazardsEnabledConfig ? "enabled" : "disabled",
+			g_AccessibilityProjectileHazardsEnabledConfig ? "enabled" : "disabled",
+			projectileHazardRange, projectileHazardVolume,
 			g_AccessibilityInteractableBeaconsEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityAudibleMarkersEnabledConfig ? "enabled" : "disabled",
 			g_AccessibilityAuthoredLandmarksEnabledConfig ? "enabled" : "disabled",
@@ -442,7 +467,7 @@ void accessibilityInit(void)
 
 	if (g_AccessibilityLoggingEnabledConfig && accessibilityLogInit()) {
 		accessibilityLogEvent("lifecycle", "session_start",
-				"enabled=%d logging=%d speech=%d menu_narration=%d hud_messages=%d player_status=%d environmental_hazards=%d interactable_beacons=%d audible_markers=%d authored_landmarks=%d ir_scanner_audio=%d non_hostile_beacons=%d rtracker_audio=%d combat_radar_audio=%d combat_radar_contact_alerts=%d combat_radar_medium_distance=%.3f combat_radar_close_distance=%.3f combat_radar_volume=%.4f king_of_the_hill_beacon=%d targeting_feedback=%d targeting_volume=%.4f interrupted_targeting_volume=%.4f interrupted_targeting_pitch_multiplier=0.6000 weapon_change_announcements=%d weapon_function_cues=%d stance_cues=%d xray_scanner_audio=%d virtual_cane_mode=%d compass_mode=%d compass_key=Shift+F4 compass_cardinals=North,East,South,West compass_clicks=1,2,3,4 cane_reach=%.3f cane_full_distance=%.3f cane_fade_distance=%.3f cane_maximum_audible_distance=%.3f cane_near_frequency_hz=%.3f cane_far_frequency_hz=%.3f cane_volume=%.4f cane_terrain_reach=%.3f cane_terrain_height_threshold=%.3f cane_drop_height_threshold=%.3f enemy_full_distance=%.3f enemy_fade_distance=%.3f enemy_maximum_distance=%.3f enemy_scoped_full_distance=%.3f enemy_scoped_fade_distance=%.3f enemy_scoped_maximum_distance=%.3f enemy_frequency_hz=%.3f enemy_volume=%.4f marker_range=%.3f marker_volume=%.4f marker_line_of_sight=1 marker_keys=F9,F10,F11,F12 marker_voices=4 landmark_voices=4 landmark_identity_chirps=0 incident_capture=1 incident_key=Shift+F2 incident_history_seconds=15 performance_diagnostics=%d performance_interval_us=%d speech_test=%d path=%s",
+				"enabled=%d logging=%d speech=%d menu_narration=%d hud_messages=%d player_status=%d environmental_hazards=%d projectile_hazards=%d projectile_hazard_range=%.3f projectile_hazard_volume=%.4f projectile_hazard_voices=4 interactable_beacons=%d audible_markers=%d authored_landmarks=%d ir_scanner_audio=%d non_hostile_beacons=%d rtracker_audio=%d combat_radar_audio=%d combat_radar_contact_alerts=%d combat_radar_medium_distance=%.3f combat_radar_close_distance=%.3f combat_radar_volume=%.4f king_of_the_hill_beacon=%d targeting_feedback=%d targeting_volume=%.4f interrupted_targeting_volume=%.4f interrupted_targeting_pitch_multiplier=0.6000 weapon_change_announcements=%d weapon_function_cues=%d stance_cues=%d xray_scanner_audio=%d virtual_cane_mode=%d compass_mode=%d compass_key=Shift+F4 compass_cardinals=North,East,South,West compass_clicks=1,2,3,4 cane_reach=%.3f cane_full_distance=%.3f cane_fade_distance=%.3f cane_maximum_audible_distance=%.3f cane_near_frequency_hz=%.3f cane_far_frequency_hz=%.3f cane_volume=%.4f cane_terrain_reach=%.3f cane_terrain_height_threshold=%.3f cane_drop_height_threshold=%.3f enemy_full_distance=%.3f enemy_fade_distance=%.3f enemy_maximum_distance=%.3f enemy_scoped_full_distance=%.3f enemy_scoped_fade_distance=%.3f enemy_scoped_maximum_distance=%.3f enemy_frequency_hz=%.3f enemy_volume=%.4f marker_range=%.3f marker_volume=%.4f marker_line_of_sight=1 marker_keys=F9,F10,F11,F12 marker_voices=4 landmark_voices=4 landmark_identity_chirps=0 incident_capture=1 incident_key=Shift+F2 incident_history_seconds=15 performance_diagnostics=%d performance_interval_us=%d speech_test=%d path=%s",
 				g_AccessibilityEnabledConfig,
 				g_AccessibilityLoggingEnabledConfig,
 				g_AccessibilitySpeechEnabledConfig,
@@ -450,6 +475,8 @@ void accessibilityInit(void)
 				g_AccessibilityHudMessagesEnabledConfig,
 				g_AccessibilityPlayerStatusEnabledConfig,
 				g_AccessibilityEnvironmentalHazardsEnabledConfig,
+				g_AccessibilityProjectileHazardsEnabledConfig,
+				projectileHazardRange, projectileHazardVolume,
 				g_AccessibilityInteractableBeaconsEnabledConfig,
 				g_AccessibilityAudibleMarkersEnabledConfig,
 				g_AccessibilityAuthoredLandmarksEnabledConfig,
@@ -536,6 +563,7 @@ void accessibilityShutdown(void)
 	accessibilityHudReset("shutdown");
 	accessibilityIncidentReset("shutdown");
 	accessibilityMarkerReset("shutdown");
+	accessibilityProjectileReset("shutdown");
 	accessibilityLandmarkReset("shutdown");
 	accessibilityStatusReset("shutdown");
 	accessibilityStanceReset("shutdown");
@@ -580,6 +608,12 @@ s32 accessibilityIsEnvironmentalHazardsEnabled(void)
 {
 	return g_AccessibilityEnabled
 			&& g_AccessibilityEnvironmentalHazardsEnabledConfig;
+}
+
+s32 accessibilityIsProjectileHazardsEnabled(void)
+{
+	return g_AccessibilityEnabled
+			&& g_AccessibilityProjectileHazardsEnabledConfig;
 }
 
 s32 accessibilityIsInteractableBeaconsEnabled(void)
@@ -757,6 +791,8 @@ PD_CONSTRUCTOR static void accessibilityConfigInit(void)
 	configRegisterInt("Accessibility.MenuNarration", &g_AccessibilityMenuNarrationEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.HudMessages", &g_AccessibilityHudMessagesEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.EnvironmentalHazards", &g_AccessibilityEnvironmentalHazardsEnabledConfig, 0, 1);
+	configRegisterInt("Accessibility.ProjectileHazards",
+			&g_AccessibilityProjectileHazardsEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.InteractableBeacons", &g_AccessibilityInteractableBeaconsEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.InteractableScannerActive",
 			&g_AccessibilityInteractableScannerActiveConfig, 0, 1);
@@ -843,4 +879,8 @@ PD_CONSTRUCTOR static void accessibilityConfigInit(void)
 			&g_AccessibilityCombatRadarCloseDistanceConfig, 1.0f, 20000.0f);
 	configRegisterFloat("Accessibility.CombatRadarVolume",
 			&g_AccessibilityCombatRadarVolumeConfig, 0.0f, 0.4f);
+	configRegisterFloat("Accessibility.ProjectileHazardRange",
+			&g_AccessibilityProjectileHazardRangeConfig, 250.0f, 10000.0f);
+	configRegisterFloat("Accessibility.ProjectileHazardVolume",
+			&g_AccessibilityProjectileHazardVolumeConfig, 0.0f, 0.5f);
 }
