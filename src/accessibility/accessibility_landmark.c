@@ -22,6 +22,8 @@
 #define ACCESSIBILITY_LANDMARK_HYSTERESIS 75.0f
 #define ACCESSIBILITY_LANDMARK_LOG_TICKS TICKS(60)
 #define ACCESSIBILITY_LANDMARK_START_SPACING TICKS(15)
+#define ACCESSIBILITY_LANDMARK_VULNERABLE_GAIN 2.0f
+#define ACCESSIBILITY_LANDMARK_VULNERABLE_RANGE_SCALE 1.5f
 #define ACCESSIBILITY_LANDMARK_SKEDAR_PUZZLE_ROCK_TAG 0x4c
 #define ACCESSIBILITY_LANDMARK_SKEDAR_PAD_RANGE 50.0f
 #define ACCESSIBILITY_LANDMARK_SKEDAR_PAD_VERTICAL_RANGE 200.0f
@@ -165,7 +167,14 @@ static f32 accessibilityLandmarkDistance(const struct coord *from,
 	return sqrtf(x * x + y * y + z * z);
 }
 
-static f32 accessibilityLandmarkDistanceGain(f32 distance, f32 range)
+static s32 accessibilityLandmarkIsVulnerableTarget(
+		const struct accessibilitylandmarkspec *spec)
+{
+	return spec && spec->stage == STAGE_SKEDARRUINS && spec->requirevulnerable;
+}
+
+static f32 accessibilityLandmarkDistanceGain(
+		const struct accessibilitylandmarkspec *spec, f32 distance, f32 range)
 {
 	f32 progress;
 
@@ -179,6 +188,10 @@ static f32 accessibilityLandmarkDistanceGain(f32 distance, f32 range)
 
 	progress = (range - distance)
 			/ (range - ACCESSIBILITY_LANDMARK_INNER_DISTANCE);
+
+	if (accessibilityLandmarkIsVulnerableTarget(spec)) {
+		return sqrtf(progress) * ACCESSIBILITY_LANDMARK_VULNERABLE_GAIN;
+	}
 
 	return progress * progress;
 }
@@ -456,6 +469,7 @@ static void accessibilityLandmarkUpdate(
 		struct coord targetpos;
 		RoomNum targetrooms[2] = { -1, -1 };
 		f32 limit;
+		f32 effectiverange;
 		s32 inrange;
 		s32 lineofsight;
 		s32 waslineofsight;
@@ -476,7 +490,8 @@ static void accessibilityLandmarkUpdate(
 
 		if (!spec) {
 			accessibilityToneSetLandmarkSlot(
-					slot, false, 0.0f, 0.0f, false);
+					slot, false, 0.0f, 0.0f,
+					ACCESSIBILITY_TONE_LANDMARK_STANDARD, false);
 			memset(state, 0, sizeof(*state));
 			continue;
 		}
@@ -489,8 +504,12 @@ static void accessibilityLandmarkUpdate(
 
 		state->distance = accessibilityLandmarkDistance(
 				&observer->camera, &targetpos);
-		limit = state->inrange ? range + ACCESSIBILITY_LANDMARK_HYSTERESIS
+		effectiverange = accessibilityLandmarkIsVulnerableTarget(spec)
+				? range * ACCESSIBILITY_LANDMARK_VULNERABLE_RANGE_SCALE
 				: range;
+		limit = state->inrange
+				? effectiverange + ACCESSIBILITY_LANDMARK_HYSTERESIS
+				: effectiverange;
 		inrange = state->distance <= limit;
 		state->lossample = 0;
 		state->losqueries = 0;
@@ -514,11 +533,13 @@ static void accessibilityLandmarkUpdate(
 		}
 
 		state->gain = lineofsight && !state->startpending
-				? accessibilityLandmarkDistanceGain(state->distance, range)
+				? accessibilityLandmarkDistanceGain(
+						spec, state->distance, effectiverange)
 						* mastervolume
 				: 0.0f;
 		pan = psCalculatePan(&targetpos,
-				ACCESSIBILITY_LANDMARK_INNER_DISTANCE, range, range,
+				ACCESSIBILITY_LANDMARK_INNER_DISTANCE,
+				effectiverange, effectiverange,
 				state->distance, false, NULL);
 		normalizedpan = ((f32)pan - (f32)AL_PAN_CENTER)
 				/ (f32)AL_PAN_CENTER;
@@ -526,13 +547,16 @@ static void accessibilityLandmarkUpdate(
 
 		if (state->inrange != inrange || state->lineofsight != lineofsight) {
 			accessibilityLogEvent("landmark", "visibility",
-					"slot=%d name=%s tick=%d stage=%d tag=%d pad=%d prop=%p propnum=%d position=%.3f,%.3f,%.3f in_range=%d line_of_sight=%d los_sample=%d los_queries=%d start_pending=%d start_tick=%d distance=%.3f observer_remote=%d",
+					"slot=%d name=%s tick=%d stage=%d tag=%d pad=%d prop=%p propnum=%d position=%.3f,%.3f,%.3f in_range=%d line_of_sight=%d los_sample=%d los_queries=%d start_pending=%d start_tick=%d distance=%.3f effective_range=%.3f gain=%.4f profile=%s observer_remote=%d",
 					slot, spec->name, g_Vars.lvframe60, g_Vars.stagenum,
 					spec->tag, spec->pad, obj ? (void *)obj->prop : NULL,
 					obj ? (s32)(obj->prop - g_Vars.props) : -1,
 					targetpos.x, targetpos.y, targetpos.z, inrange, lineofsight,
 					state->lossample, state->losqueries,
 					state->startpending, state->starttick, state->distance,
+					effectiverange,
+					state->gain, accessibilityLandmarkIsVulnerableTarget(spec)
+						? "vulnerable_target" : "standard",
 					observer->isremote);
 		}
 
@@ -542,7 +566,11 @@ static void accessibilityLandmarkUpdate(
 		state->pan = normalizedpan;
 		audiblecount += state->audible;
 		accessibilityToneSetLandmarkSlot(slot, state->audible,
-				state->gain, normalizedpan, restart);
+				state->gain, normalizedpan,
+				accessibilityLandmarkIsVulnerableTarget(spec)
+					? ACCESSIBILITY_TONE_LANDMARK_VULNERABLE_TARGET
+					: ACCESSIBILITY_TONE_LANDMARK_STANDARD,
+				restart);
 	}
 
 	if (audiblecount > 0

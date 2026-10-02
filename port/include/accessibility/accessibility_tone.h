@@ -39,6 +39,11 @@ enum accessibilitytoneradarkind {
 	ACCESSIBILITY_TONE_RADAR_UNAVAILABLE,
 };
 
+enum accessibilitytonelandmarkprofile {
+	ACCESSIBILITY_TONE_LANDMARK_STANDARD,
+	ACCESSIBILITY_TONE_LANDMARK_VULNERABLE_TARGET,
+};
+
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 struct accessibilitytonediagnostics {
 	s32 toneenabled;
@@ -125,7 +130,7 @@ void accessibilityToneSetMarkerSlot(s32 slot, s32 enabled,
 void accessibilityTonePlayMarkerRemoval(s32 slot);
 void accessibilityToneStopMarkers(void);
 void accessibilityToneSetLandmarkSlot(s32 slot, s32 enabled,
-		f32 volume, f32 pan, s32 restart);
+		f32 volume, f32 pan, s32 profile, s32 restart);
 void accessibilityToneStopLandmarks(void);
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 void accessibilityToneGetDiagnostics(struct accessibilitytonediagnostics *diagnostics);

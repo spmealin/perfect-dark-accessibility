@@ -109,6 +109,8 @@
 #define ACCESSIBILITY_MARKER_CHIRP_VOLUME 0.12f
 #define ACCESSIBILITY_MARKER_LOW_FREQUENCY_HZ 300.0f
 #define ACCESSIBILITY_MARKER_HIGH_FREQUENCY_HZ 600.0f
+#define ACCESSIBILITY_VULNERABLE_LANDMARK_LOW_FREQUENCY_HZ 900.0f
+#define ACCESSIBILITY_VULNERABLE_LANDMARK_HIGH_FREQUENCY_HZ 1400.0f
 #define ACCESSIBILITY_MARKER_IDENTITY_FREQUENCY_HZ 800.0f
 #define ACCESSIBILITY_TONE_MARKER_VOICE_COUNT \
 	(ACCESSIBILITY_TONE_MARKER_SLOT_COUNT \
@@ -223,6 +225,7 @@ static SDL_atomic_t g_AccessibilityMarkerEnabled[ACCESSIBILITY_TONE_MARKER_VOICE
 static SDL_atomic_t g_AccessibilityMarkerSequence[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
 static SDL_atomic_t g_AccessibilityMarkerVolumeMillionths[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
 static SDL_atomic_t g_AccessibilityMarkerPanMillionths[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
+static SDL_atomic_t g_AccessibilityMarkerProfile[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
 static SDL_atomic_t g_AccessibilityMarkerRemovalSequence[ACCESSIBILITY_TONE_MARKER_SLOT_COUNT];
 static SDL_atomic_t g_AccessibilityMarkerResetSequence;
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
@@ -1063,8 +1066,8 @@ void accessibilityToneStopCane(void)
 #endif
 }
 
-void accessibilityToneSetMarkerSlot(s32 slot, s32 enabled,
-		f32 volume, f32 pan, s32 restart)
+static void accessibilityToneSetMarkerSlotProfile(s32 slot, s32 enabled,
+		f32 volume, f32 pan, s32 profile, s32 restart)
 {
 	if (slot < 0 || slot >= ACCESSIBILITY_TONE_MARKER_VOICE_COUNT) {
 		return;
@@ -1086,12 +1089,20 @@ void accessibilityToneSetMarkerSlot(s32 slot, s32 enabled,
 			(s32)(volume * 1000000.0f));
 	SDL_AtomicSet(&g_AccessibilityMarkerPanMillionths[slot],
 			(s32)(pan * 1000000.0f));
+	SDL_AtomicSet(&g_AccessibilityMarkerProfile[slot], profile);
 	SDL_AtomicSet(&g_AccessibilityMarkerEnabled[slot],
 			enabled != 0 && volume > 0.0f);
 
 	if (restart) {
 		SDL_AtomicAdd(&g_AccessibilityMarkerSequence[slot], 1);
 	}
+}
+
+void accessibilityToneSetMarkerSlot(s32 slot, s32 enabled,
+		f32 volume, f32 pan, s32 restart)
+{
+	accessibilityToneSetMarkerSlotProfile(slot, enabled, volume, pan,
+			ACCESSIBILITY_TONE_LANDMARK_STANDARD, restart);
 }
 
 void accessibilityTonePlayMarkerRemoval(s32 slot)
@@ -1115,15 +1126,19 @@ void accessibilityToneStopMarkers(void)
 }
 
 void accessibilityToneSetLandmarkSlot(s32 slot, s32 enabled,
-		f32 volume, f32 pan, s32 restart)
+		f32 volume, f32 pan, s32 profile, s32 restart)
 {
 	if (slot < 0 || slot >= ACCESSIBILITY_TONE_LANDMARK_SLOT_COUNT) {
 		return;
 	}
 
-	accessibilityToneSetMarkerSlot(
+	if (profile != ACCESSIBILITY_TONE_LANDMARK_VULNERABLE_TARGET) {
+		profile = ACCESSIBILITY_TONE_LANDMARK_STANDARD;
+	}
+
+	accessibilityToneSetMarkerSlotProfile(
 			ACCESSIBILITY_TONE_MARKER_SLOT_COUNT + slot,
-			enabled, volume, pan, restart);
+			enabled, volume, pan, profile, restart);
 }
 
 void accessibilityToneStopLandmarks(void)
@@ -1263,6 +1278,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 	f32 doorvolume[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
 	f32 doorpan[ACCESSIBILITY_TONE_DOOR_SLOT_COUNT];
 	s32 markerenabled[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
+	s32 markerprofile[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
 	f32 markervolume[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
 	f32 markerpan[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
 	s32 anycombatenabled = 0;
@@ -1607,6 +1623,8 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 				&g_AccessibilityMarkerVolumeMillionths[slot]) / 1000000.0f;
 		markerpan[slot] = (f32)SDL_AtomicGet(
 				&g_AccessibilityMarkerPanMillionths[slot]) / 1000000.0f;
+		markerprofile[slot] = SDL_AtomicGet(
+				&g_AccessibilityMarkerProfile[slot]);
 		anymarkerenabled |= markerenabled[slot]
 				|| g_AccessibilityMarkerGain[slot] > 0.0f;
 
@@ -3072,17 +3090,23 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			}
 
 			if (g_AccessibilityMarkerGain[slot] > 0.0f) {
+				f32 lowfrequency = markerprofile[slot]
+						== ACCESSIBILITY_TONE_LANDMARK_VULNERABLE_TARGET
+					? ACCESSIBILITY_VULNERABLE_LANDMARK_LOW_FREQUENCY_HZ
+					: ACCESSIBILITY_MARKER_LOW_FREQUENCY_HZ;
+				f32 highfrequency = markerprofile[slot]
+						== ACCESSIBILITY_TONE_LANDMARK_VULNERABLE_TARGET
+					? ACCESSIBILITY_VULNERABLE_LANDMARK_HIGH_FREQUENCY_HZ
+					: ACCESSIBILITY_MARKER_HIGH_FREQUENCY_HZ;
 				f32 sweep = (f32)g_AccessibilityMarkerSweepSample
 						/ (f32)ACCESSIBILITY_MARKER_SWEEP_SAMPLES;
 				f32 triangle = sweep < 0.5f ? sweep * 2.0f
 						: (1.0f - sweep) * 2.0f;
-				f32 frequencya = ACCESSIBILITY_MARKER_LOW_FREQUENCY_HZ
-						+ (ACCESSIBILITY_MARKER_HIGH_FREQUENCY_HZ
-								- ACCESSIBILITY_MARKER_LOW_FREQUENCY_HZ)
+				f32 frequencya = lowfrequency
+						+ (highfrequency - lowfrequency)
 							* triangle;
-				f32 frequencyb = ACCESSIBILITY_MARKER_HIGH_FREQUENCY_HZ
-						- (ACCESSIBILITY_MARKER_HIGH_FREQUENCY_HZ
-								- ACCESSIBILITY_MARKER_LOW_FREQUENCY_HZ)
+				f32 frequencyb = highfrequency
+						- (highfrequency - lowfrequency)
 							* triangle;
 				f32 leftpan = g_AccessibilityMarkerPan[slot] > 0.0f
 						? 1.0f - g_AccessibilityMarkerPan[slot] : 1.0f;

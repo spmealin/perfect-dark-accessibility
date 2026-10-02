@@ -47,6 +47,7 @@
 #define ACCESSIBILITY_TARGETING_PRECISION_FINE_SAMPLES 5
 #define ACCESSIBILITY_TARGETING_PRECISION_FINE_QUERY_BUDGET 15
 #define ACCESSIBILITY_TARGETING_PRECISION_FINE_LOG_TICKS TICKS(60)
+#define ACCESSIBILITY_TARGETING_SKEDAR_SPIKES_VULNERABLE 0x20000000u
 
 enum accessibilitytargetingprecisionanchorsource {
 	ACCESSIBILITY_TARGETING_PRECISION_ANCHOR_NONE = 0,
@@ -163,6 +164,15 @@ struct accessibilitytargetingcamspytarget {
 	f32 screenx2;
 	f32 screeny2;
 };
+
+static s32 accessibilityTargetingGameSuppressKingPresence(struct prop *prop)
+{
+	return g_Vars.stagenum == STAGE_SKEDARRUINS
+			&& (g_StageFlags
+					& ACCESSIBILITY_TARGETING_SKEDAR_SPIKES_VULNERABLE)
+			&& prop && prop->chr
+			&& prop->chr->bodynum == BODY_SKEDARKING;
+}
 
 static const struct accessibilitytargetingdevicetarget
 		g_AccessibilityTargetingDeviceTargets[] = {
@@ -2061,6 +2071,9 @@ static void accessibilityTargetingObserveCombat(
 
 		candidate = &observation->candidates[observation->candidatecount++];
 		*candidate = *threat;
+		if (accessibilityTargetingGameSuppressKingPresence(candidate->prop)) {
+			candidate->aimonly = true;
+		}
 
 		if (aimed) {
 			candidate->obstruction = aimedbyraw
@@ -2098,6 +2111,8 @@ static void accessibilityTargetingObserveCombat(
 				== ACCESSIBILITY_TARGETING_CATEGORY_VEHICLE
 				&& obj && obj->type == OBJTYPE_CHOPPER;
 		s32 objecttarget = turret || camera || chopper;
+		s32 suppresspresence
+				= accessibilityTargetingGameSuppressKingPresence(prop);
 		s32 eligible = true;
 		s32 aimedbyraw = prop && prop == rawaimedprop;
 		s32 aimedbytolerance = prop && turret
@@ -2235,6 +2250,8 @@ static void accessibilityTargetingObserveCombat(
 			} else if (relationship
 					== ACCESSIBILITY_TARGETING_RELATIONSHIP_PROTECTED) {
 				reason = "protected_nonlethal_target";
+			} else if (suppresspresence) {
+				reason = "king_recharge_spikes_vulnerable";
 			}
 		}
 
@@ -2291,7 +2308,8 @@ static void accessibilityTargetingObserveCombat(
 					projection->category,
 					relationship,
 					relationship
-						== ACCESSIBILITY_TARGETING_RELATIONSHIP_PROTECTED,
+						== ACCESSIBILITY_TARGETING_RELATIONSHIP_PROTECTED
+						|| suppresspresence,
 					(void *)prop, projection->propnum,
 					(void *)chr, (void *)obj, obj ? obj->type : -1,
 					obj ? obj->modelnum : -1,
@@ -2352,7 +2370,8 @@ static void accessibilityTargetingObserveCombat(
 		candidate->category = projection->category;
 		candidate->relationship = relationship;
 		candidate->aimonly = relationship
-				== ACCESSIBILITY_TARGETING_RELATIONSHIP_PROTECTED;
+				== ACCESSIBILITY_TARGETING_RELATIONSHIP_PROTECTED
+				|| suppresspresence;
 		candidate->shootability = ACCESSIBILITY_TARGETING_SHOOTABILITY_SHOOTABLE;
 		candidate->obstruction = aimedbyraw
 				? g_AccessibilityTargetingGameRawAimObstruction

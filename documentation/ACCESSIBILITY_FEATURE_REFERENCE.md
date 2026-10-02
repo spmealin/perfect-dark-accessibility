@@ -372,6 +372,21 @@ objects and from the four F9–F12 player markers. Each uses the same continuous
 opposed 300–600 Hz sweeps as a player marker but never plays an 800 Hz identity
 chirp: no chirps consistently means a level-authored landmark.
 
+The final-boss spikes are a time-critical exception. While the game removes
+their invincibility, they use opposed 900–1,400 Hz sweeps with twice the peak
+gain, a stronger square-root distance curve, and 1.5 times the configured
+marker range. With the default 1,200-unit marker range, their 1,800-unit reach
+covers the approximately 1,280-unit measurements captured at the King chamber
+entrance with substantial gain margin. The cue still obeys semantic line of
+sight and stops immediately when the spike
+is shielded or destroyed. Although those setup objects carry the native
+collectable flag for mission scripting, they are excluded from the F8 pickup
+scanner so the vulnerable-target cue remains unambiguous. During the same
+native recharge window, the Skedar King's on-screen enemy-presence beep is
+suppressed. Exact crosshair alignment remains available, while the missing
+presence cue communicates that continued fire at the King is not the current
+objective and leaves the spike sweeps audible.
+
 Registry entries currently cover Area 51: Rescue's intact silver-X wall, where
 the hovercrate is intended to be positioned, Air Base's baggage conveyor,
 where the equipped suitcase is deposited, the three shield-system consoles

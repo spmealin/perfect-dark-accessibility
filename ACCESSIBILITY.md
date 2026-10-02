@@ -224,6 +224,9 @@ The cue disappears when the associated object is completed, destroyed, or no
 longer relevant. In Skedar Ruins, the bridge-puzzle pressure pad uses this cue
 until the movable rock is positioned on it; moving the rock away restores the
 cue. Coverage is intentionally semantic and is not yet exhaustive.
+During the Skedar King fight, vulnerable spikes use a louder, higher crossing
+sweep. The King's ordinary on-screen enemy beep pauses during each recharge
+window, when shooting the King is ineffective, and resumes when combat does.
 
 ### Resetting your view
 

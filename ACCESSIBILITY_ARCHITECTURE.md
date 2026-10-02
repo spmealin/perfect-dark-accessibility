@@ -591,9 +591,21 @@ Each final-boss spike additionally requires the native object invincibility flag
 to be clear. The lower four therefore sound only during the boss vulnerability
 window, while the upper spike does not sound until the game makes it vulnerable
 after the lower four are destroyed. Destruction removes each source independently.
-Registry ownership excludes them from F5 independently of
-landmark output state, preventing one prop from communicating conflicting
-mission-landmark and ordinary-interaction semantics. Authored landmarks do not
+Vulnerable spikes select a distinct opposed 900–1,400 Hz profile, twice the
+ordinary peak gain, and square-root rather than squared distance attenuation;
+their effective range is 1.5 times the configured marker range, while the LOS
+gate remains authoritative. The default therefore reaches 1,800 units, beyond
+the roughly 1,280-unit chamber-entry measurements in the acceptance log.
+Registry ownership
+excludes them from F5 and rejects their mission-script collectable flags from
+F8 independently of landmark output state, preventing one prop from
+communicating conflicting mission-landmark, interaction, and pickup semantics.
+While the stage's authoritative spikes-vulnerable flag is set, a projected
+`BODY_SKEDARKING` combat candidate remains eligible for exact aim alignment but
+is marked aim-only, preventing it from consuming an enemy-presence oscillator.
+This state ends with the native recharge window, so ordinary King presence
+feedback resumes without an accessibility timer or duplicated boss-state model.
+Authored landmarks do not
 consume scanner capacity or create a target lock.
 
 Object landmarks use the shared bounded object-surface visibility primitive:

@@ -784,6 +784,13 @@ static s32 accessibilityBeaconPickupEligible(struct prop *prop, const char **rea
 		return false;
 	}
 
+	/* Some mission-script objects carry the native collectable flag without
+	 * being inventory pickups. Their authored landmark voice is authoritative. */
+	if (accessibilityLandmarkOwnsProp(prop)) {
+		*reason = "authored_landmark_owned";
+		return false;
+	}
+
 	if (!prop->active || (obj->hidden & (OBJHFLAG_DELETING | OBJHFLAG_GONE))) {
 		*reason = "pickup_inactive_or_hidden";
 		return false;
