@@ -23,6 +23,8 @@ setup, the major speech and audio systems, all accessibility keyboard
 shortcuts, configuration, and how to capture a useful diagnostic when
 something goes wrong.
 
+See the [changelog](CHANGELOG.md) for player-facing updates in each release.
+
 For the easiest Windows setup:
 
 1. Download an accessibility-enabled Windows package from this fork's

@@ -3,9 +3,13 @@
 This directory contains detailed accessibility feature specifications,
 investigation plans, and milestone implementation records.
 
+For player-facing updates since the last public release, see the
+[release changelog](../CHANGELOG.md).
+
 The root directory retains the documents needed for immediate repository use:
 
 - `README.md`
+- `CHANGELOG.md`
 - `AGENTS.md`
 - `ACCESSIBILITY.md`
 - `ACCESSIBILITY_ARCHITECTURE.md`
