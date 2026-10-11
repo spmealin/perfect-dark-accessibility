@@ -429,17 +429,24 @@ Registry entries currently cover Area 51: Rescue's intact silver-X wall, where
 the hovercrate is intended to be positioned, Air Base's baggage conveyor,
 where the equipped suitcase is deposited, the three shield-system consoles
 on the Attack Ship, the Skedar Ruins bridge-puzzle pressure pad, and the
-final-boss spikes in Skedar Ruins. They follow the shared active
+five physical pillars and final-boss spikes in Skedar Ruins. They follow the shared active
 observer, use `Accessibility.MarkerRange` and `Accessibility.MarkerVolume`,
 and require a direct visual line of sight. The wall stops when destroyed; the
 conveyor sounds only while the difficulty includes the "Check in equipment"
 objective and that objective remains incomplete. The bridge-puzzle pad sounds
 while the movable rock is outside the same placement bounds used by the level
 script. It stops as soon as the rock holds the bridge open and returns if the
-rock is moved away and the bridge can retract. The three shuffled Target
-Amplifier pillars deliberately do not use authored mission-marker audio; the
-R-Tracker provides their navigation cue, and equipping the Target Amplifier
-provides exact alignment feedback. Completed pillars are removed from the
+rock is moved away and the bridge can retract. All five physical pillars use
+stable source tags `0x2a`–`0x2e`, not the shuffled objective aliases. Intact,
+active pillars have a spatial 360/540 Hz perfect-fifth drone with a gentle
+two-second gain swell, distinct from the crossing mission-marker sweeps.
+Placement flags, objective completion, R-Tracker state, and invincibility do
+not suppress this cue; destruction, hiding, range, LOS, and normal scope rules
+do. It defaults on through `Accessibility.AuthoredLandmarks=1`, with
+`Accessibility.MarkerRange=1200` and `Accessibility.MarkerVolume=1.0`.
+No new shortcut or speech string is introduced. Equipping the Target Amplifier
+still provides exact alignment feedback for the three selected pillars.
+Marked objective pillars are removed from the
 accessible R-Tracker using the level's authoritative placement flags. The three shield consoles
 sound only while "Disable shield system" remains incomplete, stop individually
 when destroyed, and enter audibility 250 ms apart so colocated consoles remain
@@ -450,7 +457,9 @@ Registry ownership also excludes these props from
 F5, so their native activation flags cannot misleadingly describe them as
 ordinary interactables. Authored landmarks do not require F5,
 consume interactable-scanner results, imply normal activation, or create a
-targeting lock. Four dedicated mixer voices are preallocated; adding a landmark
+targeting lock. Eleven dedicated mixer voices are preallocated so five pillars,
+one puzzle pad, and five spikes cannot starve one another, even when distant
+eligible entries retain their slots. Adding a landmark
 requires a stage plus either a setup tag or a fixed setup pad, optional objective gate,
 optional per-object completion flag, and stable semantic name in the registry
 rather than new playback logic.

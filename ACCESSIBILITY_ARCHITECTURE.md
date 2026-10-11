@@ -588,7 +588,7 @@ disable, and shutdown reset them.
 
 The authored-landmark module is a separate fixed registry of stage, setup tag,
 expected prop type, optional objective index, optional completion flag,
-actionability policy, and semantic name. Up to four eligible entries in the current stage
+actionability policy, tone profile, and semantic name. Up to eleven eligible entries in the current stage
 receive their own preallocated versions of the same opposed 300–600 Hz base
 voice, but authored slots never enter the player-marker identity scheduler and
 therefore never chirp. Each tick validates the tagged object's identity, active
@@ -599,7 +599,14 @@ discard them. Inactive registry entries consume no voice; eligible entries retai
 their existing slot identity where possible so another landmark's completion does
 not reshuffle every remaining source. Registry entries cover Rescue's tagged
 intact silver-X wall, Air Base's suitcase-deposit conveyor, Attack Ship's three
-shield consoles, the Skedar Ruins bridge-puzzle pressure pad, and the final-boss spikes.
+shield consoles, the Skedar Ruins bridge-puzzle pressure pad, all five physical
+pillars, and the final-boss spikes. Physical pillar entries resolve stable source
+tags `0x2a`–`0x2e` and never consult shuffled objective aliases, placement flags,
+tracker state, or objective completion. They use a fixed 360/540 Hz fifth drone
+with a two-second 65–100 percent swell, retaining the shared live health, LOS,
+range, observer, and scope gates. Eleven fixed voices cover every Skedar entry
+without distant pillars starving the pad or spikes. No additional game hook,
+native sound handle, allocation, or localized speech string is needed.
 Registry identity follows the engine's current tag-to-object mapping rather than
 asking an object for one tag. Pad entries instead resolve the setup position and
 room directly and may use a separate tagged object's live state as their completion gate.

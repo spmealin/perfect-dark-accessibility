@@ -224,6 +224,12 @@ The cue disappears when the associated object is completed, destroyed, or no
 longer relevant. In Skedar Ruins, the bridge-puzzle pressure pad uses this cue
 until the movable rock is positioned on it; moving the rock away restores the
 cue. Coverage is intentionally semantic and is not yet exhaustive.
+All five intact pillars in Battle Shrine also have a distinct low two-note
+drone, independent of whether the R-Tracker selects them. This cue remains
+after placing an amplifier and stops when the pillar is destroyed. It requires
+line of sight and uses the authored-landmark range and volume settings; it does
+not require the R-Tracker or F5 to be enabled. The R-Tracker still identifies
+only the selected, unmarked objective pillars.
 During the Skedar King fight, vulnerable spikes use a louder, higher crossing
 sweep. The King's ordinary on-screen enemy beep pauses during each recharge
 window, when shooting the King is ineffective, and resumes when combat does.

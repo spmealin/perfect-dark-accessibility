@@ -38,6 +38,7 @@ struct accessibilitylandmarkspec {
 	s32 pad;
 	s32 completiontag;
 	const char *name;
+	s32 toneprofile;
 };
 
 struct accessibilitylandmarkstate {
@@ -57,33 +58,45 @@ struct accessibilitylandmarkstate {
 
 /*
  * Authored landmarks are semantic navigation destinations, not interactable
- * objects. Registry entries may name setup tags from any stage; up to four
+ * objects. Registry entries may name setup tags from any stage; up to eleven
  * entries in the current stage receive independent preallocated voices.
  */
 static const struct accessibilitylandmarkspec g_AccessibilityLandmarkSpecs[] = {
 	{ STAGE_RESCUE, 0x18, PROPTYPE_DOOR, -1, 0, false, -1, -1,
-		"crate_placement_marker" },
+		"crate_placement_marker", ACCESSIBILITY_TONE_LANDMARK_STANDARD },
 	{ STAGE_AIRBASE, 0x04, PROPTYPE_OBJ, 1, 0, false, -1, -1,
-		"suitcase_deposit_conveyor" },
+		"suitcase_deposit_conveyor", ACCESSIBILITY_TONE_LANDMARK_STANDARD },
 	{ STAGE_ATTACKSHIP, 0x04, PROPTYPE_OBJ, 0, 0, false, -1, -1,
-		"shield_console_1" },
+		"shield_console_1", ACCESSIBILITY_TONE_LANDMARK_STANDARD },
 	{ STAGE_ATTACKSHIP, 0x05, PROPTYPE_OBJ, 0, 0, false, -1, -1,
-		"shield_console_2" },
+		"shield_console_2", ACCESSIBILITY_TONE_LANDMARK_STANDARD },
 	{ STAGE_ATTACKSHIP, 0x06, PROPTYPE_OBJ, 0, 0, false, -1, -1,
-		"shield_console_3" },
+		"shield_console_3", ACCESSIBILITY_TONE_LANDMARK_STANDARD },
+	/* Stable physical tags, not the three randomly remapped objective aliases.
+	 * Marking a pillar never silences this cue; only its live object state does. */
+	{ STAGE_SKEDARRUINS, 0x2a, PROPTYPE_OBJ, -1, 0, false, -1, -1,
+		"shrine_pillar_1", ACCESSIBILITY_TONE_LANDMARK_PILLAR },
+	{ STAGE_SKEDARRUINS, 0x2b, PROPTYPE_OBJ, -1, 0, false, -1, -1,
+		"shrine_pillar_2", ACCESSIBILITY_TONE_LANDMARK_PILLAR },
+	{ STAGE_SKEDARRUINS, 0x2c, PROPTYPE_OBJ, -1, 0, false, -1, -1,
+		"shrine_pillar_3", ACCESSIBILITY_TONE_LANDMARK_PILLAR },
+	{ STAGE_SKEDARRUINS, 0x2d, PROPTYPE_OBJ, -1, 0, false, -1, -1,
+		"shrine_pillar_4", ACCESSIBILITY_TONE_LANDMARK_PILLAR },
+	{ STAGE_SKEDARRUINS, 0x2e, PROPTYPE_OBJ, -1, 0, false, -1, -1,
+		"shrine_pillar_5", ACCESSIBILITY_TONE_LANDMARK_PILLAR },
 	{ STAGE_SKEDARRUINS, -1, -1, -1, 0, false, PAD_SHO_00D4,
 		ACCESSIBILITY_LANDMARK_SKEDAR_PUZZLE_ROCK_TAG,
-		"puzzle_rock_pressure_pad" },
+		"puzzle_rock_pressure_pad", ACCESSIBILITY_TONE_LANDMARK_STANDARD },
 	{ STAGE_SKEDARRUINS, 0x13, PROPTYPE_OBJ, 4, 0, true, -1, -1,
-		"king_spike_middle_left" },
+		"king_spike_middle_left", ACCESSIBILITY_TONE_LANDMARK_VULNERABLE_TARGET },
 	{ STAGE_SKEDARRUINS, 0x14, PROPTYPE_OBJ, 4, 0, true, -1, -1,
-		"king_spike_middle_right" },
+		"king_spike_middle_right", ACCESSIBILITY_TONE_LANDMARK_VULNERABLE_TARGET },
 	{ STAGE_SKEDARRUINS, 0x15, PROPTYPE_OBJ, 4, 0, true, -1, -1,
-		"king_spike_bottom_left" },
+		"king_spike_bottom_left", ACCESSIBILITY_TONE_LANDMARK_VULNERABLE_TARGET },
 	{ STAGE_SKEDARRUINS, 0x16, PROPTYPE_OBJ, 4, 0, true, -1, -1,
-		"king_spike_bottom_right" },
+		"king_spike_bottom_right", ACCESSIBILITY_TONE_LANDMARK_VULNERABLE_TARGET },
 	{ STAGE_SKEDARRUINS, 0x17, PROPTYPE_OBJ, 4, 0, true, -1, -1,
-		"king_spike_top" },
+		"king_spike_top", ACCESSIBILITY_TONE_LANDMARK_VULNERABLE_TARGET },
 };
 
 static struct accessibilitylandmarkstate
@@ -435,7 +448,7 @@ static void accessibilityLandmarkUpdate(
 	}
 
 	/* Allocate only eligible entries. Inactive entries in the same stage must
-	 * not consume one of the four preallocated voices. */
+	 * not consume one of the preallocated voices. */
 	for (candidateindex = 0; candidateindex < candidatecount;
 			candidateindex++) {
 		if (candidates[candidateindex].slot >= 0) {
@@ -555,8 +568,9 @@ static void accessibilityLandmarkUpdate(
 					state->lossample, state->losqueries,
 					state->startpending, state->starttick, state->distance,
 					effectiverange,
-					state->gain, accessibilityLandmarkIsVulnerableTarget(spec)
-						? "vulnerable_target" : "standard",
+					state->gain, spec->toneprofile == ACCESSIBILITY_TONE_LANDMARK_PILLAR
+						? "pillar" : accessibilityLandmarkIsVulnerableTarget(spec)
+							? "vulnerable_target" : "standard",
 					observer->isremote);
 		}
 
@@ -567,9 +581,7 @@ static void accessibilityLandmarkUpdate(
 		audiblecount += state->audible;
 		accessibilityToneSetLandmarkSlot(slot, state->audible,
 				state->gain, normalizedpan,
-				accessibilityLandmarkIsVulnerableTarget(spec)
-					? ACCESSIBILITY_TONE_LANDMARK_VULNERABLE_TARGET
-					: ACCESSIBILITY_TONE_LANDMARK_STANDARD,
+				spec->toneprofile,
 				restart);
 	}
 

@@ -113,6 +113,8 @@
 #define ACCESSIBILITY_MARKER_HIGH_FREQUENCY_HZ 600.0f
 #define ACCESSIBILITY_VULNERABLE_LANDMARK_LOW_FREQUENCY_HZ 900.0f
 #define ACCESSIBILITY_VULNERABLE_LANDMARK_HIGH_FREQUENCY_HZ 1400.0f
+#define ACCESSIBILITY_PILLAR_LOW_FREQUENCY_HZ 360.0f
+#define ACCESSIBILITY_PILLAR_HIGH_FREQUENCY_HZ 540.0f
 #define ACCESSIBILITY_MARKER_IDENTITY_FREQUENCY_HZ 800.0f
 #define ACCESSIBILITY_TONE_MARKER_VOICE_COUNT \
 	(ACCESSIBILITY_TONE_MARKER_SLOT_COUNT \
@@ -1188,7 +1190,8 @@ void accessibilityToneSetLandmarkSlot(s32 slot, s32 enabled,
 		return;
 	}
 
-	if (profile != ACCESSIBILITY_TONE_LANDMARK_VULNERABLE_TARGET) {
+	if (profile != ACCESSIBILITY_TONE_LANDMARK_VULNERABLE_TARGET
+			&& profile != ACCESSIBILITY_TONE_LANDMARK_PILLAR) {
 		profile = ACCESSIBILITY_TONE_LANDMARK_STANDARD;
 	}
 
@@ -3274,6 +3277,14 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 				f32 marker = (sinf(g_AccessibilityMarkerPhaseA[slot])
 						+ sinf(g_AccessibilityMarkerPhaseB[slot])) * 0.5f
 						* g_AccessibilityMarkerGain[slot] * 32767.0f;
+
+				/* A fixed perfect-fifth drone with a gentle two-second swell,
+				 * distinct from moving mission-marker and boss-spike sweeps. */
+				if (markerprofile[slot] == ACCESSIBILITY_TONE_LANDMARK_PILLAR) {
+					frequencya = ACCESSIBILITY_PILLAR_LOW_FREQUENCY_HZ;
+					frequencyb = ACCESSIBILITY_PILLAR_HIGH_FREQUENCY_HZ;
+					marker *= 0.65f + 0.35f * triangle;
+				}
 
 				markerleft += (s32)(marker * leftpan);
 				markerright += (s32)(marker * rightpan);
