@@ -32,6 +32,58 @@ The Combat Simulator results sequence announces the semantic contents of every c
 
 Mission Select list options announce the complete localized mission name rendered across the location and subtitle lines, such as `dataDyne Central - Extraction`, followed by each bright completion star by its localized difficulty name: Agent, Special Agent, or Perfect Agent. Solo narration follows the renderer's highest-completed-difficulty rule, co-op narration reports the independently stored completion markers, and anti mode announces no completion state because it renders no stars. Combat Simulator challenge lists announce every bright player-count completion star, from one through four players or one through two in the 4 MB configuration. The Completed Challenges page uses the current player's markers, while the general Combat Challenges list uses the same shared-profile markers as its renderer.
 
+### Accessibility menu and audio glossary
+
+Extended Options contains Accessibility → Audio glossary. Native menu dialogs,
+list rendering and input retain the established font, sizing, focus speech,
+scrolling and localized Back control. Focus reads a cue label without starting
+audio; activation previews one example. Continuous examples are bounded to at
+most 2.2 seconds, except the friendly-combat-character drone, which plays two
+complete one-second-on/one-second-off upper-note cycles over four seconds.
+The localized Back entry is the final list row, not a separate footer that
+native list navigation cannot reach. It cancels previews and pops the dialog
+using the ordinary close sound; cancel/back input also exits.
+The glossary list opts into the generic, list-only
+`MENUITEMFLAG_LIST_SILENTSELECT` behavior so activation does not overlay the
+native selection beep. Navigation, Back and other controls keep their sounds.
+Changing list focus, focusing Back, closing the dialog, stage
+teardown and shutdown cancel playback. No new shortcut or configuration key is
+introduced, no scanner/mode selection changes, and previews honor global
+accessibility enablement plus existing cue pitch/master-volume settings.
+
+`src/accessibility/accessibility_glossary.c` owns the complete cue/variant
+catalog and simulated example parameters. The port-owned
+`port/src/accessibility/accessibility_options.c` supplies native menu definitions
+and thin callbacks. All current procedural families are represented, including
+protected and through-glass locks, directional/height patterns, marker
+identities/removal, mission/pillar/spike landmarks, hazard warnings and
+confirmation patterns. X-Ray, FarSight, device targeting, combat radar contact
+alerts and firing-range targets reuse their existing sound families rather
+than invented glossary-only sounds. Names and dialog vocabulary are centralized
+English accessibility strings; future translation must use an accessibility-owned
+locale catalog, not generated ROM language data. Back reuses the game's
+localized string.
+
+Preview ownership temporarily rejects gameplay mixer commands while the menu
+borrows existing fixed voices. The normal DSP renders each example, with no
+asset loading, world scan, collision query, dynamic allocation or extra voice.
+Main-thread menu ticks update moving examples and bounded threat repetitions;
+an independent audio-sample deadline fades the accessibility contribution to
+silence even if menu updates stall. Preview boundaries clear audio-owned tails
+and reset example scheduling without changing ordinary gameplay scheduling.
+The main thread publishes only atomic mixer commands, and audio never reads
+menu structures or performs speech/logging. `glossary/play` and `glossary/stop`
+logs identify the catalog index, name, variant and requested duration.
+
+`tools/tests/accessibility_glossary_test.c` exercises every entry through the
+real list activation and mixer paths with synthetic state: non-silent PCM,
+menu-time world-stop isolation, replacement/exit cleanup, disabled operation,
+unique labels and sample-deadline expiry without menu ticks. These checks do
+not establish audibility, visual layout or blind-user usability. The project
+owner accepted the basic workflow and follow-up selection-beep, two-cycle
+friendly-drone and reachable Back changes on 2026-10-15. Full catalog recognition,
+independent-user testing and long-session performance remain open.
+
 ### Active weapon menu narration
 
 With `Accessibility.MenuNarration=1`, holding the active-menu control announces the localized title and focused label of every active-menu radial: Weapon, Function, cooperative Perfect Buddies, and Combat Simulator Orders. The title is included on entry to each radial screen and subsequent focus movement speaks only the new label. Weapon labels include `Unarmed`; stable focus and renderer animation do not repeat speech. Closing the radial resets selection state without cancelling an already-started short announcement. Only the primary local player publishes speech; selection, weapon-function, and bot-command behavior are unchanged.

@@ -787,7 +787,9 @@ bool menuitemListTick(struct menuitem *item, struct menuinputs *inputs, u32 tick
 
 				item->handler(MENUOP_SET, item, &handlerdata);
 
-				menuPlaySound(MENUSOUND_SELECT);
+				if (!(item->flags & MENUITEMFLAG_LIST_SILENTSELECT)) {
+					menuPlaySound(MENUSOUND_SELECT);
+				}
 
 				if (handlerdata.list.unk04 == 2) {
 					inputs->start = false;

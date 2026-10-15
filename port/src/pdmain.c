@@ -74,6 +74,7 @@
 #include "types.h"
 #include "system.h"
 #include "accessibility/accessibility.h"
+#include "accessibility/accessibility_glossary.h"
 #include "accessibility/accessibility_beacon.h"
 #include "accessibility/accessibility_cane.h"
 #include "accessibility/accessibility_compass.h"
@@ -526,6 +527,7 @@ void mainLoop(void)
 			}
 		}
 
+		accessibilityGlossaryStop();
 		accessibilityBeaconReset("stage_stop", true);
 		accessibilityCaneReset("stage_stop");
 		accessibilityCompassReset("stage_stop");

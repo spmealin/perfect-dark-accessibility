@@ -84,6 +84,33 @@ This means focus identity is centralized but accessible names and values are typ
 
 `src/game/mainmenu.c` defines the main menu and many dynamic handlers. A generic menu hook should narrate those definitions without adding calls to every individual menu.
 
+### Accessibility options and audio previews
+
+**Confirmed:** Extended Options links to a port-owned Accessibility dialog and
+native Audio glossary list. Menu callbacks delegate cue naming, activation,
+timing and cancellation to `accessibility_glossary.c`; they do not query the
+world, edit configuration, or call speech directly. Existing generic menu
+narration reads the list without a new gameplay/menu observer hook. Back uses
+the game's localized string; new labels are accessibility-owned English
+vocabulary pending a separate translation catalog.
+
+The glossary borrows existing procedural voices through an exclusive
+main-thread preview transaction. Its list uses the generic type-specific
+`MENUITEMFLAG_LIST_SILENTSELECT` flag to suppress only its activation beep;
+navigation, Back and all unflagged menus retain normal audio. The list flag
+shares a bit with the slider-only hide-value flag, matching the menu system's
+existing type-specific aliases, and is read only by the list tick function.
+Ordinary gameplay commands, including menu
+suppression resets, are ignored only while that transaction owns the voices.
+The audio side receives atomic commands, clears residual example tails at
+preview boundaries and enforces a sample-count duration with a short fade.
+Closing the dialog, changing focus, stage teardown and shutdown release preview
+ownership. Normal gameplay scheduling and saved scanner settings are unchanged.
+No extra voice, game channel, collision query or runtime allocation is needed.
+Synthetic cue inputs demonstrate current DSP rather than approximate recordings.
+The project owner accepted the basic glossary workflow and follow-up fixes;
+full sound-recognition, visual-layout and independent-user validation remain open.
+
 ### HUD messages, subtitles, and dialogue
 
 `src/game/hudmsg.c:hudmsgCreateFromArgs` is the common sink used by the public HUD-message wrappers. After the native subtitle-option and alive checks, a semantic hook publishes each message before the visual queue's duplicate and capacity policies. This preserves every back-to-back pickup event for speech without changing which messages the sighted HUD allocates or renders. The accessibility adapter still excludes in-game and cutscene subtitle types.
@@ -154,6 +181,7 @@ src/accessibility/
   accessibility_beacon.c         object, door, pickup, and non-hostile-character scanners
   accessibility_cane.c           live nine-angle movement/terrain orientation cue
   accessibility_compass.c        cardinal-crossing speech and numbered click policy
+  accessibility_glossary.c       sound catalog, synthetic previews, bounded menu playback
   accessibility_hazard.c         damaging-laser semantic adapter and sweep policy
   accessibility_projectile.c     hostile-rocket detection, ranking, and warning policy
   accessibility_hill.c           King of the Hill center and native-radar guide policy
@@ -176,6 +204,7 @@ src/accessibility/
 src/include/accessibility/
   *.h                            narrow contracts corresponding to the modules above
 port/src/accessibility/
+  accessibility_options.c        native accessibility and audio-glossary dialogs
   accessibility_tone.c           fixed procedural mixer and atomic command bridge
   speech_null.c                   unavailable backend for non-Windows targets
   speech_prism.c                  dynamically loaded Windows Prism backend
@@ -651,6 +680,9 @@ This table records implemented and anticipated changes to established files so f
 
 | Established file | Proposed narrow hook or reason | Semantic payload | Why polling alone may be insufficient | Status |
 | --- | --- | --- | --- | --- |
+| `src/game/menuitem.c`, `src/include/constants.h` (glossary activation) | Generic opt-in silent list selection flag, used only by the audio glossary | Per-list presentation flag; no accessibility state or policy in the engine | The native list tick unconditionally overlays a selection beep after activation | Implemented; only flagged lists skip the beep; navigation, Back, and unflagged controls are unchanged |
+| `port/src/optionsmenu.c` | Link Extended Options to the port-owned Accessibility dialog | Native dialog pointer and port entry label | Discoverable controller/keyboard access without a new shortcut | Implemented: Accessibility → Audio glossary; live settings remain future work |
+| `port/src/pdmain.c` (glossary teardown) | Cancel the glossary before stage-stop gameplay resets | Release exclusive preview ownership and voices | A stage transition can bypass normal dialog closing | Implemented as one main-thread cancellation call |
 | `CMakeLists.txt` | Register core sources, including shared world semantics, select exactly one native/null speech backend, copy Windows runtimes, and define the clean Windows ZIP target | Build platform/configuration only | `src/accessibility` is outside the game glob; platform backends must not compile together; package staging must never admit ROM, save, log, or personal configuration paths | Implemented through the Windows redistributable target |
 | `port/src/main.c` | Initialize after `configInit`; shut down in `cleanup` | Lifecycle and logger availability | First UI may occur before a later tick; resources need ordered shutdown | Implemented in Milestone 2 with two calls |
 | `port/src/system.c`, `port/include/system.h` | Expose monotonic microsecond timing and read-only process-memory totals | Timing plus Windows working-set/private-byte values when available | Backend-call latency, bounded scan cost, and suspected long-session growth need a shared platform boundary rather than feature-specific native APIs | Implemented; non-Windows memory queries return unavailable while timing remains portable |
@@ -679,7 +711,7 @@ This table records implemented and anticipated changes to established files so f
 | `port/include/input.h` | Use provisional context-sensitive PC F1 through F12 accessibility and diagnostic keys and expose modifier bits | Development-only action identifiers | Gameplay uses F1 for player status and team-only Shift+F1 for team status; Shift+F2 captures diagnostic state; Combat Simulator uses F3 for a radar pulse and Shift+F3 for contact alerts; plain F4 controls the cane, Shift+F4 controls the compass, F5/F6/F8 scanners, F7 people, and F9–F12 markers; menus retain their own contexts; modified OS/debug chords must not trigger unmodified actions | F1–F3 and F10–F12 are named SDL scancodes; replacement of player-facing shortcuts by Milestone 6 actions/settings remains required |
 | `port/src/input.c` | Add configurable accessibility actions or a dispatch boundary | Repeat, status, beacon/scan, cancel, navigation commands | Current binding model represents game controls, not a separate action set | Proposed for Milestone 6; provisional keys require no binding-model change |
 | `port/src/input.c`, `port/src/optionsmenu.c`, `src/include/constants.h`, `src/game/bondmove.c` | Add a configurable reset-view gameplay action using the unused extended control bit | Pressed edge from End, R3, or a player-selected replacement binding | Gives a deterministic horizontal-orientation recovery command without changing yaw or bypassing the binding system | Implemented as `CK_1000`/`BUTTON_RESET_VIEW`; PC defaults are End and right-stick click |
-| `port/src/optionsmenu.c` | Add an accessibility settings entry/dialog | Existing registered values, including proven beacon actions | Users need discoverable control without editing `pd.ini` | Proposed for Milestone 6 after beacon behavior is tested |
+| `port/src/optionsmenu.c` | Add live accessibility settings controls | Existing registered values, including proven beacon actions | Users need discoverable control without editing `pd.ini` | Future work; the Accessibility menu and Audio glossary entry are implemented |
 
 `src/game/player.c` is a confirmed future semantic source but does not need Milestone 4 hooks. `src/game/mainmenu.c` has one read-only semantic-provider case for its custom-rendered mission list; it combines the same localized location and subtitle fields drawn by the renderer and appends the visible difficulty-completion state, while containing no speech policy.
 

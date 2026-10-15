@@ -287,6 +287,7 @@ set(SRC_ACCESSIBILITY
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_cane_path_query.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_compass.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_combat_radar.c"
+  "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_glossary.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_hazard.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_hill.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_hud.c"

@@ -1651,6 +1651,8 @@
 #define MENUITEMFLAG_SLIDER_FAST             0x00000800
 #define MENUITEMFLAG_ADJUSTWIDTH             0x00001000
 #define MENUITEMFLAG_SLIDER_HIDEVALUE        0x00002000
+/* Type-specific alias: list activation can supply its own audible feedback. */
+#define MENUITEMFLAG_LIST_SILENTSELECT       0x00002000
 #define MENUITEMFLAG_DARKERBG                0x00004000
 #define MENUITEMFLAG_LABEL_HASRIGHTTEXT      0x00008000
 #define MENUITEMFLAG_00010000                0x00010000

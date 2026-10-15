@@ -6,6 +6,7 @@
 #include "fs.h"
 #include "system.h"
 #include "accessibility/accessibility.h"
+#include "accessibility/accessibility_glossary.h"
 #include "accessibility/accessibility_announcement.h"
 #include "accessibility/accessibility_beacon.h"
 #include "accessibility/accessibility_cane.h"
@@ -554,6 +555,7 @@ void accessibilityShutdown(void)
 	}
 
 	g_AccessibilityShutdownComplete = 1;
+	accessibilityGlossaryStop();
 	accessibilityBeaconReset("shutdown", false);
 	accessibilityCaneReset("shutdown");
 	accessibilityCompassReset("shutdown");

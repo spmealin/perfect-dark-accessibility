@@ -47,6 +47,8 @@ If the main menu is not spoken, see
 
 - Screen-reader narration for menus, mission briefings, objectives, HUD
   messages, weapon changes, results screens, and other important text.
+- An in-game audio glossary under Extended Options → Accessibility, with
+  playable examples of accessibility cues and their important variants.
 - Spatial scanners for doors, interactable objects, pickups, friendly or
   neutral characters, enemies, hazards, and supported mission targets.
 - A virtual cane that sweeps the space ahead and describes barriers, openings,

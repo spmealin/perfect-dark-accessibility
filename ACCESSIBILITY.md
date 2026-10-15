@@ -99,6 +99,41 @@ Speech covers much more than the focused menu control. Current support includes:
 Press F5 when a menu's static information was spoken too quickly or focus alone
 does not repeat it.
 
+## Audio glossary
+
+Open **Extended Options → Accessibility → Audio glossary** from the game's
+options menus. This uses the ordinary menu font, scrolling list, navigation,
+activation button, and Back control; no new keyboard shortcut is required.
+
+Moving through the list speaks the cue name without playing it. Activate an
+entry to hear one example, and activate it again to replay. Continuous sounds
+have short demonstrations rather than looping indefinitely. The usual selection
+beep is suppressed for previews so it cannot mask the example; navigation,
+Back, and other menus retain their normal sounds. Moving to another
+entry, selecting Back, or closing the glossary stops playback.
+
+The list covers all current accessibility sound families and their meaningful
+variants: object, door, pickup and character scanners; enemy presence, elevation,
+precision guidance and lock-on; head/arm and through-glass locks; range and
+special-device targeting; cane barriers, contours, stairs, ladders, crouch
+passages, drops and vehicle collisions; lasers and rockets; tracker/IR and
+Combat Simulator radar; hill status; numbered player markers and removal;
+mission landmarks, vulnerable spikes and intact pillars; scanner/cane mode
+confirmations, compass directions, stance and weapon-function changes.
+X-Ray uses the normal scanner sounds rather than a separate cue.
+
+Examples use the actual procedural sound generators with simulated positions
+and terrain, not recorded game assets or live scanning. They work while menus
+suspend gameplay cues and do not enable features or change saved settings.
+Your configured cue volumes and pitches apply. A zero-volume cue remains
+silent, and the global `Accessibility.Enabled` switch must be enabled.
+The initial glossary labels are English-only.
+
+The friendly-combat-character example plays two full on/off cycles of its
+upper note (four seconds). The localized Back entry is the last row in the
+sound list, reachable with the same navigation controls; the ordinary cancel
+button also returns to Accessibility.
+
 ## World scanners
 
 Four player-controlled scanners provide spatial sounds during gameplay:

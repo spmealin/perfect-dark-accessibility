@@ -1,5 +1,22 @@
 # Player changelog
 
+## v0.92 — October 15, 2026
+
+### In-game audio glossary
+
+- Added **Extended Options → Accessibility → Audio glossary**, available through the normal options menus. Use the usual keyboard or controller navigation and activation controls; no new shortcut is required.
+- Browse 92 named examples covering all current accessibility sound families and important variants: scanners, enemy presence and targeting, body-region and through-glass locks, cane navigation, hazards, devices, radar, player and mission landmarks, compass, stance, and confirmation sounds.
+- Moving through the list reads the cue name without playing it. Activate an entry to hear one example, or activate it again to replay. Continuous sounds use bounded demonstrations, and changing focus or leaving the menu stops playback.
+- Sound previews use the actual gameplay sound generators and respect existing volume and pitch settings without changing scanner selections or saved preferences. The normal selection beep is suppressed for previews so it does not mask the example; other menus retain their normal sounds.
+- The friendly-combat-character example plays two full upper-note on/off cycles, making it easier to distinguish from the steady neutral-character drone.
+- A localized **Back** entry at the bottom of the sound list returns to Accessibility. The ordinary cancel/back command also works.
+
+### Testing and upgrade notes
+
+- The project owner confirmed the glossary workflow, selection-beep fix, longer friendly-character demonstration, and Back navigation. Automated playback and cleanup checks cover all 92 entries; this does not establish that every cue is recognizable to every player.
+- Glossary names are currently English-only. Existing keyboard shortcuts and gameplay cue behavior are unchanged.
+- Download and extract the complete Windows package, keeping its executable and DLLs together. Supply your own supported ROM; no ROM, extracted game assets, saves, personal settings, logs, or diagnostic captures are included.
+
 ## v0.91 — October 11, 2026
 
 Player-facing changes since the initial v0.90 release (published under the

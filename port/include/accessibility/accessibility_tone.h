@@ -81,6 +81,12 @@ struct accessibilitytonediagnostics {
 #endif
 
 void accessibilityToneSet(s32 enabled, f32 frequencyhz);
+/* Main-thread exclusive preview transaction. Existing gameplay commands are
+ * ignored until Stop; the same mixer/DSP renders the menu's example. */
+void accessibilityTonePreviewBegin(void);
+void accessibilityTonePreviewCommit(s32 durationms);
+void accessibilityTonePreviewCommands(s32 enabled);
+void accessibilityTonePreviewStop(void);
 void accessibilityToneSetAlignment(s32 enabled, f32 frequencyhz,
 		s32 patternflags);
 void accessibilityTonePlayChirp(f32 frequencyhz, f32 volume, f32 pan);

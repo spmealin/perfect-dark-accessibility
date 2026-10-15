@@ -14,6 +14,7 @@
 #include "video.h"
 #include "input.h"
 #include "config.h"
+#include "accessibility/accessibility_options.h"
 
 static s32 g_ExtMenuPlayer = 0;
 static struct menudialogdef *g_ExtNextDialog = NULL;
@@ -1963,6 +1964,14 @@ struct menuitem g_ExtendedMenuItems[] = {
 		(uintptr_t)"Audio\n",
 		0,
 		(void *)&g_ExtendedAudioMenuDialog,
+	},
+	{
+		MENUITEMTYPE_SELECTABLE,
+		0,
+		MENUITEMFLAG_SELECTABLE_OPENSDIALOG,
+		(uintptr_t)&accessibilityOptionsMenuText,
+		0,
+		(void *)&g_AccessibilityOptionsMenuDialog,
 	},
 	{
 		MENUITEMTYPE_SELECTABLE,
