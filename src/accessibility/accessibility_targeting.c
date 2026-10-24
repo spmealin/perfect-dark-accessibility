@@ -48,7 +48,9 @@
 #define ACCESSIBILITY_TARGETING_PRECISION_PERIOD_MS 160
 #define ACCESSIBILITY_TARGETING_PRECISION_DURATION_MS 100
 #define ACCESSIBILITY_TARGETING_PRECISION_PAN_SCALE 1.75f
-#define ACCESSIBILITY_TARGETING_PRECISION_VERTICAL_DEADZONE 0.025f
+#define ACCESSIBILITY_TARGETING_PRECISION_DEADZONE 0.0025f
+#define ACCESSIBILITY_TARGETING_PRECISION_MIN_PAN 0.16f
+#define ACCESSIBILITY_TARGETING_PRECISION_MIN_PITCH_EXPONENT 0.14f
 #define ACCESSIBILITY_TARGETING_PRECISION_VERTICAL_LIMIT 0.5f
 #define ACCESSIBILITY_TARGETING_PRECISION_FREQUENCY_SMOOTHING 0.65f
 #define ACCESSIBILITY_TARGETING_PRECISION_SWITCH_MARGIN 0.08f
@@ -95,6 +97,7 @@ struct accessibilitytargetingcombatslot {
 	s32 precisionguidance;
 	f32 frequencyhz;
 	s32 nextcadencelog60;
+	s32 nextprecisionlog60;
 };
 
 struct accessibilitytargetingthreatknown {
@@ -1235,27 +1238,46 @@ static f32 accessibilityTargetingCombatElevationFrequency(
 	return basefrequency * multiplier;
 }
 
+/* Shape only the audio error, never target eligibility or the weapon ray.
+ * Keep a noticeable direction outside a small jitter band instead of letting
+ * a near miss become acoustically indistinguishable from the reference. */
+static f32 accessibilityTargetingPrecisionMagnitude(f32 offset,
+		f32 limit, f32 minimum)
+{
+	f32 magnitude;
+	f32 normalized;
+
+	if (!isfinite(offset)) return 0.0f;
+	magnitude = fabsf(offset);
+	if (magnitude <= ACCESSIBILITY_TARGETING_PRECISION_DEADZONE) return 0.0f;
+	if (magnitude >= limit) return 1.0f;
+	normalized = (magnitude - ACCESSIBILITY_TARGETING_PRECISION_DEADZONE)
+			/ (limit - ACCESSIBILITY_TARGETING_PRECISION_DEADZONE);
+	return minimum + (1.0f - minimum) * sqrtf(normalized);
+}
+
+static f32 accessibilityTargetingPrecisionPan(f32 offset)
+{
+	f32 magnitude = accessibilityTargetingPrecisionMagnitude(offset,
+			1.0f / ACCESSIBILITY_TARGETING_PRECISION_PAN_SCALE,
+			ACCESSIBILITY_TARGETING_PRECISION_MIN_PAN);
+	return offset < 0.0f ? -magnitude : magnitude;
+}
+
 static f32 accessibilityTargetingPrecisionFrequency(
 		const struct accessibilitytargetingcandidate *candidate,
 		f32 basefrequency, s32 *elevationzone)
 {
 	f32 offset = candidate->verticalaimerrornormalized;
-	f32 magnitude = fabsf(offset);
-	f32 normalized;
+	f32 normalized = accessibilityTargetingPrecisionMagnitude(offset,
+			ACCESSIBILITY_TARGETING_PRECISION_VERTICAL_LIMIT,
+			ACCESSIBILITY_TARGETING_PRECISION_MIN_PITCH_EXPONENT);
 	f32 multiplier;
 
-	if (magnitude <= ACCESSIBILITY_TARGETING_PRECISION_VERTICAL_DEADZONE) {
+	if (normalized == 0.0f) {
 		*elevationzone = 0;
 		return basefrequency;
 	}
-
-	if (magnitude > ACCESSIBILITY_TARGETING_PRECISION_VERTICAL_LIMIT) {
-		magnitude = ACCESSIBILITY_TARGETING_PRECISION_VERTICAL_LIMIT;
-	}
-	normalized = (magnitude
-			- ACCESSIBILITY_TARGETING_PRECISION_VERTICAL_DEADZONE)
-			/ (ACCESSIBILITY_TARGETING_PRECISION_VERTICAL_LIMIT
-				- ACCESSIBILITY_TARGETING_PRECISION_VERTICAL_DEADZONE);
 
 	if (offset > 0.0f) {
 		*elevationzone = 1;
@@ -1270,6 +1292,21 @@ static f32 accessibilityTargetingPrecisionFrequency(
 	}
 
 	return basefrequency * multiplier;
+}
+
+static f32 accessibilityTargetingPrecisionSmoothFrequency(
+		const struct accessibilitytargetingcombatslot *voice,
+		f32 targetfrequency, s32 elevationzone)
+{
+	/* Don't interpolate through the level pitch when the required correction
+	 * changes sign, or linger on the previous correction after reaching level.
+	 * The mixer still interpolates frequencies within each audio buffer. */
+	if (!voice->precisionguidance || elevationzone == 0
+			|| elevationzone != voice->elevationzone) {
+		return targetfrequency;
+	}
+	return voice->frequencyhz + (targetfrequency - voice->frequencyhz)
+			* ACCESSIBILITY_TARGETING_PRECISION_FREQUENCY_SMOOTHING;
 }
 
 static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
@@ -1408,11 +1445,12 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 		}
 
 		voice = &g_AccessibilityTargetingCombatSlots[slot];
-		if (!camera || precisionguidance) {
+		if (precisionguidance) {
+			voice->frequencyhz = accessibilityTargetingPrecisionSmoothFrequency(
+					voice, elevationfrequency, elevationzone);
+		} else if (!camera) {
 			voice->frequencyhz += (elevationfrequency - voice->frequencyhz)
-					* (precisionguidance
-						? ACCESSIBILITY_TARGETING_PRECISION_FREQUENCY_SMOOTHING
-						: ACCESSIBILITY_TARGETING_COMBAT_ELEVATION_SMOOTHING);
+					* ACCESSIBILITY_TARGETING_COMBAT_ELEVATION_SMOOTHING;
 		}
 
 		volume = accessibilityTargetingCalculateVolumeFromDistance(
@@ -1430,12 +1468,28 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 		normalizedpan = ((f32)pan - (f32)AL_PAN_CENTER)
 				/ (f32)AL_PAN_CENTER;
 		if (precisionguidance) {
-			normalizedpan = record->candidate.horizontalaimerrornormalized
-					* ACCESSIBILITY_TARGETING_PRECISION_PAN_SCALE;
-			if (normalizedpan < -1.0f) {
-				normalizedpan = -1.0f;
-			} else if (normalizedpan > 1.0f) {
-				normalizedpan = 1.0f;
+			normalizedpan = accessibilityTargetingPrecisionPan(
+					record->candidate.horizontalaimerrornormalized);
+			if (restart || !voice->precisionguidance
+					|| elevationzone != voice->elevationzone
+					|| frame60 >= voice->nextprecisionlog60) {
+				accessibilityLogEvent("targeting", "precision_mapping",
+						"frame=%d propnum=%d category=%d mapping=close_in_sqrt_v1 horizontal_error=%.6f vertical_error=%.6f deadzone=%.6f min_pan=%.3f min_pitch_exponent=%.3f pan=%.4f base_frequency_hz=%.2f target_frequency_hz=%.2f smoothed_frequency_hz=%.2f elevation_zone=%d alignment_active=%d aim_loss_grace_frames=%d anchor_source=%d",
+						frame60, voice->identity.propnum, record->candidate.category,
+						record->candidate.horizontalaimerrornormalized,
+						record->candidate.verticalaimerrornormalized,
+						ACCESSIBILITY_TARGETING_PRECISION_DEADZONE,
+						ACCESSIBILITY_TARGETING_PRECISION_MIN_PAN,
+						ACCESSIBILITY_TARGETING_PRECISION_MIN_PITCH_EXPONENT,
+						normalizedpan, combatfrequency, elevationfrequency,
+						voice->frequencyhz, elevationzone,
+						g_AccessibilityTargetingAlignmentActive
+							&& g_AccessibilityTargetingHasAimedIdentity
+							&& accessibilityTargetingIdentityEqual(&voice->identity,
+									&g_AccessibilityTargetingAimedIdentity),
+						g_AccessibilityTargetingAimLossFrames,
+						record->candidate.precisionaimsource);
+				voice->nextprecisionlog60 = frame60 + TICKS(60);
 			}
 		}
 		restart |= normalizedvolume > 0.0f && !voice->audible;

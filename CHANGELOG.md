@@ -1,5 +1,12 @@
 # Player changelog
 
+## Unreleased
+
+- Precision aiming keeps small remaining left/right and up/down corrections
+  more noticeable, with a narrower vertical level band and quicker response
+  when the required vertical correction changes direction. Confirmed lock-on
+  tones, body-part feedback, target selection and hit detection are unchanged.
+
 ## v0.92 — October 15, 2026
 
 ### In-game audio glossary

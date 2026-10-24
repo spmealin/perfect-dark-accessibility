@@ -196,6 +196,15 @@ The centered aiming tone is separate from the positioned enemy sound:
 The system reports aim and target state; it does not change weapon spread,
 damage, projectile behavior, or mission rules.
 
+The current precision-aim experiment keeps left/right separation and the
+up/down pitch difference stronger near the target. Its small level band is
+ten times narrower than before. The reference-first, altered-second beep
+remains: higher means move your aim up, lower means move it down. These
+pulsed directions are acquisition guidance, not confirmation of a hit.
+The separate confirmed lock-on tone, including body-region and through-glass
+feedback, is unchanged. Target-size-relative scaling is not part of this
+first experiment.
+
 Special devices reuse the alignment tone only for objects the device can
 actually affect. This includes supported Data Uplink, Door Decoder, ECM Mine,
 Reprogrammer, CamSpy photograph, security-hub, taxi, terminal, panel, and

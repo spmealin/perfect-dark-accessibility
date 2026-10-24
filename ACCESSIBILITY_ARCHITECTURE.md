@@ -524,6 +524,25 @@ The compass is independent of virtual-cane policy even though the two provisiona
 
 Each crossing sends one atomic command to a dedicated centered procedural voice: North has one 30 ms 600 Hz click, East two, South three, and West four, separated by 65 ms. A short harmonic component and decaying envelope distinguish the cue from pure scanner sine chirps. Speech mode publishes the matching isolated cardinal label through the announcement boundary with replacement semantics at the same main-thread event; sound-only mode makes no ongoing speech request. Mode changes use one-time spoken confirmations in every mode so a screen-reader user can identify the resulting selection. The audio path is fixed-storage and allocation-free. Menu, pause, cutscene, death, unsupported-player, stage-stop, observer-change, and shutdown scopes stop a partial pattern while retaining the configured mode.
 
+### Close-in precision aiming experiment
+
+The 2026-10-24 experiment is confined to `accessibility_targeting.c`: a bounded,
+value-only square-root audio mapping strengthens small residual pan/pitch
+errors, with a 0.0025 viewport-half-extent jitter band, minimum pan 0.16 and
+minimum vertical exponent 0.14. Precision frequency smoothing snaps on entry,
+vertical sign change and entry to level, but retains the existing interpolation
+within one direction. It consumes the same immutable semantic aim coordinates
+and geometry anchors. Target selection, exact alignment, the native attack ray,
+body-region feedback, aim-loss grace, scope/zoom handling, cadence and mixer DSP
+are unchanged. No upstream hook, public contract, world query, voice, allocation
+or configuration key is added. Target-size normalization is deliberately deferred
+until listening tests establish whether this simpler audio change is useful.
+Rate-limited `targeting/precision_mapping` diagnostics expose input errors and
+actual output alongside matching lock/grace state. Synthetic fixtures exercise
+the real private policy and unchanged exact-lock frequencies. The owner reported
+improved usability and accepted committing the experiment on 2026-10-24;
+broader independent-user and frame-time evidence remain open.
+
 ### Target and scanner
 
 The shared accessibility relationship adapter applies native blue-sight protection first, classifies `TEAM_NONCOMBAT` as neutral because native AI acquisition explicitly excludes that team, then applies native friendly and generic enemy comparisons. Targeting, Combat Simulator radar classification, and the F7 people scanner consume this one result, so perceptible non-combatants use the neutral-character drone rather than a hostile cue and script-driven team changes reclassify without stage or model allowlists. Cloak/IR, hidden, untargetable, life/action, render, and line-of-sight state remain separate eligibility filters.

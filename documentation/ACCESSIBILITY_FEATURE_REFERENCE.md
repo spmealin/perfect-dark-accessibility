@@ -220,6 +220,41 @@ Pointing directly at an admitted hostile starts the responsive alignment tone on
 
 Characters retain the game's finalized character-target selection. A two-frame release grace keeps the tone stable across a transient one- or two-frame loss only while that same living character remains visible, hostile, shootable, and unobstructed; a different target, invalid state, scope transition, or a third lost frame stops or changes it immediately. Security cameras, non-turret threat-detector objects, and breakable route obstructions use the same-frame non-random weapon query ray already used to determine where a shot would land and receive no release grace. Automated turrets use that exact hit when available. Turret and security-camera presence no longer relies on a single ray to the object's setup origin: five bounded screen samples test actual rendered model geometry at the center, upper, lower, upper-left, and upper-right regions, and one sampled surface must pass semantic visual line of sight. This keeps a partly exposed, shootable turret audible when its origin is behind cover while rejecting a fully occluded model. If the attack ray hits no prop, an active hostile turret may also align when the live crosshair lies within three logical screen pixels of its finite projected model bounds. The closest bounds and then closest center win when multiple turrets overlap. This turret-only tolerance still requires the model to be rendered in the current viewport and to have a validated visible geometry sample; an exact hit on a door, character, glass pane, or any other prop suppresses the fallback. It changes only feedback and never pulls, snaps, redirects, or otherwise alters weapon aim, so random spread and visible-model gaps can still make a shot hit or miss independently of the tone. Characters in dying, dead, knockout-fall, or knocked-out actions and cameras that become disabled, deactivated, or destroyed are removed from the audible combat slots; detector objects disappear when the native threat list removes them or the player leaves the detector function. Firing-range targets retain their scoring-center pitch mapping, procedural round robin, and back-facing shootability rule. Switching between firing-range and combat profiles clears prior identities and owned sound state.
 
+#### Close-in precision mapping experiment (2026-10-24)
+
+Manual-aim guidance now uses a square-root close-in mapping rather than linear
+horizontal pan and nearly linear pitch exponents. Both axes have a jitter band
+of 0.0025 of the viewport half-extent: 0.125% of its full dimension. This makes
+the vertical level band ten times narrower than its previous 0.025 half-height
+threshold (about 1.35 rather than 13.5 pixels each way at 1080p). Outside that
+band, horizontal pan starts at magnitude 0.16 and grows monotonically to full
+pan at the existing saturation threshold of 1/1.75 viewport half-widths.
+Vertical direction starts at exponent 0.14 and grows to one at the existing
+0.5 half-height limit, retaining the two-thirds/five-thirds frequency endpoints.
+The first half of the beep remains the reference carrier. On precision entry,
+vertical sign changes or entry into the level band, the second-half frequency
+immediately takes the new mapped value instead of temporarily averaging through
+the wrong direction. Same-direction changes retain 0.65 smoothing; ordinary
+non-aim enemy elevation retains its original mapping and smoothing.
+
+This first experiment changes audio policy only. The viewport-normalized error,
+anchor selection and geometry-query budget are unchanged; target-relative
+scaling remains a possible later step. Guidance stays pulsed at 100 ms every
+160 ms. It does not create or enlarge a lock, modify native aim/hit detection,
+remove character aim-loss grace, or change body-region/protected/glass lock
+semantics. A level or centered guide is not by itself a confirmed firing solution.
+
+`targeting/precision_mapping` records raw normalized errors, shaped pan, target
+and smoothed frequency, elevation zone, anchor source and matching alignment
+state, including aim-loss grace, on entry/direction changes and about once per
+second. It requires no new configuration, key, speech or audio voice. The
+value-only precision mapping fixtures cover bounds, monotonicity, direction,
+resolution invariance, sign-change smoothing and unchanged lock frequencies.
+See `documentation/ACCESSIBILITY_PRECISION_AIM_EXPERIMENT.md` for the test plan.
+On 2026-10-24 the project owner reported that this mapping was working better
+and requested committing it. Detailed weapon/zoom/target coverage, independent
+blind-user testing and live frame-time evidence remain open.
+
 ### Weapon-function state cues
 
 `Accessibility.WeaponFunctionCues` defaults to `1` and is subordinate to `Accessibility.Enabled`. During first-person gameplay, the accessibility layer observes the same effective primary/secondary value used by the gun-function visual indicator after each player's weapon processing. A successful change to primary plays one centered 1000 Hz beep; a successful change to secondary plays two. Each beep is 35 ms with a 30 ms gap, a 2 ms attack, and a 5 ms release. When the game's Show Gun Function option is enabled, the exact localized function name drawn beside the ammo display is also spoken once at normal, non-interrupting priority under `Accessibility.HudMessages`; this direct-rendered label does not pass through the common HUD-message queue. Initial state, stage entry, and changing weapons establish a new baseline silently, so equipping a weapon does not masquerade as a function-toggle command or repeat its stored firing mode.
