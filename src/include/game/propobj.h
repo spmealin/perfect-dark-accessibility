@@ -205,6 +205,7 @@ s32 objTickPlayer(struct prop *prop);
 Gfx *propsRenderBeams(Gfx *gdl);
 void tvscreenSetCmdlist(struct tvscreen *screen, u32 *cmdlist);
 void tvscreenSetImageByNum(struct tvscreen *screen, s32 imagenum);
+bool tvscreenIsShowingImage(const struct tvscreen *screen, s32 imagenum);
 void tvscreenSetTexture(struct tvscreen *screen, s32 texturenum);
 Gfx *tvscreenRender(struct model *model, struct modelnode *node, struct tvscreen *screen, Gfx *gdl, s32 arg4, s32 arg5);
 void objRenderProp(struct prop *prop, struct modelrenderdata *renderdata, bool xlupass);

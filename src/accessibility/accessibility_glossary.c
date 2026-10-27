@@ -116,6 +116,7 @@ static const struct glossaryentry g_Glossary[] = {
 	{ "Double-crouching", STANCE, CROUCHPOS_SQUAT, 180 },
 	{ "Weapon primary function", FUNCTION, 0, 55 },
 	{ "Weapon secondary function", FUNCTION, 1, 120 },
+	{ "X-Ray puzzle: reset switch", OBJECT, 1, 120 },
 };
 
 static s32 g_GlossaryPlaying = -1;
@@ -169,7 +170,7 @@ void accessibilityGlossaryPlay(s32 index)
 		accessibilityToneSetDoorSlot(0, 1, 1.0f, 0.0f, 1);
 		break;
 	case OBJECT:
-		accessibilityTonePlayChirp(880.0f, 1.0f, 0.0f);
+		accessibilityTonePlayChirp(v ? 660.0f : 880.0f, 1.0f, 0.0f);
 		break;
 	case PICKUP:
 		accessibilityTonePlayChirpPattern(880.0f, 1.0f, 0.0f, 3, 1.0f);

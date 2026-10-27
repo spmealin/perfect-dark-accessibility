@@ -25,6 +25,7 @@
 #include "accessibility/accessibility_beacon.h"
 #include "accessibility/accessibility_landmark.h"
 #include "accessibility/accessibility_log.h"
+#include "accessibility/accessibility_interaction.h"
 #include "accessibility/accessibility_observer.h"
 #include "accessibility/accessibility_relationship.h"
 #include "accessibility/accessibility_tone.h"
@@ -46,6 +47,7 @@
 #define ACCESSIBILITY_BEACON_DOOR_SILENT_DISTANCE 3166.6667f
 #define ACCESSIBILITY_BEACON_DOOR_FREQUENCY_HZ 440.0f
 #define ACCESSIBILITY_BEACON_OBJECT_FREQUENCY_HZ 880.0f
+#define ACCESSIBILITY_BEACON_RESET_FREQUENCY_HZ 660.0f
 #define ACCESSIBILITY_BEACON_NON_HOSTILE_GAIN 2.0f
 #define ACCESSIBILITY_BEACON_PULSE_TICKS TICKS(45)
 #define ACCESSIBILITY_BEACON_REFRESH_TICKS TICKS(30)
@@ -599,6 +601,7 @@ static s32 accessibilityBeaconObjectEligible(struct prop *prop, u32 *citag, cons
 {
 	struct defaultobj *obj;
 	u32 tag;
+	s32 interactioncue;
 
 	if (!prop || (prop->type != PROPTYPE_OBJ && prop->type != PROPTYPE_WEAPON)) {
 		*reason = "not_object_category";
@@ -662,10 +665,21 @@ static s32 accessibilityBeaconObjectEligible(struct prop *prop, u32 *citag, cons
 		*reason = "object_not_deliberately_interactable";
 		return false;
 	}
+	interactioncue = accessibilityInteractionGetCue(prop);
+	if (interactioncue == ACCESSIBILITY_INTERACTION_COMPLETED
+			|| interactioncue == ACCESSIBILITY_INTERACTION_PENDING) {
+		*reason = interactioncue == ACCESSIBILITY_INTERACTION_COMPLETED
+				? "xray_puzzle_completed" : "xray_puzzle_state_pending";
+		return false;
+	}
 
 	tag = propobjGetCiTagId(prop);
 	*citag = tag;
-	*reason = tag ? "ci_tag" : "native_interaction_semantics";
+	*reason = interactioncue == ACCESSIBILITY_INTERACTION_RESET
+			? "xray_puzzle_reset_switch"
+			: interactioncue == ACCESSIBILITY_INTERACTION_CORRECT
+				? "xray_puzzle_correct_switch"
+				: tag ? "ci_tag" : "native_interaction_semantics";
 	return true;
 }
 
@@ -2600,6 +2614,17 @@ static void accessibilityBeaconPulse(s32 category,
 	s32 pulses = selected->kind == ACCESSIBILITY_BEACON_KIND_PICKUP ? 3 : 1;
 	f32 gain = 1.0f;
 	const char *pattern = "chirp";
+	s32 interactioncue = selected->category == ACCESSIBILITY_BEACON_CATEGORY_OBJECT
+			? accessibilityInteractionGetCue(prop) : ACCESSIBILITY_INTERACTION_DEFAULT;
+
+	/* Refresh again at playback; cached scanner membership must not speak a
+	 * switch that has since turned black, nor retain a stale red/green pitch. */
+	if (interactioncue == ACCESSIBILITY_INTERACTION_COMPLETED
+			|| interactioncue == ACCESSIBILITY_INTERACTION_PENDING) return;
+	if (interactioncue == ACCESSIBILITY_INTERACTION_RESET) {
+		frequencyhz = ACCESSIBILITY_BEACON_RESET_FREQUENCY_HZ;
+		pattern = "xray_reset_chirp";
+	}
 
 	if (selected->kind == ACCESSIBILITY_BEACON_KIND_MOVABLE_PUZZLE) {
 		accessibilityTonePlayMovableLandmark(normalizedvolume, normalizedpan);

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- In Pelagic II, the X-Ray-visible reactor switches now distinguish correct
+  green switches with the normal interaction chirp and red reset switches with
+  a lower chirp. Already-activated black switches are silent and resume their
+  normal sound when a reset turns them green again. Added the reset-switch
+  sound to the audio glossary.
+
 - Precision aiming keeps small remaining left/right and up/down corrections
   more noticeable, with a narrower vertical level band and quicker response
   when the required vertical correction changes direction. Confirmed lock-on

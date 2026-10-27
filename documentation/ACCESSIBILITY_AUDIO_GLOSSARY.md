@@ -33,7 +33,7 @@ dialogue and ordinary game/menu effects are not separate glossary entries.
 Names are English-only accessibility vocabulary pending an accessibility-owned
 localization catalog; no ROM/generated language data is edited.
 
-## Sound inventory (92 entries)
+## Sound inventory (93 entries)
 
 - Door
 - Interactable object
@@ -127,6 +127,7 @@ localization catalog; no ROM/generated language data is edited.
 - Double-crouching
 - Weapon primary function
 - Weapon secondary function
+- X-Ray puzzle: reset switch
 
 ## Implementation and boundaries
 

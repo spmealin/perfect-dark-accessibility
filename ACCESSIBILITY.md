@@ -165,6 +165,17 @@ to its camera and return to Joanna when remote control ends. Interactable and
 pickup scanning pause in CamSpy view because those objects cannot be used or
 collected from the remote camera.
 
+### Pelagic II X-Ray reactor switches
+
+While the X-Ray Scanner reveals the reactor puzzle switches, F5 distinguishes
+their visible states: a green switch uses the normal 880 Hz interaction chirp;
+a red reset switch uses a lower 660 Hz chirp; a black, already-activated switch
+is silent. Resetting the sequence restores the normal chirps as switches return
+to green, on the scanner's normal refresh. This follows the live randomized
+assignments, not fixed locations. The ordinary scanner visibility, range and
+toggle rules still apply; the color distinction is not exposed without X-Ray.
+The audio glossary includes **X-Ray puzzle: reset switch** for the lowered cue.
+
 ## Enemy awareness and targeting
 
 Visible hostiles produce positioned pulses. Their timing and duration change

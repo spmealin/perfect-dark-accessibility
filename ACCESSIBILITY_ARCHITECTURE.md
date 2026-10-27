@@ -543,6 +543,21 @@ the real private policy and unchanged exact-lock frequencies. The owner reported
 improved usability and accepted committing the experiment on 2026-10-24;
 broader independent-user and frame-time evidence remain open.
 
+### X-Ray-visible puzzle interaction states
+
+The interaction-state adapter resolves Pelagic II's eight shuffled aliases and
+reads the live screen-zero program through a native pure query. The existing
+X-Ray semantic-visibility predicate gates the distinction; scanners retain
+their normal eligibility and scheduling. Green keeps the ordinary interaction
+chirp, red uses 660 Hz and black is excluded. Candidate and playback-time checks
+prevent stale state; normal refresh restores newly green switches after a reset.
+Native image selection now shares one internal ID-to-program resolver between
+its unchanged setter and `tvscreenIsShowingImage`. The adapter does not read
+pixels, retain game pointers across stages, duplicate switch activation flags,
+change scripts, or generalize puzzle meanings to arbitrary colored monitors.
+The glossary includes the new cue. Synthetic assignment/transition fixtures are
+not in-game blind-user validation.
+
 ### Target and scanner
 
 The shared accessibility relationship adapter applies native blue-sight protection first, classifies `TEAM_NONCOMBAT` as neutral because native AI acquisition explicitly excludes that team, then applies native friendly and generic enemy comparisons. Targeting, Combat Simulator radar classification, and the F7 people scanner consume this one result, so perceptible non-combatants use the neutral-character drone rather than a hostile cue and script-driven team changes reclassify without stage or model allowlists. Cloak/IR, hidden, untargetable, life/action, render, and line-of-sight state remain separate eligibility filters.
@@ -699,6 +714,7 @@ This table records implemented and anticipated changes to established files so f
 
 | Established file | Proposed narrow hook or reason | Semantic payload | Why polling alone may be insufficient | Status |
 | --- | --- | --- | --- | --- |
+| `src/game/propobj.c`, `src/include/game/propobj.h` (monitor state) | Expose a pure `tvscreenIsShowingImage` query and share the existing image resolver with the unchanged setter | The native screen program selected by image ID | A puzzle's live visual state can lead activation-flag cleanup during resets; copying color/program tables would drift from the renderer | Implemented; no accessibility call or policy added to game code |
 | `src/game/menuitem.c`, `src/include/constants.h` (glossary activation) | Generic opt-in silent list selection flag, used only by the audio glossary | Per-list presentation flag; no accessibility state or policy in the engine | The native list tick unconditionally overlays a selection beep after activation | Implemented; only flagged lists skip the beep; navigation, Back, and unflagged controls are unchanged |
 | `port/src/optionsmenu.c` | Link Extended Options to the port-owned Accessibility dialog | Native dialog pointer and port entry label | Discoverable controller/keyboard access without a new shortcut | Implemented: Accessibility → Audio glossary; live settings remain future work |
 | `port/src/pdmain.c` (glossary teardown) | Cancel the glossary before stage-stop gameplay resets | Release exclusive preview ownership and voices | A stage transition can bypass normal dialog closing | Implemented as one main-thread cancellation call |

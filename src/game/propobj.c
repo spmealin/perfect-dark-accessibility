@@ -11999,7 +11999,7 @@ u32 var8006aae4[] = {
 	tvcmd_restart(),
 };
 
-void tvscreenSetImageByNum(struct tvscreen *screen, s32 imagenum)
+static u32 *tvscreenGetImageCmdlist(s32 imagenum)
 {
 	u32 *image = g_TvCmdlist00;
 
@@ -12062,7 +12062,17 @@ void tvscreenSetImageByNum(struct tvscreen *screen, s32 imagenum)
 		break;
 	}
 
-	tvscreenSetCmdlist(screen, image);
+	return image;
+}
+
+bool tvscreenIsShowingImage(const struct tvscreen *screen, s32 imagenum)
+{
+	return screen && screen->cmdlist == tvscreenGetImageCmdlist(imagenum);
+}
+
+void tvscreenSetImageByNum(struct tvscreen *screen, s32 imagenum)
+{
+	tvscreenSetCmdlist(screen, tvscreenGetImageCmdlist(imagenum));
 }
 
 void tvscreenSetTexture(struct tvscreen *screen, s32 texturenum)

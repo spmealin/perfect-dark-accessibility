@@ -75,6 +75,8 @@ int main(void)
 	const s16 *pcm;
 
 	assert(accessibilityGlossaryGetCount() > 80);
+	assert(g_Glossary[accessibilityGlossaryGetCount() - 1].kind == OBJECT);
+	assert(g_Glossary[accessibilityGlossaryGetCount() - 1].variant == 1);
 	assert(!*accessibilityGlossaryGetName(-1));
 	assert(!*accessibilityGlossaryGetName(accessibilityGlossaryGetCount()));
 	glossaryListHandler(MENUOP_GETOPTIONCOUNT, NULL, &data);

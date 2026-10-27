@@ -315,6 +315,58 @@ until the left hand's actual in-use value changes.
 
 When the active camera is a deployed CamSpy, door scanning transfers to the CamSpy prop, rooms, position, and camera heading on the same logical tick as the visible perspective change. Returning to Joanna transfers it back without requiring F6 to be toggled. Interactable and pickup categories deliberately pause while viewing through the CamSpy because those cues describe things Joanna can physically use or collect, then resume from her position after returning. At that point, the inactive CamSpy itself can enter F8 from Joanna's perspective.
 
+### X-Ray-visible interaction states: Pelagic II reactor switches
+
+`accessibility_interaction.c` resolves the current stage's puzzle aliases
+`0x08`–`0x0f` through `objFindByTagId`; it never assumes physical switch positions.
+The eight Pelagic II multimonitor objects expose their puzzle color through
+screen zero's native TV program. Green (`TVCMDLIST_13`) keeps the existing
+880 Hz F5 chirp, red (`TVCMDLIST_12`) uses a 660 Hz chirp, and completed black
+(`TVCMDLIST_14`) is excluded from the interaction candidates. A wrong switch's
+temporary reset animation (`TVCMDLIST_0F`) retains its lowered cue. Other
+initialization/unknown programs remain silent until a known state is available.
+
+Classification requires the existing X-Ray semantic visibility predicate, so
+the actual device must be active/uninhibited, scanner accessibility enabled,
+the prop rendered in the native X-Ray radius and the supported player context
+valid. Ordinary scanner eligibility, viewport/range/LOS or native X-Ray visibility,
+F5 selection, remote-view and lifecycle gates are unchanged. Outside X-Ray,
+ordinary generic scanner behavior applies without revealing the color class.
+These visual-state semantics apply only to the registered Pelagic puzzle set,
+not every red or green screen elsewhere in the game.
+
+Both candidate collection and pre-playback validation use this state, and the
+pulse path rechecks it to avoid stale pitch or a stale completed cue. Black
+switches return automatically on the normal bounded scanner refresh when the
+script restores green, even during the short interval before activation flags
+clear. The scanner never changes switch scripts, randomization or puzzle rules.
+The pure `tvscreenIsShowingImage` query shares the native image-ID resolver
+with the existing setter; no program table is duplicated. No new voice,
+configuration key, shortcut, speech string or world query is introduced.
+
+The glossary now has 93 entries, including the new lowered reset chirp. Unit
+fixtures cover all 40,320 switch assignments, green/black/reset transitions,
+scope and ordinary eligibility exclusions, and stale playback.
+The native-monitor fixture also checks the real image setter/query across its
+image-ID range, exact puzzle-program identities and unchanged screen state.
+Native gameplay
+and blind-user recognition/sequence-completion validation remain pending.
+Diagnostic candidate reasons distinguish correct, reset, completed and pending
+states; reset pulse records use `pattern=xray_reset_chirp` and 660 Hz.
+
+Verification (2026-10-27): MinGW64 Windows x86-64/ntsc-final RelWithDebInfo
+build passed with advanced diagnostics off; the interaction fixture passed
+with diagnostics off and on, and the native monitor, 93-entry glossary,
+precision-mapping and cane fixtures passed. Existing session `1792856368`
+and the current developer INI confirm accessibility, speech, logging, F5 and
+X-Ray audio enabled; that session predates the change and is not runtime
+acceptance evidence. No automated game launch overwrote the tester's log.
+Test green activation, silence on black, a red reset and restored green chirps
+with X-Ray enabled. Outside X-Ray ordinary generic scanner behavior is retained.
+Rollback requires reverting the switch-state change and rebuilding, with no
+save/config migration. Sound recognition and in-game sequence completion remain
+unvalidated until reported by a blind tester.
+
 ### Non-hostile-character beacons
 
 `Accessibility.NonHostileBeacons` defaults to `1` as the people-scanner backend. Its independent F7 selection is stored in `Accessibility.NonHostileScannerActive`, also defaults to `1`, and persists across orderly game restarts. During unobscured single-player gameplay, F7 toggles positioned cues for nearby living friendly or neutral characters. Each retained person uses a two-oscillator drone: a steady 440 Hz fundamental at 72 percent of the voice and a quieter 550 Hz major third at 28 percent. The upper component remains steady for neutral and protected characters. For characters classified as friendly, the 550 Hz component alternates one second on and one second off while the 440 Hz fundamental remains steady; ten-millisecond edges prevent clicks. Distance attenuation is multiplied by two before a 0.10 mixer gain, producing a maximum 0.20 voice level. Smooth 10 ms gain and pan changes avoid clicks as a person moves, appears, or leaves.
