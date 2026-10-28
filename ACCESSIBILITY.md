@@ -207,6 +207,14 @@ The centered aiming tone is separate from the positioned enemy sound:
 The system reports aim and target state; it does not change weapon spread,
 damage, projectile behavior, or mission rules.
 
+Mines, grenades, rockets, and a deployed Dragon in proximity-mine mode use the
+lower interrupted destructible lock when your exact aim hits them and the
+equipped attack can damage them. This does not depend on who placed the item.
+Ordinary dropped guns do not qualify merely because they are weapon pickups.
+Threat Detector contact alerts remain available, but directly aiming at a
+shoot-detonatable weapon uses this destructible lock, not the solid enemy lock.
+Its volume uses the existing independent `InterruptedTargetingVolume` setting.
+
 The current precision-aim experiment keeps left/right separation and the
 up/down pitch difference stronger near the target. Its small level band is
 ten times narrower than before. The reference-first, altered-second beep

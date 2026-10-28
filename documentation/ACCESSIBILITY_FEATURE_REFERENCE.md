@@ -403,6 +403,19 @@ objects remain aim-only and use the same interrupted lock; they do not gain a
 nearby or off-screen presence sound. Invincible, destroyed, hidden, inactive,
 ordinary decorative glass, and incompatible attacks remain silent.
 
+Weapon props have a separate native damage exception: grenades, timed/remote/
+proximity mines, rockets, homing rockets, grenade rounds, secondary-mode Dragons,
+and weapons flagged `OBJFLAG2_AICANNOTUSE` can detonate even though ordinary
+weapon pickups fail `objIsMortal`. These eligible world weapons use the same
+exact-hit, 396 Hz interrupted destructible lock and independent
+`Accessibility.InterruptedTargetingVolume` (default `0.12`), regardless of owner.
+Held, inactive, hidden, gone, deleting, unhealthy, invincible and incompatible
+targets are excluded; ordinary dropped guns and non-damaging device functions
+do not gain generic destructible locks. Threat Detector discovery/contact
+alerts remain unchanged, but a directly aimed explosive weapon uses the
+interrupted rather than solid enemy lock. No setting, shortcut or speech string
+is added, and no aim tolerance, damage, autoaim or presence range changes.
+
 The firing-range behavior remains a bounded proof. The separate hostile-combat slice covers basic single-player character relationship, occlusion, cloak/IR, elimination, automated-gun state/team semantics, and the native threat-detector sight list. A shared accessibility relationship adapter preserves the engine's special `TEAM_NONCOMBAT` semantics: those characters cannot become hostile merely because their team mask is disjoint from Joanna's, and eligible living, perceptible examples use the F7 friendly/neutral-character drone instead. Broader vehicle/non-character discovery outside the threat-detector sight, target speech/repeat, multiplayer output, and full Milestone 9 blind-user acceptance remain pending.
 
 ### Virtual cane prototype

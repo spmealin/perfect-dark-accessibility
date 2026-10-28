@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Directly aiming at shoot-detonatable mines, grenades, rockets, or a Dragon
+  deployed in proximity-mine mode now gives the lower interrupted destructible
+  lock, including with the Threat Detector active. Ordinary dropped guns do
+  not receive a destructible lock just because they are weapon pickups.
+
 - In Pelagic II, the X-Ray-visible reactor switches now distinguish correct
   green switches with the normal interaction chirp and red reset switches with
   a lower chirp. Already-activated black switches are silent and resume their

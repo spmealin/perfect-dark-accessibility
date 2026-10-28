@@ -904,6 +904,37 @@ static s32 accessibilityTargetingGameChopperCombatCapable(
 				== g_Vars.currentplayer->prop;
 }
 
+/* Mirror objDamage's weapon branch, which runs before objIsMortal. */
+static s32 accessibilityTargetingGameIsDetonatableWeapon(const struct prop *prop)
+{
+	const struct weaponobj *weapon;
+
+	if (!prop || (prop->type != PROPTYPE_WEAPON && prop->type != PROPTYPE_OBJ)
+			|| !prop->obj || prop->obj->type != OBJTYPE_WEAPON) {
+		return false;
+	}
+
+	weapon = (const struct weaponobj *)prop->obj;
+	if (weapon->base.flags2 & OBJFLAG2_AICANNOTUSE) {
+		return true;
+	}
+
+	switch (weapon->weaponnum) {
+	case WEAPON_GRENADE:
+	case WEAPON_TIMEDMINE:
+	case WEAPON_REMOTEMINE:
+	case WEAPON_PROXIMITYMINE:
+	case WEAPON_ROCKET:
+	case WEAPON_HOMINGROCKET:
+	case WEAPON_GRENADEROUND:
+		return true;
+	case WEAPON_DRAGON:
+		return weapon->gunfunc == FUNC_SECONDARY;
+	}
+
+	return false;
+}
+
 static s32 accessibilityTargetingGameCurrentAttackCanDamageObject(
 		const struct prop *prop)
 {
@@ -915,7 +946,8 @@ static s32 accessibilityTargetingGameCurrentAttackCanDamageObject(
 	s32 weaponnum;
 
 	if (!func || !prop
-			|| (prop->type != PROPTYPE_OBJ && prop->type != PROPTYPE_DOOR)
+			|| (prop->type != PROPTYPE_OBJ && prop->type != PROPTYPE_DOOR
+				&& prop->type != PROPTYPE_WEAPON)
 			|| !prop->obj || !objIsHealthy(prop->obj)) {
 		return false;
 	}
@@ -927,6 +959,20 @@ static s32 accessibilityTargetingGameCurrentAttackCanDamageObject(
 			|| func->type == INVENTORYFUNCTYPE_SHOOT_PROJECTILE
 			|| (func->flags & (FUNCFLAG_EXPLOSIVESHELLS
 				| FUNCFLAG_20000000));
+	if (obj->type == OBJTYPE_WEAPON) {
+		/* Do not advertise ordinary dropped guns or device actions as damage. */
+		return accessibilityTargetingGameIsDetonatableWeapon(prop)
+				&& (obj->flags & OBJFLAG_INVINCIBLE) == 0
+				&& ((type == INVENTORYFUNCTYPE_SHOOT
+						&& (obj->flags2 & OBJFLAG2_IMMUNETOGUNFIRE) == 0)
+					|| (explosive
+						&& (obj->flags2 & OBJFLAG2_IMMUNETOEXPLOSIONS) == 0
+						&& (((struct weaponobj *)obj)->weaponnum
+								!= WEAPON_HOMINGROCKET
+							|| weaponnum != WEAPON_REMOTEMINE
+							|| (obj->flags2 & OBJFLAG2_AICANNOTUSE))));
+	}
+
 	conditionalexplosive = (func->flags & (FUNCFLAG_EXPLOSIVESHELLS
 				| FUNCFLAG_20000000)) != 0;
 
@@ -976,7 +1022,8 @@ static s32 accessibilityTargetingGameIsDestroyableObject(
 {
 	struct defaultobj *obj;
 
-	if (!prop || (prop->type != PROPTYPE_OBJ && prop->type != PROPTYPE_DOOR)
+	if (!prop || (prop->type != PROPTYPE_OBJ && prop->type != PROPTYPE_DOOR
+				&& prop->type != PROPTYPE_WEAPON)
 			|| !prop->obj
 			|| !prop->active || (prop->flags & PROPFLAG_ENABLED) == 0) {
 		return false;
@@ -990,8 +1037,30 @@ static s32 accessibilityTargetingGameIsDestroyableObject(
 			&& (obj->flags2 & OBJFLAG2_INVISIBLE) == 0
 			&& (obj->hidden & (OBJHFLAG_DELETING | OBJHFLAG_GONE)) == 0
 			&& objIsHealthy(obj)
-			&& (objIsMortal(obj)
+			&& (obj->type == OBJTYPE_WEAPON
+				? accessibilityTargetingGameIsDetonatableWeapon(prop)
+					&& (obj->flags & OBJFLAG_INVINCIBLE) == 0
+					&& (!prop->parent || (prop->parent->type != PROPTYPE_CHR
+						&& prop->parent->type != PROPTYPE_PLAYER))
+				: objIsMortal(obj)
 				|| (obj->hidden & OBJHFLAG_CONDITIONALSCENERY));
+}
+
+/* Keep the detector's independent discovery list intact; only its combat-copy
+ * lock semantics change. An exact hit is still required by the caller. */
+static s32 accessibilityTargetingGamePrepareWeaponThreat(
+		struct accessibilitytargetingcandidate *candidate)
+{
+	const struct prop *prop = candidate->prop;
+
+	if (prop && (prop->type == PROPTYPE_WEAPON || prop->type == PROPTYPE_OBJ)
+			&& prop->obj && prop->obj->type == OBJTYPE_WEAPON) {
+		candidate->category = ACCESSIBILITY_TARGETING_CATEGORY_DESTROYABLE_OBJECT;
+		return accessibilityTargetingGameIsDestroyableObject(prop)
+				&& accessibilityTargetingGameCurrentAttackCanDamageObject(prop);
+	}
+
+	return true;
 }
 
 static s32 accessibilityTargetingGameLootContainerChildType(
@@ -2071,6 +2140,16 @@ static void accessibilityTargetingObserveCombat(
 
 		candidate = &observation->candidates[observation->candidatecount++];
 		*candidate = *threat;
+		aimed = aimed && accessibilityTargetingGamePrepareWeaponThreat(candidate);
+		if (detailed && threat->prop && threat->prop->obj
+				&& threat->prop->obj->type == OBJTYPE_WEAPON) {
+			accessibilityLogEvent("targeting", "weapon_threat_aim",
+					"frame=%d propnum=%d weapon=%d gunfunc=%d raw_hit=%d accepted=%d category=%d",
+					g_Vars.lvframe60, candidate->identity.propnum,
+					((struct weaponobj *)threat->prop->obj)->weaponnum,
+					((struct weaponobj *)threat->prop->obj)->gunfunc,
+					aimedbyraw, aimed, candidate->category);
+		}
 		if (accessibilityTargetingGameSuppressKingPresence(candidate->prop)) {
 			candidate->aimonly = true;
 		}

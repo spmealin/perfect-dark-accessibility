@@ -121,6 +121,13 @@ int main(void)
 	accessibilityTargetingUpdateAlignment(5, &candidate, "fixture");
 	closeTo(capturedfrequency, 660);
 	assert(capturedflags == ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_PENETRABLE);
+	/* A hostile detector relationship must not turn an explosive weapon's
+	 * destructible category into the ordinary solid hostile lock. */
+	candidate.category = ACCESSIBILITY_TARGETING_CATEGORY_DESTROYABLE_OBJECT;
+	candidate.obstruction = ACCESSIBILITY_TARGETING_OBSTRUCTION_NONE;
+	accessibilityTargetingUpdateAlignment(6, &candidate, "weapon_fixture");
+	closeTo(capturedfrequency, 396);
+	assert(capturedflags == ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_INTERRUPTED);
 	puts("Precision mapping: direction, close-in contrast, bounds, smoothing and unchanged locks passed.");
 	return 0;
 }
