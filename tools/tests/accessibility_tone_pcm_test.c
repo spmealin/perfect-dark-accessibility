@@ -89,5 +89,14 @@ int main(int argc, char **argv)
 	accessibilityTonePreviewStop();
 	assert(accessibilityToneOwnershipCanPublish());
 	assert(!accessibilityToneOwnershipIsPreview());
+	accessibilityToneSetAlignment(1, 660, 0);
+	assert(SDL_AtomicGet(&g_AccessibilityToneEnabled));
+	assert(memcmp(accessibilityToneMix(gameaudio, sizeof(gameaudio)),
+			gameaudio, sizeof(gameaudio)) != 0);
+	accessibilityToneSetAlignment(0, 0, 0);
+	assert(!SDL_AtomicGet(&g_AccessibilityToneEnabled));
+	assert(accessibilityToneMix(NULL, 0) == NULL);
+	assert(accessibilityToneMix(gameaudio, 3) == gameaudio);
+	assert(accessibilityToneMix(gameaudio, sizeof(gameaudio) * 3) == gameaudio);
 	return 0;
 }

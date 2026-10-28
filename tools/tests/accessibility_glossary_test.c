@@ -8,6 +8,7 @@
 #include "types.h"
 #include "../../port/src/accessibility/accessibility_tone_ownership.c"
 #include "../../port/src/accessibility/accessibility_tone.c"
+#include "../../port/src/accessibility/accessibility_tone_mixer.c"
 #include "../../src/accessibility/accessibility_glossary.c"
 #include "../../port/src/accessibility/accessibility_options.c"
 

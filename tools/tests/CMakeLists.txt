@@ -44,6 +44,7 @@ add_test(NAME accessibility_tone_command_contract
   COMMAND "${CMAKE_COMMAND}"
     "-DCOMMAND_SOURCE=${PROJECT_SOURCE_DIR}/port/src/accessibility/accessibility_tone.c"
     "-DCOMMAND_HEADER=${PROJECT_SOURCE_DIR}/port/include/accessibility/accessibility_tone.h"
+    "-DMIXER_SOURCE=${PROJECT_SOURCE_DIR}/port/src/accessibility/accessibility_tone_mixer.c"
     -P "${CMAKE_CURRENT_SOURCE_DIR}/check_tone_commands.cmake")
 set_tests_properties(accessibility_tone_command_contract PROPERTIES
   LABELS accessibility TIMEOUT 60)

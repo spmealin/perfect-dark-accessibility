@@ -752,7 +752,7 @@ combat's screen-space geometry sampling is deliberately separate. The
 unchanged query budgets, pre/post-consolidation fixtures and acceptance limits.
 No established engine hook changed.
 
-### Audio ownership
+### Audio ownership and rendering
 
 The private main-thread `accessibility_tone_ownership.c` state machine has three
 states: gameplay, preview command transaction, and held preview. Every public
@@ -761,6 +761,14 @@ the transitions. The audio callback does not read this state: it retains its
 existing atomic preview deadline/sequence and voice controls. A source-contract
 test detects missing gates on new public commands; exact PCM fixtures exercise
 all 93 glossary entries and gameplay interference. No engine hook changes.
+Command publication remains in `accessibility_tone.c`; audio-owned phase,
+envelope, scheduling and PCM generation live in `accessibility_tone_mixer.c`.
+Only private atomic mailboxes and unchanged constants cross that compilation
+boundary through `accessibility_tone_internal.h`. The mixer function's arithmetic
+order is unchanged. The source-contract check forbids main-thread ownership
+calls from the audio unit. See the
+[audio refactor notes](documentation/ACCESSIBILITY_AUDIO_REFACTOR.md) for scope
+and verification limits.
 
 ## Regression testing
 

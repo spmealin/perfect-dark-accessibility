@@ -1,6 +1,10 @@
 # Fail if a new public mutator bypasses the central ownership gate.
 file(READ "${COMMAND_SOURCE}" source)
 file(READ "${COMMAND_HEADER}" header)
+file(READ "${MIXER_SOURCE}" mixer)
+if(mixer MATCHES "accessibilityToneOwnership")
+  message(FATAL_ERROR "The audio callback must not read main-thread ownership policy.")
+endif()
 string(REGEX MATCHALL "void[ \t\r\n]+accessibilityTone[A-Za-z0-9_]+[ \t\r\n]*\\(" declarations "${header}")
 if(NOT declarations)
   message(FATAL_ERROR "No tone commands found; cannot verify ownership.")

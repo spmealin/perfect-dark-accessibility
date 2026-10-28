@@ -37,12 +37,36 @@ must be investigated, not silently accepted by regenerating it. These tests are
 not concurrent-thread race proofs, FPS benchmarks, listening tests or independent
 blind-user acceptance. No game session is launched or claimed by this test pass.
 
-## Next mechanical step
+## Command publication and audio-thread rendering
 
-Separate command publication from audio-owned phase/envelope/mixing state into
-private implementation units, preserving the same public API and exact sample
-operation order. Keep the PCM fixture as a guard; do not introduce dynamic voice
-management or change the live sound design as part of that split.
+The mechanical split is implemented as separate compilation units:
+
+- `accessibility_tone_ownership.c`: private main-thread authorization only.
+- `accessibility_tone.c`: guarded public commands and atomic control publication.
+- `accessibility_tone_internal.h`: private shared sound constants and atomic
+  mailboxes; no audio-owned phase/envelope variables are exposed.
+- `accessibility_tone_mixer.c`: audio-owned fixed voice state, wave helpers,
+  sample-clock scheduling, envelopes and final PCM mixing.
+
+The mixer function body is textually unchanged from the pre-split backend and
+matches the pre-refactor PCM fingerprint in both diagnostics modes. No extra
+per-sample dispatch, dynamic voice management, locks or allocation was added.
+Waveform families retain their established arithmetic and grouping inside the
+rendering unit; further per-family DSP extraction is deliberately not combined
+with this ownership/thread-boundary change. The source-contract test also rejects
+main-thread ownership-policy calls from the rendering unit. Existing public
+headers and established game hooks are unchanged.
+
+The glossary and PCM fixtures exercise both implementation units; the normal
+game build additionally checks that they compile and link separately. Regression
+coverage includes resumed gameplay publication after preview release and invalid
+buffer passthrough. No new runtime/speech session or audible acceptance is claimed.
+
+The full MinGW64 Windows x64 `ntsc-final` RelWithDebInfo game build completed
+successfully with performance diagnostics off. Existing upstream warnings were
+left unchanged. Accessibility/logging/targeting and the four scanner selections
+remain enabled in the developer configuration; no settings were edited. All 23
+regressions pass after the split, including both exact-PCM diagnostic variants.
 
 Rollback is a revert of the refactor commits. No save or configuration migration
 is needed, and no user choices are changed.
