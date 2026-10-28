@@ -6,6 +6,7 @@
 #include <math.h>
 #define SDL_MAIN_HANDLED
 #include "types.h"
+#include "../../port/src/accessibility/accessibility_tone_ownership.c"
 #include "../../port/src/accessibility/accessibility_tone.c"
 #include "../../src/accessibility/accessibility_glossary.c"
 #include "../../port/src/accessibility/accessibility_options.c"
@@ -90,7 +91,7 @@ int main(void)
 	assert(!strcmp((char *)glossaryListHandler(MENUOP_GETOPTIONTEXT, NULL, &data), "Back"));
 	accessibilityGlossaryPlay(4);
 	glossaryListHandler(MENUOP_LISTITEMFOCUS, NULL, &data);
-	assert(!g_AccessibilityPreviewOwned);
+	assert(!accessibilityToneOwnershipIsPreview());
 	glossaryListHandler(MENUOP_SET, NULL, &data);
 	assert(testpops == 1);
 	assert(g_Glossary[5].durationms == 4000 && g_Glossary[5].variant == 1);
@@ -149,7 +150,7 @@ int main(void)
 	/* No saved scanner/mode setters exist in this module; disabled stays inert. */
 	testenabled = 0;
 	accessibilityGlossaryPlay(0);
-	assert(!g_AccessibilityPreviewOwned);
+	assert(!accessibilityToneOwnershipIsPreview());
 	assert(!nonzero(accessibilityToneMix(silence, sizeof(silence)), 512));
 	printf("Audio glossary: %d entries passed catalog/menu/PCM/isolation/deadline checks.\n",
 			accessibilityGlossaryGetCount());

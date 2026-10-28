@@ -1,0 +1,19 @@
+# Fail if a new public mutator bypasses the central ownership gate.
+file(READ "${COMMAND_SOURCE}" source)
+file(READ "${COMMAND_HEADER}" header)
+string(REGEX MATCHALL "void[ \t\r\n]+accessibilityTone[A-Za-z0-9_]+[ \t\r\n]*\\(" declarations "${header}")
+if(NOT declarations)
+  message(FATAL_ERROR "No tone commands found; cannot verify ownership.")
+endif()
+foreach(declaration IN LISTS declarations)
+  string(REGEX MATCH "accessibilityTone[A-Za-z0-9_]+" name "${declaration}")
+  # Preview transactions manage ownership; diagnostic reads do not publish.
+  if(name MATCHES "^accessibilityTonePreview(Begin|Commit|Stop|Commands)$"
+      OR name STREQUAL "accessibilityToneGetDiagnostics")
+    continue()
+  endif()
+  if(NOT source MATCHES "void[ \t\r\n]+${name}\\([^{}]*\\)[ \t\r\n]*\\{[ \t\r\n]*if[ \t]*\\(!accessibilityToneOwnershipCanPublish\\(\\)\\)")
+    message(FATAL_ERROR "${name} must begin with the central ownership guard.")
+  endif()
+endforeach()
+message(STATUS "All public tone mutators use the central ownership gate.")

@@ -4,6 +4,7 @@
 #include "constants.h"
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_tone.h"
+#include "accessibility_tone_ownership.h"
 
 #define ACCESSIBILITY_TONE_SAMPLE_RATE 22020.0f
 #define ACCESSIBILITY_TONE_GAIN_STEP (1.0f / (ACCESSIBILITY_TONE_SAMPLE_RATE * 0.01f))
@@ -135,8 +136,6 @@
 
 /* Ownership/dispatch are main-thread-only; audio consumes only atomics below.
  * A preview borrows the existing voices while menus suppress world cues. */
-static s32 g_AccessibilityPreviewOwned;
-static s32 g_AccessibilityPreviewDispatch;
 static SDL_atomic_t g_AccessibilityPreviewActive;
 static SDL_atomic_t g_AccessibilityPreviewSequence;
 static SDL_atomic_t g_AccessibilityPreviewDurationMs;
@@ -413,7 +412,7 @@ static f32 accessibilityToneCombatWave(f32 phase)
 
 void accessibilityToneSet(s32 enabled, f32 frequencyhz)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	accessibilityToneSetAlignment(enabled, frequencyhz, 0);
@@ -422,7 +421,7 @@ void accessibilityToneSet(s32 enabled, f32 frequencyhz)
 void accessibilityToneSetAlignment(s32 enabled, f32 frequencyhz,
 		s32 patternflags)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	s32 previousenabled = SDL_AtomicGet(&g_AccessibilityToneEnabled);
@@ -450,7 +449,7 @@ void accessibilityToneSetAlignment(s32 enabled, f32 frequencyhz,
 
 void accessibilityTonePlayChirp(f32 frequencyhz, f32 volume, f32 pan)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	accessibilityTonePlayChirpPattern(frequencyhz, volume, pan, 1, 1.0f);
@@ -459,7 +458,7 @@ void accessibilityTonePlayChirp(f32 frequencyhz, f32 volume, f32 pan)
 void accessibilityTonePlayChirpPattern(f32 frequencyhz, f32 volume, f32 pan,
 		s32 pulses, f32 gain)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	if (frequencyhz < 1.0f) {
@@ -507,7 +506,7 @@ void accessibilityTonePlayChirpPattern(f32 frequencyhz, f32 volume, f32 pan,
 
 void accessibilityTonePlayMovableLandmark(f32 volume, f32 pan)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	/* Reuse the serialized object-scanner lane: the distinctive pattern must
@@ -538,7 +537,7 @@ void accessibilityTonePlayMovableLandmark(f32 volume, f32 pan)
 
 void accessibilityToneStopChirp(void)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	SDL_AtomicSet(&g_AccessibilityChirpEnabled, 0);
@@ -548,7 +547,7 @@ void accessibilityToneStopChirp(void)
 void accessibilityTonePlayTargetPresence(f32 frequencyhz,
 		f32 volume, f32 pan)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	if (frequencyhz < 1.0f) {
@@ -577,7 +576,7 @@ void accessibilityTonePlayTargetPresence(f32 frequencyhz,
 
 void accessibilityToneStopTargetPresence(void)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	SDL_AtomicSet(&g_AccessibilityTargetPresenceEnabled, 0);
@@ -586,7 +585,7 @@ void accessibilityToneStopTargetPresence(void)
 
 void accessibilityTonePlayThreatAlert(f32 volume, f32 pan)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	if (volume < 0.0f) {
@@ -611,7 +610,7 @@ void accessibilityTonePlayThreatAlert(f32 volume, f32 pan)
 
 void accessibilityToneStopThreatAlert(void)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	SDL_AtomicSet(&g_AccessibilityThreatAlertEnabled, 0);
@@ -620,7 +619,7 @@ void accessibilityToneStopThreatAlert(void)
 
 void accessibilityTonePlayToggleConfirmation(s32 enabled)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	SDL_AtomicSet(&g_AccessibilityTogglePattern,
@@ -632,7 +631,7 @@ void accessibilityTonePlayToggleConfirmation(s32 enabled)
 
 void accessibilityTonePlayCaneModeConfirmation(s32 mode)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	s32 pattern = mode;
@@ -651,7 +650,7 @@ void accessibilityTonePlayCaneModeConfirmation(s32 mode)
 
 void accessibilityTonePlayCompass(s32 pulses)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	if (pulses < 1) {
@@ -667,7 +666,7 @@ void accessibilityTonePlayCompass(s32 pulses)
 
 void accessibilityToneStopCompass(void)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	SDL_AtomicSet(&g_AccessibilityCompassEnabled, 0);
@@ -676,7 +675,7 @@ void accessibilityToneStopCompass(void)
 
 void accessibilityTonePlayStanceConfirmation(s32 crouchpos)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	s32 pulses = CROUCHPOS_STAND - crouchpos + 1;
@@ -695,7 +694,7 @@ void accessibilityTonePlayStanceConfirmation(s32 crouchpos)
 
 void accessibilityTonePlayWeaponFunction(s32 secondary)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	SDL_AtomicSet(&g_AccessibilityWeaponFunctionPulses, secondary ? 2 : 1);
@@ -704,7 +703,7 @@ void accessibilityTonePlayWeaponFunction(s32 secondary)
 
 void accessibilityToneStopWeaponFunction(void)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	SDL_AtomicSet(&g_AccessibilityWeaponFunctionPulses, 0);
@@ -713,7 +712,7 @@ void accessibilityToneStopWeaponFunction(void)
 
 void accessibilityToneSetHazard(s32 enabled, f32 frequencyhz, f32 volume, f32 pan)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	if (enabled) {
@@ -746,7 +745,7 @@ void accessibilityToneSetHazard(s32 enabled, f32 frequencyhz, f32 volume, f32 pa
 
 void accessibilityToneSetCaneEdge(s32 enabled, f32 volume, f32 pan)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	if (volume < 0.0f) volume = 0.0f;
@@ -766,7 +765,7 @@ void accessibilityToneSetCombatSlot(s32 slot, s32 enabled,
 		s32 periodms, s32 durationms, s32 frequencycontour, s32 continuous,
 		s32 restart, s32 triggernow)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	if (slot < 0 || slot >= ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT) {
@@ -829,7 +828,7 @@ void accessibilityToneSetCombatSlot(s32 slot, s32 enabled,
 
 void accessibilityToneStopCombat(void)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	s32 slot;
@@ -844,7 +843,7 @@ void accessibilityToneSetProjectileSlot(s32 slot, s32 enabled,
 		f32 frequencyhz, f32 volume, f32 pan, s32 periodms,
 		s32 durationms, s32 restart)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	if (slot < 0 || slot >= ACCESSIBILITY_TONE_PROJECTILE_SLOT_COUNT) {
@@ -878,7 +877,7 @@ void accessibilityToneSetProjectileSlot(s32 slot, s32 enabled,
 
 void accessibilityToneStopProjectiles(void)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	s32 slot;
@@ -893,7 +892,7 @@ void accessibilityToneSetTrackerSlot(s32 slot, s32 enabled, f32 frequencyhz,
 		f32 volume, f32 pan, s32 periodms, s32 height, s32 rear,
 		s32 restart)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	if (slot < 0 || slot >= ACCESSIBILITY_TONE_TRACKER_SLOT_COUNT) {
@@ -943,7 +942,7 @@ void accessibilityToneSetTrackerSlot(s32 slot, s32 enabled, f32 frequencyhz,
 
 void accessibilityToneStopTracker(void)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	s32 slot;
@@ -957,7 +956,7 @@ void accessibilityToneStopTracker(void)
 void accessibilityToneSetFriendlySlot(s32 slot, s32 enabled,
 		f32 volume, f32 pan, s32 pulsethird, s32 restart)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	if (slot < 0 || slot >= ACCESSIBILITY_TONE_FRIENDLY_SLOT_COUNT) {
@@ -990,7 +989,7 @@ void accessibilityToneSetFriendlySlot(s32 slot, s32 enabled,
 
 void accessibilityToneStopFriendly(void)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	s32 slot;
@@ -1003,7 +1002,7 @@ void accessibilityToneStopFriendly(void)
 void accessibilityToneSetDoorSlot(s32 slot, s32 enabled,
 		f32 volume, f32 pan, s32 restart)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	if (slot < 0 || slot >= ACCESSIBILITY_TONE_DOOR_SLOT_COUNT) {
@@ -1035,7 +1034,7 @@ void accessibilityToneSetDoorSlot(s32 slot, s32 enabled,
 
 void accessibilityToneStopDoors(void)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	s32 slot;
@@ -1049,7 +1048,7 @@ void accessibilityToneStopDoors(void)
 void accessibilityTonePlayRadarPing(f32 frequencyhz, f32 volume, f32 pan,
 		s32 height, s32 rear, s32 kind)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	if (frequencyhz < 1.0f) {
@@ -1088,7 +1087,7 @@ void accessibilityTonePlayRadarPing(f32 frequencyhz, f32 volume, f32 pan,
 
 void accessibilityToneStopRadar(void)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	SDL_AtomicSet(&g_AccessibilityRadarEnabled, 0);
@@ -1098,7 +1097,7 @@ void accessibilityToneStopRadar(void)
 void accessibilityToneSetHillBeacon(s32 enabled, f32 volume, f32 pan,
 		s32 rear, s32 identitychirp, s32 scoring, s32 restart)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	if (volume < 0.0f) {
@@ -1127,7 +1126,7 @@ void accessibilityToneSetHillBeacon(s32 enabled, f32 volume, f32 pan,
 
 void accessibilityToneStopHillBeacon(void)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	SDL_AtomicSet(&g_AccessibilityHillEnabled, 0);
@@ -1140,7 +1139,7 @@ void accessibilityTonePlayCaneSlot(s32 slot, f32 startfrequencyhz,
 		const f32 *pathfrequencieshz, const f32 *pathvolumes,
 		const f32 *pathpans)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	s32 i;
@@ -1225,7 +1224,7 @@ void accessibilityTonePlayCaneSlot(s32 slot, f32 startfrequencyhz,
 
 void accessibilityToneStopCane(void)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	s32 slot;
@@ -1274,7 +1273,7 @@ static void accessibilityToneSetMarkerSlotProfile(s32 slot, s32 enabled,
 void accessibilityToneSetMarkerSlot(s32 slot, s32 enabled,
 		f32 volume, f32 pan, s32 restart)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	accessibilityToneSetMarkerSlotProfile(slot, enabled, volume, pan,
@@ -1283,7 +1282,7 @@ void accessibilityToneSetMarkerSlot(s32 slot, s32 enabled,
 
 void accessibilityTonePlayMarkerRemoval(s32 slot)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	if (slot < 0 || slot >= ACCESSIBILITY_TONE_MARKER_SLOT_COUNT) {
@@ -1295,7 +1294,7 @@ void accessibilityTonePlayMarkerRemoval(s32 slot)
 
 void accessibilityToneStopMarkers(void)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	s32 slot;
@@ -1310,7 +1309,7 @@ void accessibilityToneStopMarkers(void)
 void accessibilityToneSetLandmarkSlot(s32 slot, s32 enabled,
 		f32 volume, f32 pan, s32 profile, s32 restart)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	if (slot < 0 || slot >= ACCESSIBILITY_TONE_LANDMARK_SLOT_COUNT) {
@@ -1329,7 +1328,7 @@ void accessibilityToneSetLandmarkSlot(s32 slot, s32 enabled,
 
 void accessibilityToneStopLandmarks(void)
 {
-	if (g_AccessibilityPreviewOwned && !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	s32 slot;
@@ -1368,14 +1367,13 @@ static void accessibilityTonePreviewClear(void)
 
 void accessibilityTonePreviewBegin(void)
 {
-	g_AccessibilityPreviewOwned = 1;
-	g_AccessibilityPreviewDispatch = 1;
+	accessibilityToneOwnershipBegin();
 	accessibilityTonePreviewClear();
 }
 
 void accessibilityTonePreviewCommit(s32 durationms)
 {
-	if (!g_AccessibilityPreviewOwned || !g_AccessibilityPreviewDispatch) {
+	if (!accessibilityToneOwnershipCanCommit()) {
 		return;
 	}
 	if (durationms < 1) {
@@ -1386,28 +1384,26 @@ void accessibilityTonePreviewCommit(s32 durationms)
 	SDL_AtomicSet(&g_AccessibilityPreviewDurationMs, durationms);
 	SDL_AtomicSet(&g_AccessibilityPreviewActive, 1);
 	SDL_AtomicAdd(&g_AccessibilityPreviewSequence, 1);
-	g_AccessibilityPreviewDispatch = 0;
+	accessibilityToneOwnershipCommands(0);
 }
 
 void accessibilityTonePreviewStop(void)
 {
-	if (!g_AccessibilityPreviewOwned) {
+	if (!accessibilityToneOwnershipIsPreview()) {
 		return;
 	}
-	g_AccessibilityPreviewDispatch = 1;
+	accessibilityToneOwnershipCommands(1);
 	accessibilityTonePreviewClear();
 	SDL_AtomicSet(&g_AccessibilityPreviewActive, 0);
 	SDL_AtomicSet(&g_AccessibilityPreviewDurationMs, 0);
 	SDL_AtomicAdd(&g_AccessibilityPreviewSequence, 1);
-	g_AccessibilityPreviewDispatch = 0;
-	g_AccessibilityPreviewOwned = 0;
+	accessibilityToneOwnershipCommands(0);
+	accessibilityToneOwnershipRelease();
 }
 
 void accessibilityTonePreviewCommands(s32 enabled)
 {
-	if (g_AccessibilityPreviewOwned) {
-		g_AccessibilityPreviewDispatch = enabled != 0;
-	}
+	accessibilityToneOwnershipCommands(enabled);
 }
 
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS

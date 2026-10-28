@@ -752,10 +752,21 @@ combat's screen-space geometry sampling is deliberately separate. The
 unchanged query budgets, pre/post-consolidation fixtures and acceptance limits.
 No established engine hook changed.
 
+### Audio ownership
+
+The private main-thread `accessibility_tone_ownership.c` state machine has three
+states: gameplay, preview command transaction, and held preview. Every public
+tone mutator uses one authorization predicate; preview lifecycle functions own
+the transitions. The audio callback does not read this state: it retains its
+existing atomic preview deadline/sequence and voice controls. A source-contract
+test detects missing gates on new public commands; exact PCM fixtures exercise
+all 93 glossary entries and gameplay interference. No engine hook changes.
+
 ## Regression testing
 
-The opt-in `ACCESSIBILITY_BUILD_TESTS` CMake option registers the ten current
-regression fixtures with CTest in both performance-diagnostics modes. The
+The opt-in `ACCESSIBILITY_BUILD_TESTS` CMake option registers eleven current
+regression fixtures with CTest in both performance-diagnostics modes plus one
+audio-command source-contract check (23 tests total). The
 `accessibility_tests` target is excluded from normal game/package builds.
 `tools/test_accessibility.ps1` initializes MinGW64, uses the isolated
 `build/accessibility-tests` cache, builds that target and runs the suite.
