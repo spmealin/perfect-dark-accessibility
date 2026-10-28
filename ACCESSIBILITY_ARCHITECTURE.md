@@ -724,6 +724,17 @@ breadcrumbs, objective selection, and route-deviation policy are separate and
 must not infer destinations from marker state. Do not generalize a future route
 model to all stages until blind task completion supports it.
 
+## Regression testing
+
+The opt-in `ACCESSIBILITY_BUILD_TESTS` CMake option registers the eight current
+regression fixtures with CTest in both performance-diagnostics modes. The
+`accessibility_tests` target is excluded from normal game/package builds.
+`tools/test_accessibility.ps1` initializes MinGW64, uses the isolated
+`build/accessibility-tests` cache, builds that target and runs the suite.
+Release-mode assertions are forced on and independently checked at compilation;
+failures and an empty suite are errors. No game hooks or runtime behavior are
+changed. See [the test guide](tools/tests/README.md) for boundaries and replay.
+
 ## Upstream hook ledger
 
 This table records implemented and anticipated changes to established files so future diffs remain deliberate.

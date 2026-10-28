@@ -36,6 +36,8 @@ set(ROMID "ntsc-final" CACHE STRING "Which ROM to build an executable for: ntsc-
 option(FORCE_CROSSCOMPILE "Force cross compiling" NO)
 option(ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
   "Enable temporary high-frequency accessibility performance diagnostics" OFF)
+option(ACCESSIBILITY_BUILD_TESTS
+  "Expose the MinGW64 accessibility regression suite (not built by default)" OFF)
 option(PD_PACKAGE_ACCESSIBILITY
   "Enable accessibility in the generated Windows redistributable configuration" OFF)
 
@@ -491,6 +493,16 @@ if(WIN32 AND MINGW)
 endif()
 
 # Additional commands for specific platforms.
+
+if(ACCESSIBILITY_BUILD_TESTS)
+  if(NOT MINGW OR NOT CMAKE_C_COMPILER_ID STREQUAL "GNU"
+      OR NOT TARGET_IS_64BIT OR NOT ROMID STREQUAL "ntsc-final")
+    message(FATAL_ERROR
+      "Accessibility fixtures currently require MinGW64 GCC and ROMID=ntsc-final.")
+  endif()
+  enable_testing()
+  add_subdirectory(tools/tests)
+endif()
 
 if(NINTENDO_SWITCH)
   add_custom_command(TARGET pd POST_BUILD

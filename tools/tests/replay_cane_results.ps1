@@ -1,6 +1,6 @@
 param(
     [string]$LogPath = (Join-Path $PSScriptRoot '../../build/accessibility.log'),
-    [string]$TestExecutable = (Join-Path $PSScriptRoot '../../build/cane_result_test.exe')
+    [string]$TestExecutable = (Join-Path $PSScriptRoot '../../build/accessibility-tests/tools/tests/accessibility_cane_result_test_diagnostics_0.exe')
 )
 
 $ErrorActionPreference = 'Stop'

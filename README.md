@@ -144,6 +144,12 @@ refer to the [upstream Perfect Dark port](https://github.com/fgsfdsfgs/perfect_d
 Developers should read the [architecture](ACCESSIBILITY_ARCHITECTURE.md) and
 [detailed feature reference](documentation/ACCESSIBILITY_FEATURE_REFERENCE.md).
 
+Run the accessibility regression suite from PowerShell with
+`powershell -NoProfile -ExecutionPolicy Bypass -File tools\test_accessibility.ps1`.
+It uses MinGW64, builds tests separately without rebuilding or launching the
+game, and checks diagnostics-off and diagnostics-on variants. See the
+[test guide](tools/tests/README.md) for coverage, requirements and limitations.
+
 The most valuable contribution is a precise blind-player test report: include
 the level, difficulty, task, what cue or speech was expected, what happened,
 and a Shift+F2 diagnostic capture number when possible. The diagnostic log is
