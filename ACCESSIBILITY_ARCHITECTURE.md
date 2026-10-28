@@ -770,11 +770,23 @@ calls from the audio unit. See the
 [audio refactor notes](documentation/ACCESSIBILITY_AUDIO_REFACTOR.md) for scope
 and verification limits.
 
+### Authored interaction semantics
+
+`accessibility_interaction.c` owns a small stage/tag/prop-type registry for
+authored action kinds. `accessibilityInteractionGetKind` identifies confirmed
+pushable objects without applying lifecycle, viewport, feature or completion
+policy. Generic beacon eligibility, projection capture, live scan and diagnostic
+classification consume that semantic kind; none retain mission stage constants
+or tag lookups. Battle Shrine's rock keeps its existing F5 movable cue while the
+pressure pad remains separately owned by the landmark registry. A source-contract
+check enforces the scanner boundary. See the
+[authored-interaction notes](documentation/ACCESSIBILITY_AUTHORED_INTERACTION_REFACTOR.md).
+
 ## Regression testing
 
 The opt-in `ACCESSIBILITY_BUILD_TESTS` CMake option registers eleven current
-regression fixtures with CTest in both performance-diagnostics modes plus one
-audio-command source-contract check (23 tests total). The
+regression fixtures with CTest in both performance-diagnostics modes plus two
+source-contract checks (24 tests total). The
 `accessibility_tests` target is excluded from normal game/package builds.
 `tools/test_accessibility.ps1` initializes MinGW64, uses the isolated
 `build/accessibility-tests` cache, builds that target and runs the suite.

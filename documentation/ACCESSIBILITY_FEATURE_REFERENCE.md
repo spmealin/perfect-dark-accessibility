@@ -196,6 +196,13 @@ query limits are unchanged. See the
 [visibility refactor notes](ACCESSIBILITY_VISIBILITY_REFACTOR.md) for regression
 coverage and the distinction between synthetic checks and runtime acceptance.
 
+Authored non-native actions are classified in the interaction-semantic module,
+not by mission checks inside the scanner. The Battle Shrine bridge rock retains
+its existing F5 movable-object sound and ordinary visibility/lifecycle policy;
+its pressure-pad mission landmark and completion behavior are separate and
+unchanged. This internal registry refactor adds no object, sound, setting or
+shortcut. See the [refactor notes](ACCESSIBILITY_AUTHORED_INTERACTION_REFACTOR.md).
+
 ### Hostile combat targeting
 
 Armed hostile `OBJTYPE_CHOPPER` aircraft are also part of the generic combat

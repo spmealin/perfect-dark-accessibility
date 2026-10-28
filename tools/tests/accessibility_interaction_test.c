@@ -15,9 +15,14 @@ static s32 healthy = 1;
 static s32 playable = 1;
 static s32 tonecalls;
 static f32 tonefrequency;
+static struct defaultobj rock, otherrock;
+static struct defaultobj *rockmapping;
+static struct prop rockprop;
+static s32 landmarkowned, movablecalls;
 
 struct defaultobj *objFindByTagId(s32 tag)
 {
+	if (tag == 0x4c) return rockmapping;
 	return tag >= 8 && tag <= 15 ? &monitors[permutation[tag - 8]].base : NULL;
 }
 bool accessibilityVisibilityIsXrayExposed(struct prop *prop)
@@ -26,7 +31,7 @@ bool tvscreenIsShowingImage(const struct tvscreen *screen, s32 image)
 { return screen && (uintptr_t)screen->cmdlist == (uintptr_t)image; }
 bool objIsHealthy(struct defaultobj *obj) { return healthy; }
 bool objIsPotentiallyInteractable(struct prop *prop) { return playable; }
-bool accessibilityLandmarkOwnsProp(struct prop *prop) { return false; }
+bool accessibilityLandmarkOwnsProp(struct prop *prop) { return landmarkowned; }
 u32 propobjGetCiTagId(struct prop *prop) { return 0; }
 void accessibilityLogEvent(const char *a, const char *b, const char *fmt, ...) { }
 s32 psCalculateVolumeFromDistance(f32 d, f32 a, f32 b, f32 c, s32 full)
@@ -35,7 +40,8 @@ s32 psCalculatePan(struct coord *p, f32 a, f32 b, f32 c, f32 d,
 		bool flag, struct pschannel *channel) { return AL_PAN_CENTER; }
 void accessibilityTonePlayChirpPattern(f32 frequency, f32 volume, f32 pan,
 		s32 pulses, f32 gain) { tonecalls++; tonefrequency = frequency; }
-void accessibilityTonePlayMovableLandmark(f32 volume, f32 pan) { assert(0); }
+void accessibilityTonePlayMovableLandmark(f32 volume, f32 pan)
+{ assert(volume == 1 && pan == 0); movablecalls++; }
 
 static void image(s32 slot, s32 num)
 { monitors[slot].screens[0].cmdlist = (u32 *)(uintptr_t)num; }
@@ -45,6 +51,70 @@ static s32 eligible(s32 slot)
 	u32 tag = 0;
 	const char *reason = NULL;
 	return accessibilityBeaconObjectEligible(&props[slot], &tag, &reason);
+}
+
+static void authoredObjectCases(void)
+{
+	const s32 stages[] = { -1, STAGE_CITRAINING, STAGE_PELAGIC,
+		STAGE_SKEDARRUINS, STAGE_RESCUE, STAGE_AIRBASE };
+	const s32 types[] = { PROPTYPE_OBJ, PROPTYPE_WEAPON, PROPTYPE_DOOR, PROPTYPE_CHR };
+	struct defaultobj *objects[] = { NULL, &rock, &otherrock };
+	struct accessibilitybeaconresult result = {0};
+	const char *reason;
+	u32 tag;
+	s32 stage, type, mapping, object;
+	assert(accessibilityInteractionGetKind(NULL) == ACCESSIBILITY_INTERACTION_NATIVE);
+	for (stage = 0; stage < ARRAYCOUNT(stages); stage++)
+	for (type = 0; type < ARRAYCOUNT(types); type++)
+	for (mapping = 0; mapping < ARRAYCOUNT(objects); mapping++)
+	for (object = 0; object < ARRAYCOUNT(objects); object++) {
+		s32 legacy;
+		g_Vars.stagenum = stages[stage];
+		rockprop.type = types[type];
+		rockprop.obj = objects[object];
+		rockmapping = objects[mapping];
+		/* Frozen original scanner classification; no lifecycle policy here. */
+		legacy = g_Vars.stagenum == STAGE_SKEDARRUINS
+				&& rockprop.type == PROPTYPE_OBJ && rockprop.obj
+				&& objFindByTagId(0x4c) == rockprop.obj;
+		assert((accessibilityInteractionGetKind(&rockprop)
+				== ACCESSIBILITY_INTERACTION_PUSHABLE) == legacy);
+	}
+	g_Vars.stagenum = STAGE_SKEDARRUINS;
+	memset(&rock, 0, sizeof(rock));
+	memset(&rockprop, 0, sizeof(rockprop));
+	rockprop.type = PROPTYPE_OBJ;
+	rockprop.active = 1;
+	rockprop.obj = rockmapping = &rock;
+	rock.prop = &rockprop;
+	/* Pushing is not native activation, and must not require an activate flag. */
+	rock.flags = OBJFLAG_CANNOT_ACTIVATE | OBJFLAG_DEACTIVATED;
+	playable = 0;
+	assert(accessibilityBeaconObjectEligible(&rockprop, &tag, &reason));
+	assert(tag == 0 && !strcmp(reason, "movable_puzzle_object"));
+	landmarkowned = 1;
+	assert(!accessibilityBeaconObjectEligible(&rockprop, &tag, &reason));
+	assert(!strcmp(reason, "authored_landmark_owned"));
+	landmarkowned = 0;
+	healthy = 0; assert(!accessibilityBeaconObjectEligible(&rockprop, &tag, &reason)); healthy = 1;
+	rockprop.active = 0; assert(!accessibilityBeaconObjectEligible(&rockprop, &tag, &reason)); rockprop.active = 1;
+	rock.hidden = OBJHFLAG_GONE; assert(!accessibilityBeaconObjectEligible(&rockprop, &tag, &reason));
+	rock.hidden = OBJHFLAG_DELETING; assert(!accessibilityBeaconObjectEligible(&rockprop, &tag, &reason));
+	rock.hidden = 0;
+	rock.flags2 = OBJFLAG2_INVISIBLE; assert(!accessibilityBeaconObjectEligible(&rockprop, &tag, &reason));
+	rock.flags2 = 0;
+	rock.prop = NULL; assert(!accessibilityBeaconObjectEligible(&rockprop, &tag, &reason)); rock.prop = &rockprop;
+	/* Moving onto/away from the pad cannot change the rock's scanner role. */
+	rockprop.pos.x = 9999;
+	assert(accessibilityInteractionGetKind(&rockprop) == ACCESSIBILITY_INTERACTION_PUSHABLE);
+	result.category = ACCESSIBILITY_BEACON_CATEGORY_OBJECT;
+	result.kind = ACCESSIBILITY_BEACON_KIND_MOVABLE_PUZZLE;
+	accessibilityBeaconPulse(result.category, &result, &rockprop);
+	assert(movablecalls == 1 && tonecalls == 3);
+	rockmapping = NULL;
+	assert(accessibilityInteractionGetKind(&rockprop) == ACCESSIBILITY_INTERACTION_NATIVE);
+	assert(!accessibilityBeaconObjectEligible(&rockprop, &tag, &reason));
+	playable = 1;
 }
 
 static s32 nextPermutation(void)
@@ -135,6 +205,7 @@ int main(void)
 	image(0, TVCMDLIST_13);
 	accessibilityBeaconPulse(result.category, &result, &props[0]);
 	assert(tonecalls == 3 && tonefrequency == 880);
-	printf("Interaction cues: %d shuffled assignments, states, scope and stale-pulse checks passed.\n", count);
+	authoredObjectCases();
+	printf("Interaction cues: %d shuffled assignments, states, scope, stale pulses and authored-action registry checks passed.\n", count);
 	return 0;
 }

@@ -32,15 +32,15 @@ Every fixture runs with `ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS=0` and `1`:
 | `landmark` | Landmark registry and eligibility rules |
 | `glossary` | Catalog/menu behavior, generated PCM, ownership and deadlines |
 | `monitor_image` | Native monitor setter/query parity and read-only identity |
-| `interaction` | X-Ray switch classification, all 8! assignments, lifecycle and pulses |
+| `interaction` | X-Ray switch classification, all 8! assignments, lifecycle/pulses and authored pushable-object classification |
 | `precision_mapping` | Aim-direction mapping, smoothing and lock-tone semantics |
 | `weapon_target` | Explosive weapon classification, lifecycle, damage compatibility and detector-copy rules |
 | `visibility` | Shared/scanner surface endpoints and budgets, embedded-monitor policy, transforms and door-sibling perimeter restoration |
 | `cane_decision` | 435,456 differential cases comparing unified resolution/materialization with the previous adapter policy |
 | `tone_pcm` | Pre-refactor exact PCM fingerprint for 93 glossary cues, conflicting world commands, varied buffer sizes and ownership transitions |
 
-This is **23 tests**: eleven fixtures in both diagnostics modes, plus a source
-contract checking every public tone mutator's ownership gate. Assertions are
+This is **24 tests**: eleven fixtures in both diagnostics modes, plus source
+contracts checking tone ownership and generic scanner/mission-registry boundaries. Assertions are
 explicitly enabled even in Release builds.
 Every executable also compiles `assertions_enabled.c`, which fails compilation
 if `NDEBUG` remains defined. CTest applies a 60-second timeout per test, prints
@@ -137,3 +137,11 @@ benchmark. Do not regenerate the expected fingerprint just to accept a refactor;
 investigate differences, including possible toolchain/libm changes. The source
 contract rejects newly added public mutators without the central guard. The
 suite now contains 23 tests.
+
+Authored-interaction coverage compares 216 stage/type/object/tag-mapping cases
+against the old scanner predicate, then checks lifecycle, ownership, native
+activation bypass and the unchanged movable cue. The landmark fixture confirms
+the rock does not gain a mission-landmark voice. The scanner source contract
+rejects direct stage constants or setup-tag lookups in the generic scanner.
+The current suite contains 24 tests; this is synthetic regression evidence,
+not new in-game puzzle or independent-user acceptance.

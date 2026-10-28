@@ -48,3 +48,10 @@ add_test(NAME accessibility_tone_command_contract
     -P "${CMAKE_CURRENT_SOURCE_DIR}/check_tone_commands.cmake")
 set_tests_properties(accessibility_tone_command_contract PROPERTIES
   LABELS accessibility TIMEOUT 60)
+
+add_test(NAME accessibility_beacon_semantic_boundary
+  COMMAND "${CMAKE_COMMAND}"
+    "-DSCANNER_SOURCE=${PROJECT_SOURCE_DIR}/src/accessibility/accessibility_beacon.c"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/check_beacon_boundaries.cmake")
+set_tests_properties(accessibility_beacon_semantic_boundary PROPERTIES
+  LABELS accessibility TIMEOUT 60)

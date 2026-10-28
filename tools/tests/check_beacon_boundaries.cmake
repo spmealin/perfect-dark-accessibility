@@ -1,0 +1,8 @@
+file(READ "${SCANNER_SOURCE}" source)
+if(NOT source MATCHES "accessibilityInteractionGetKind")
+  message(FATAL_ERROR "Scanner must consume authored action semantics.")
+endif()
+if(source MATCHES "STAGE_[A-Z0-9_]+" OR source MATCHES "objFindByTagId[ \t\r\n]*\\(")
+  message(FATAL_ERROR "Mission stage/tag mappings belong in the semantic registry, not the scanner.")
+endif()
+message(STATUS "Generic scanner contains no authored stage/tag lookup rules.")

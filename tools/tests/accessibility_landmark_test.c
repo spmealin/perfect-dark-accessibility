@@ -15,9 +15,12 @@ u32 g_StageFlags;
 static struct defaultobj pillars[5];
 static struct prop props[5];
 static s32 healthy = true;
+static struct defaultobj puzzlerock;
+static struct prop puzzlerockprop;
 
 struct defaultobj *objFindByTagId(s32 tag)
 {
+	if (tag == 0x4c) return &puzzlerock;
 	if (tag >= 0x2a && tag <= 0x2e) {
 		return &pillars[tag - 0x2a];
 	}
@@ -76,6 +79,12 @@ int main(void)
 		count++;
 	}
 	assert(count == 5);
+	puzzlerockprop.type = PROPTYPE_OBJ;
+	puzzlerockprop.obj = &puzzlerock;
+	puzzlerock.prop = &puzzlerockprop;
+	/* The rock is scanner-owned, not an independently sounding landmark.
+	 * Its pressure pad retains its own completion-tag rule and voice. */
+	assert(!accessibilityLandmarkOwnsProp(&puzzlerockprop));
 	assert(stageentries <= ACCESSIBILITY_TONE_LANDMARK_SLOT_COUNT);
 	puts("Pillar registry, shuffled aliases, completion independence, destruction and capacity: PASS");
 	return 0;

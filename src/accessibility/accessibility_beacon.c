@@ -63,7 +63,6 @@
 #define ACCESSIBILITY_BEACON_DIAGNOSTIC_FOCUS_DOT 0.75f
 #define ACCESSIBILITY_BEACON_PROJECTION_CAPACITY 256
 #define ACCESSIBILITY_BEACON_PROJECTION_MAX_AGE_TICKS TICKS(2)
-#define ACCESSIBILITY_BEACON_SKEDAR_PUZZLE_ROCK_TAG 0x4c
 
 enum accessibilitybeaconcategory {
 	ACCESSIBILITY_BEACON_CATEGORY_NONE = 0,
@@ -556,14 +555,6 @@ static s32 accessibilityBeaconRoomValid(RoomNum room)
 	return room > 0 && room < g_Vars.roomcount;
 }
 
-static s32 accessibilityBeaconIsMovablePuzzleObject(struct prop *prop)
-{
-	return g_Vars.stagenum == STAGE_SKEDARRUINS
-			&& prop && prop->type == PROPTYPE_OBJ && prop->obj
-			&& objFindByTagId(ACCESSIBILITY_BEACON_SKEDAR_PUZZLE_ROCK_TAG)
-					== prop->obj;
-}
-
 static s32 accessibilityBeaconRoomsRelated(RoomNum *playerrooms, RoomNum *targetrooms)
 {
 	s32 i;
@@ -637,11 +628,11 @@ static s32 accessibilityBeaconObjectEligible(struct prop *prop, u32 *citag, cons
 	}
 
 	/*
-	 * This rock is moved by walking into it rather than by pressing the normal
-	 * interaction button. Keep it on F5, but identify that distinct action
-	 * with the pickup-style three-chirp rhythm.
+	 * Authored pushable objects are moved by walking into them rather than by
+	 * pressing the normal interaction button. Keep them on F5 with their
+	 * existing distinctive movable-landmark sound.
 	 */
-	if (accessibilityBeaconIsMovablePuzzleObject(prop)) {
+	if (accessibilityInteractionGetKind(prop) == ACCESSIBILITY_INTERACTION_PUSHABLE) {
 		*citag = 0;
 		*reason = "movable_puzzle_object";
 		return true;
@@ -709,7 +700,8 @@ void accessibilityBeaconCaptureGame(void)
 				&& obj && obj->prop == prop && obj->model
 				&& (prop->type == PROPTYPE_DOOR
 					|| objIsPotentiallyInteractable(prop)
-					|| accessibilityBeaconIsMovablePuzzleObject(prop))) {
+					|| accessibilityInteractionGetKind(prop)
+							== ACCESSIBILITY_INTERACTION_PUSHABLE)) {
 			struct accessibilitybeaconprojection *projection;
 
 			if (g_AccessibilityBeaconProjectionCount
@@ -1363,7 +1355,8 @@ static s32 accessibilityBeaconScan(s32 detailed)
 						ACCESSIBILITY_BEACON_CATEGORY_OBJECT]) {
 					eligible = accessibilityBeaconObjectEligible(
 							prop, &citag, &reason);
-					result.kind = accessibilityBeaconIsMovablePuzzleObject(prop)
+					result.kind = accessibilityInteractionGetKind(prop)
+							== ACCESSIBILITY_INTERACTION_PUSHABLE
 							? ACCESSIBILITY_BEACON_KIND_MOVABLE_PUZZLE
 							: ACCESSIBILITY_BEACON_KIND_OBJECT;
 					result.category = ACCESSIBILITY_BEACON_CATEGORY_OBJECT;
@@ -2989,7 +2982,8 @@ static void accessibilityBeaconDumpDiagnosticCandidate(u64 captureid,
 			semanticeligible = accessibilityBeaconObjectEligible(
 					prop, &citag, &semanticreason);
 			result.category = ACCESSIBILITY_BEACON_CATEGORY_OBJECT;
-			result.kind = accessibilityBeaconIsMovablePuzzleObject(prop)
+			result.kind = accessibilityInteractionGetKind(prop)
+						== ACCESSIBILITY_INTERACTION_PUSHABLE
 					? ACCESSIBILITY_BEACON_KIND_MOVABLE_PUZZLE
 					: ACCESSIBILITY_BEACON_KIND_OBJECT;
 			categoryactive = g_AccessibilityBeaconCategoryActive[

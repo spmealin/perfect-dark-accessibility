@@ -9,6 +9,37 @@
 #include "accessibility/accessibility_interaction.h"
 #include "accessibility/accessibility_visibility.h"
 
+struct accessibilityinteractionobjectspec {
+	s32 stage;
+	s32 tag;
+	s32 proptype;
+	enum accessibilityinteractionkind kind;
+};
+
+/* Authored action semantics belong here, not in generic scanner discovery,
+ * projection or playback. This does not allocate a mission-landmark voice or
+ * change ownership of the separate bridge pressure-pad landmark. */
+static const struct accessibilityinteractionobjectspec
+		g_AccessibilityInteractionObjects[] = {
+	{ STAGE_SKEDARRUINS, 0x4c, PROPTYPE_OBJ, ACCESSIBILITY_INTERACTION_PUSHABLE },
+};
+
+s32 accessibilityInteractionGetKind(struct prop *prop)
+{
+	s32 i;
+
+	if (!prop || !prop->obj) return ACCESSIBILITY_INTERACTION_NATIVE;
+	for (i = 0; i < ARRAYCOUNT(g_AccessibilityInteractionObjects); i++) {
+		const struct accessibilityinteractionobjectspec *spec
+				= &g_AccessibilityInteractionObjects[i];
+		if (g_Vars.stagenum == spec->stage && prop->type == spec->proptype
+				&& objFindByTagId(spec->tag) == prop->obj) {
+			return spec->kind;
+		}
+	}
+	return ACCESSIBILITY_INTERACTION_NATIVE;
+}
+
 /* Pelagic's script remaps aliases 08..0f onto eight physical consoles each
  * playthrough. Slot zero's live image is the X-Ray-visible puzzle state.
  * Never classify generic red/green screens or fixed physical switch positions. */
