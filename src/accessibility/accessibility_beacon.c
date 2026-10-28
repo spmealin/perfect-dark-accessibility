@@ -59,10 +59,6 @@
 			* (ACCESSIBILITY_BEACON_CATEGORY_COUNT - 1))
 #define ACCESSIBILITY_BEACON_TELEMETRY_TICKS TICKS(60 * 30)
 #define ACCESSIBILITY_BEACON_MAX_DOOR_SIBLINGS 32
-#define ACCESSIBILITY_BEACON_SURFACE_INSET 0.35f
-#define ACCESSIBILITY_BEACON_SURFACE_PULL_FORWARD 0.25f
-#define ACCESSIBILITY_BEACON_EMBEDDED_SURFACE_TOLERANCE 8.0f
-#define ACCESSIBILITY_BEACON_RENDERPOSTBG_SURFACE_TOLERANCE 24.0f
 #define ACCESSIBILITY_BEACON_DIAGNOSTIC_FOCUS_CAPACITY 16
 #define ACCESSIBILITY_BEACON_DIAGNOSTIC_FOCUS_DOT 0.75f
 #define ACCESSIBILITY_BEACON_PROJECTION_CAPACITY 256
@@ -893,189 +889,7 @@ static s32 accessibilityBeaconRequiresLineOfSight(s32 category)
 			|| category == ACCESSIBILITY_BEACON_CATEGORY_PICKUP
 			|| category == ACCESSIBILITY_BEACON_CATEGORY_NON_HOSTILE;
 }
-
-static void accessibilityBeaconTransformObjectPoint(
-		struct defaultobj *obj, struct coord *local, struct coord *world)
-{
-	world->x = obj->prop->pos.x
-			+ obj->realrot[0][0] * local->x
-			+ obj->realrot[1][0] * local->y
-			+ obj->realrot[2][0] * local->z;
-	world->y = obj->prop->pos.y
-			+ obj->realrot[0][1] * local->x
-			+ obj->realrot[1][1] * local->y
-			+ obj->realrot[2][1] * local->z;
-	world->z = obj->prop->pos.z
-			+ obj->realrot[0][2] * local->x
-			+ obj->realrot[1][2] * local->y
-			+ obj->realrot[2][2] * local->z;
-}
-
-static void accessibilityBeaconPullPointTowardCamera(
-		struct coord *point, const struct coord *camera, f32 amount)
-{
-	f32 x = camera->x - point->x;
-	f32 y = camera->y - point->y;
-	f32 z = camera->z - point->z;
-	f32 distance = sqrtf(x * x + y * y + z * z);
-
-	if (distance > amount) {
-		f32 scale = amount / distance;
-
-		point->x += x * scale;
-		point->y += y * scale;
-		point->z += z * scale;
-	}
-}
-
-static s32 accessibilityBeaconPropHasSurfaceLineOfSight(
-		struct coord *viewpos, RoomNum *camrooms, struct prop *targetprop,
-		s32 allowembedded, s32 *sample, s32 *queries)
-{
-	struct defaultobj *obj = targetprop->obj;
-	struct modelrodata_bbox *bbox;
-	struct coord local;
-	struct coord facecenters[6];
-	struct coord targets[5];
-	f32 mins[3];
-	f32 maxs[3];
-	f32 mids[3];
-	f32 halfspans[3];
-	f32 bestdist = 0.0f;
-	s32 bestface = -1;
-	s32 faceaxis;
-	s32 otheraxis1;
-	s32 otheraxis2;
-	s32 i;
-
-	*sample = 0;
-	*queries = 1;
-
-	if (accessibilityVisibilityHasVisualLineOfSight(
-			viewpos, camrooms, &targetprop->pos,
-			targetprop->rooms, targetprop)) {
-		return true;
-	}
-
-	if (!obj || !obj->model || obj->prop != targetprop) {
-		return false;
-	}
-
-	bbox = objFindBboxRodata(obj);
-
-	if (!bbox) {
-		return false;
-	}
-
-	mins[0] = objGetLocalXMin(bbox);
-	mins[1] = objGetLocalYMin(bbox);
-	mins[2] = objGetLocalZMin(bbox);
-	maxs[0] = objGetLocalXMax(bbox);
-	maxs[1] = objGetLocalYMax(bbox);
-	maxs[2] = objGetLocalZMax(bbox);
-
-	for (i = 0; i < 3; i++) {
-		mids[i] = (mins[i] + maxs[i]) * 0.5f;
-		halfspans[i] = (maxs[i] - mins[i]) * 0.5f;
-	}
-
-	for (i = 0; i < 6; i++) {
-		f32 dx;
-		f32 dy;
-		f32 dz;
-		f32 distsq;
-		s32 axis = i / 2;
-
-		local.x = mids[0];
-		local.y = mids[1];
-		local.z = mids[2];
-		local.f[axis] = (i & 1) ? maxs[axis] : mins[axis];
-		accessibilityBeaconTransformObjectPoint(obj, &local, &facecenters[i]);
-
-		dx = facecenters[i].x - viewpos->x;
-		dy = facecenters[i].y - viewpos->y;
-		dz = facecenters[i].z - viewpos->z;
-		distsq = dx * dx + dy * dy + dz * dz;
-
-		if (bestface < 0 || distsq < bestdist) {
-			bestface = i;
-			bestdist = distsq;
-		}
-	}
-
-	faceaxis = bestface / 2;
-	otheraxis1 = (faceaxis + 1) % 3;
-	otheraxis2 = (faceaxis + 2) % 3;
-	local.x = mids[0];
-	local.y = mids[1];
-	local.z = mids[2];
-	local.f[faceaxis] = (bestface & 1) ? maxs[faceaxis] : mins[faceaxis];
-
-	for (i = 0; i < ARRAYCOUNT(targets); i++) {
-		struct coord samplelocal = local;
-
-		if (i > 0) {
-			samplelocal.f[otheraxis1] += halfspans[otheraxis1]
-					* ACCESSIBILITY_BEACON_SURFACE_INSET
-					* ((i & 1) ? 1.0f : -1.0f);
-			samplelocal.f[otheraxis2] += halfspans[otheraxis2]
-					* ACCESSIBILITY_BEACON_SURFACE_INSET
-					* ((i & 2) ? 1.0f : -1.0f);
-		}
-
-		accessibilityBeaconTransformObjectPoint(obj, &samplelocal, &targets[i]);
-		accessibilityBeaconPullPointTowardCamera(&targets[i], viewpos,
-				ACCESSIBILITY_BEACON_SURFACE_PULL_FORWARD);
-		(*queries)++;
-
-		if (accessibilityVisibilityHasVisualLineOfSight(
-				viewpos, camrooms, &targets[i],
-				targetprop->rooms, targetprop)) {
-			*sample = i + 1;
-			return true;
-		}
-	}
-
-	/*
-	 * Wall-mounted monitors can place their model anchor and complete bounding
-	 * box just behind the background wall that visually frames them. Preserve
-	 * the ordinary LOS result first, then tolerate only a very shallow embed
-	 * for an object that was actually rendered on-screen and whose native
-	 * interaction path does not request its own LOS check.
-	 */
-	if (allowembedded
-			&& (targetprop->flags & PROPFLAG_ONTHISSCREENTHISTICK)
-			&& (obj->flags2 & OBJFLAG2_INTERACTCHECKLOS) == 0) {
-		f32 tolerance = ACCESSIBILITY_BEACON_EMBEDDED_SURFACE_TOLERANCE;
-
-		/*
-		 * Render-post-background monitor pads can deliberately place their
-		 * visible screen plane farther inside its mounting geometry than the
-		 * generic shallow-embed allowance. Keep the larger retry tied to that
-		 * native monitor semantic rather than widening every interactable.
-		 */
-		if (obj->flags & OBJFLAG_MONITOR_RENDERPOSTBG) {
-			tolerance =
-					ACCESSIBILITY_BEACON_RENDERPOSTBG_SURFACE_TOLERANCE;
-		}
-
-		for (i = 0; i < ARRAYCOUNT(targets); i++) {
-			accessibilityBeaconPullPointTowardCamera(&targets[i], viewpos,
-					tolerance);
-			(*queries)++;
-
-			if (accessibilityVisibilityHasVisualLineOfSight(
-					viewpos, camrooms, &targets[i],
-					targetprop->rooms, targetprop)) {
-				*sample = ARRAYCOUNT(targets) + i + 1;
-				return true;
-			}
-		}
-	}
-
-	return false;
-}
-
+/* Keep sibling ownership here; surface geometry and retries are shared. */
 static s32 accessibilityBeaconDoorHasLineOfSight(
 		struct accessibilitybeaconresult *result,
 		const struct accessibilityobserver *observer,
@@ -1095,7 +909,7 @@ static s32 accessibilityBeaconDoorHasLineOfSight(
 	camrooms[1] = -1;
 
 	if (!door) {
-		return accessibilityBeaconPropHasSurfaceLineOfSight(
+		return accessibilityVisibilityHasObjectSurfaceLineOfSight(
 				&viewpos, camrooms, targetprop, false,
 				&result->lossample, &result->losqueries);
 	}
@@ -1123,7 +937,7 @@ static s32 accessibilityBeaconDoorHasLineOfSight(
 	} while (sibling && sibling != door
 			&& guard++ < ACCESSIBILITY_BEACON_MAX_DOOR_SIBLINGS);
 
-	clear = accessibilityBeaconPropHasSurfaceLineOfSight(
+	clear = accessibilityVisibilityHasObjectSurfaceLineOfSight(
 			&viewpos, camrooms, targetprop, false,
 			&result->lossample, &result->losqueries);
 
@@ -1170,7 +984,7 @@ static s32 accessibilityBeaconHasLineOfSight(
 	}
 
 	if (result->kind == ACCESSIBILITY_BEACON_KIND_OBJECT) {
-		return accessibilityBeaconPropHasSurfaceLineOfSight(
+		return accessibilityVisibilityHasObjectSurfaceLineOfSight(
 				&viewpos, camrooms, targetprop,
 				true,
 				&result->lossample, &result->losqueries);

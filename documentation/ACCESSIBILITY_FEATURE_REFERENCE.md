@@ -187,6 +187,15 @@ The shared predicate requires the uninhibited X-Ray Scanner device, the native `
 
 Ordinary scenery receives no sound merely because X-Ray recolors it. Turning away, moving it outside the native X-Ray radius, inhibiting or deactivating the device, disabling `Accessibility.XRayScannerAudio`, or leaving supported gameplay immediately restores the normal scanner visibility rules. Logs retain X-Ray device-state transitions and mark admitted candidates with `xray_semantic_visibility` or `xray_exposed=1`.
 
+The F5/F6 surface-LOS implementation is shared with authored landmarks rather
+than duplicated inside the scanner. This is an internal consolidation only:
+viewport/category/device policy remains with each caller, F6 never opts into
+embedded-monitor retries, and sibling-door collision state is still excluded
+and restored by the door adapter. Collision masks, sample order, tolerances and
+query limits are unchanged. See the
+[visibility refactor notes](ACCESSIBILITY_VISIBILITY_REFACTOR.md) for regression
+coverage and the distinction between synthetic checks and runtime acceptance.
+
 ### Hostile combat targeting
 
 Armed hostile `OBJTYPE_CHOPPER` aircraft are also part of the generic combat

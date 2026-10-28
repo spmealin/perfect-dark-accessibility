@@ -724,9 +724,21 @@ breadcrumbs, objective selection, and route-deviation policy are separate and
 must not infer destinations from marker state. Do not generalize a future route
 model to all stages until blind task completion supports it.
 
+### Shared object-surface visibility
+
+F5/F6 surface queries and authored landmarks use the existing
+`accessibilityVisibilityHasObjectSurfaceLineOfSight` helper. Object transforms,
+nearest-face inset samples, camera pulls, embedded-monitor retries and their
+constants have one production implementation. Scanner category/viewport/device
+decisions and door-sibling perimeter ownership remain in the beacon adapter;
+combat's screen-space geometry sampling is deliberately separate. The
+[refactor notes](documentation/ACCESSIBILITY_VISIBILITY_REFACTOR.md) record
+unchanged query budgets, pre/post-consolidation fixtures and acceptance limits.
+No established engine hook changed.
+
 ## Regression testing
 
-The opt-in `ACCESSIBILITY_BUILD_TESTS` CMake option registers the eight current
+The opt-in `ACCESSIBILITY_BUILD_TESTS` CMake option registers the nine current
 regression fixtures with CTest in both performance-diagnostics modes. The
 `accessibility_tests` target is excluded from normal game/package builds.
 `tools/test_accessibility.ps1` initializes MinGW64, uses the isolated

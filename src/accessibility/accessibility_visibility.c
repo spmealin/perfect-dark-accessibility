@@ -263,11 +263,16 @@ bool accessibilityVisibilityHasObjectSurfaceLineOfSight(
 		}
 	}
 
+	/* Wall-mounted monitors can put their entire model box just behind the
+	 * framing wall. Retry only for a rendered target whose interaction does
+	 * not require native LOS; doors and other strict callers never opt in. */
 	if (allowembedded
 			&& (targetprop->flags & PROPFLAG_ONTHISSCREENTHISTICK)
 			&& (obj->flags2 & OBJFLAG2_INTERACTCHECKLOS) == 0) {
 		f32 tolerance = ACCESSIBILITY_VISIBILITY_EMBEDDED_SURFACE_TOLERANCE;
 
+		/* Render-post-background monitors have a deeper authored screen plane;
+		 * do not widen this allowance for ordinary interactables. */
 		if (obj->flags & OBJFLAG_MONITOR_RENDERPOSTBG) {
 			tolerance =
 					ACCESSIBILITY_VISIBILITY_RENDERPOSTBG_SURFACE_TOLERANCE;

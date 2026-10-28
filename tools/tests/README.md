@@ -35,8 +35,9 @@ Every fixture runs with `ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS=0` and `1`:
 | `interaction` | X-Ray switch classification, all 8! assignments, lifecycle and pulses |
 | `precision_mapping` | Aim-direction mapping, smoothing and lock-tone semantics |
 | `weapon_target` | Explosive weapon classification, lifecycle, damage compatibility and detector-copy rules |
+| `visibility` | Shared/scanner surface endpoints and budgets, embedded-monitor policy, transforms and door-sibling perimeter restoration |
 
-This is **16 tests**, with assertions explicitly enabled even in Release builds.
+This is **18 tests**, with assertions explicitly enabled even in Release builds.
 Every executable also compiles `assertions_enabled.c`, which fails compilation
 if `NDEBUG` remains defined. CTest applies a 60-second timeout per test, prints
 failed-test output, and rejects an empty test selection.
@@ -107,3 +108,10 @@ full suite passed again. No game was launched, speech/interaction test performed
 or new accessibility log session created. This verifies developer tooling, not
 blind-user acceptance. Reverting the tooling commit restores the prior manual
 workflow without a game/save/config migration.
+
+The subsequent visibility fixture passed against both the original scanner
+implementation and the existing shared helper before consolidation. The same
+checks then passed after routing the scanner through the helper, bringing the
+suite to 18 tests. Its collision callbacks are synthetic: it verifies query
+coordinates/order, masks, budgets and collision-state ownership, not real level
+occlusion, transparent-glass geometry, viewport projection or audible output.
