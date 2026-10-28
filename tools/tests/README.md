@@ -36,8 +36,9 @@ Every fixture runs with `ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS=0` and `1`:
 | `precision_mapping` | Aim-direction mapping, smoothing and lock-tone semantics |
 | `weapon_target` | Explosive weapon classification, lifecycle, damage compatibility and detector-copy rules |
 | `visibility` | Shared/scanner surface endpoints and budgets, embedded-monitor policy, transforms and door-sibling perimeter restoration |
+| `cane_decision` | 435,456 differential cases comparing unified resolution/materialization with the previous adapter policy |
 
-This is **18 tests**, with assertions explicitly enabled even in Release builds.
+This is **20 tests**, with assertions explicitly enabled even in Release builds.
 Every executable also compiles `assertions_enabled.c`, which fails compilation
 if `NDEBUG` remains defined. CTest applies a 60-second timeout per test, prints
 failed-test output, and rejects an empty test selection.
@@ -115,3 +116,12 @@ checks then passed after routing the scanner through the helper, bringing the
 suite to 18 tests. Its collision callbacks are synthetic: it verifies query
 coordinates/order, masks, budgets and collision-state ownership, not real level
 occlusion, transparent-glass geometry, viewport projection or audible output.
+
+The cane-decision refactor adds a frozen reference under `fixtures/` from
+commit `07b091ec5`. It is compiled only into the differential test, never the
+game. Both diagnostic variants compare all sample fields and final contact
+outputs, with a deterministic clock; every primary and crouch action is
+required to be exercised. It preserves prior policy rather than proving that
+the policy is correct for every level. The suite now contains 20 tests.
+Do not change the frozen reference alongside a refactor merely to make it pass;
+intentional policy changes need separately justified expectations and acceptance.

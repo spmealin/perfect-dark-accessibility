@@ -724,6 +724,22 @@ breadcrumbs, objective selection, and route-deviation policy are separate and
 must not infer destinations from marker state. Do not generalize a future route
 model to all stages until blind task completion supports it.
 
+### Cane decision reconciliation
+
+`accessibility_cane_decision.c` owns value-only reconciliation of preliminary
+barrier/terrain evidence and the connected-path result. It applies drop,
+terrain and crouch precedence and returns the final evaluation plus explicit
+contact/position materialization steps. The engine-facing cane adapter no
+longer makes those three successive policy decisions or overrides their cues;
+it applies the returned steps and publishes existing diagnostic fields.
+Preliminary evaluation still gates optional crouch observation, preserving the
+accepted geometry-query schedule. Corridor grouping, contour/boundary audio,
+observer handling and uncertain-path fallback are unchanged. A frozen,
+test-only copy of the former adapter verifies 435,456 combinations per
+diagnostics mode against every resulting sample field. See
+[the reconciliation notes](documentation/ACCESSIBILITY_CANE_DECISION_REFACTOR.md)
+for scope, limitations and rollback.
+
 ### Shared object-surface visibility
 
 F5/F6 surface queries and authored landmarks use the existing
@@ -738,7 +754,7 @@ No established engine hook changed.
 
 ## Regression testing
 
-The opt-in `ACCESSIBILITY_BUILD_TESTS` CMake option registers the nine current
+The opt-in `ACCESSIBILITY_BUILD_TESTS` CMake option registers the ten current
 regression fixtures with CTest in both performance-diagnostics modes. The
 `accessibility_tests` target is excluded from normal game/package builds.
 `tools/test_accessibility.ps1` initializes MinGW64, uses the isolated

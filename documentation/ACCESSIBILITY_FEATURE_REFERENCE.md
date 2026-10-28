@@ -429,6 +429,14 @@ The firing-range behavior remains a bounded proof. The separate hostile-combat s
 
 ### Virtual cane prototype
 
+The cane's preliminary evidence and connected-path result are reconciled by
+one value-only decision module before the engine adapter applies positions and
+contacts. This internal refactor preserves existing drop/ladder/terrain/crouch
+precedence, uncertain-path fallback, query scheduling, corridor grouping and
+audio behavior; it introduces no setting or shortcut. Differential fixtures
+compare the old and new policy, but do not replace in-game or blind-user
+acceptance. See [the decision refactor notes](ACCESSIBILITY_CANE_DECISION_REFACTOR.md).
+
 `Accessibility.VirtualCaneMode` is a bounded integer with `0=off`, `1=slow`, and `2=fast`; it defaults to `1` for blind-user acceptance testing. During ordinary single-player walking gameplay, grabbed-object movement, mounted hoverbike movement, or active CamSpy viewing, F4 cycles Off, Slow, Fast, and back to Off. Each successful mode change plays a centered earcon using the scanner-toggle timing: Slow is 880 Hz then 1320 Hz, Fast is 880 Hz followed by two 1320 Hz beeps, and Off is 880 Hz then 440 Hz. Every beep lasts 35 ms with a 25 ms gap. There is no spoken mode announcement, and F4 is ignored while either Alt key is held. Menus, pause, cutscenes, death, other unsupported movement, stopped simulation, multiplayer, stage teardown, global accessibility disable, and shutdown stop all cane voices. Grab mode retains the ordinary barrier sweep while temporarily excluding exactly the live `grabbedprop` perimeter from each cane collision query, so the carried crate does not mask the route beyond it; all other props and background geometry remain eligible. Stance-dependent terrain traversal and crouch-passage classification resume after the player releases the object.
 
 Each sweep samples current player position, stance-sized movement cylinder, and horizontal camera direction at nine live angles: -80, -45, -25, -10, 0, 10, 25, 45, and 80 degrees. The nonuniform fan concentrates five rays around the forward path, retains rays near a typical widescreen viewport edge, and uses the outer pair to expose peripheral openings. Slow completes the left-to-right sweep plus end pause in 120 logical ticks; Fast completes it in 60. Movement and turning do not restart or freeze the sequence. A delayed frame never catches up with a burst: overdue angles are skipped and no more than one collision query runs in a logical tick.
