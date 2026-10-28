@@ -5,7 +5,7 @@ add_custom_target(accessibility_tests)
 
 set(accessibility_fixture_names
   cane_result cane_path landmark glossary monitor_image interaction
-  precision_mapping weapon_target visibility cane_decision tone_pcm)
+  precision_mapping weapon_target visibility cane_decision tone_pcm log)
 
 foreach(diagnostics RANGE 0 1)
   foreach(fixture IN LISTS accessibility_fixture_names)

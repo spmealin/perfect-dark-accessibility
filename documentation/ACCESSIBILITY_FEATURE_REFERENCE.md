@@ -6,6 +6,14 @@ shortcuts, cue summaries, and troubleshooting written for players, see the root
 
 ## Purpose
 
+Current implementation and validation status are summarized separately in the
+architecture's [current-evidence section](../ACCESSIBILITY_ARCHITECTURE.md#current-evidence-and-remaining-validation).
+Historical milestone experiments are not the current runtime specification.
+The existing advanced diagnostics flag now also measures synchronous logger
+formatting, writes, explicit flushes and temporary allocations; see the
+[logging profiling guide](ACCESSIBILITY_LOGGING_PROFILING.md). Normal builds
+retain their existing logging behavior with these measurements compiled out.
+
 This work aims to make the Perfect Dark PC port meaningfully playable by blind and low-vision players, starting with nonvisual access to menus and essential game state and progressing through small, testable gameplay slices.
 
 The current branch contains the accessibility coordinator/logger, Prism screen-reader/OneCore/SAPI speech backend, menu-agnostic focus narration, non-subtitle HUD-message speech, single-player interaction/door/pickup beacons, non-hostile-character beacons, damaging-laser and hostile-rocket hazard cues, firing-range, hostile-character/autogun/security-camera, FarSight-visible hostile targeting, and initial device-target feedback, weapon-function state cues, a nine-direction virtual-cane prototype, four player-authored audible landmarks, a nonvisual R-Tracker interface, a Combat Simulator audio-radar prototype, IR Scanner highlight audio, and X-Ray-aware semantic scanner visibility. All implemented feature backends default to enabled for blind-user acceptance testing; the cane defaults to Slow mode. Menu narration has passed project-owner blind-user acceptance, while newer gameplay slices retain the narrower evidence and pending tests documented below and in their historical milestone and feature records. Automatic route and goal guidance, other non-character combat categories, and full-game accessibility are not implemented.

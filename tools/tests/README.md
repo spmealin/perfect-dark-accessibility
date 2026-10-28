@@ -38,8 +38,9 @@ Every fixture runs with `ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS=0` and `1`:
 | `visibility` | Shared/scanner surface endpoints and budgets, embedded-monitor policy, transforms and door-sibling perimeter restoration |
 | `cane_decision` | 435,456 differential cases comparing unified resolution/materialization with the previous adapter policy |
 | `tone_pcm` | Pre-refactor exact PCM fingerprint for 93 glossary cues, conflicting world commands, varied buffer sizes and ownership transitions |
+| `log` | JSON/UTF-8, full oversized messages, allocation cleanup, flush policy, nonfatal failures and diagnostic-window accounting |
 
-This is **24 tests**: eleven fixtures in both diagnostics modes, plus source
+This is **26 tests**: twelve fixtures in both diagnostics modes, plus source
 contracts checking tone ownership and generic scanner/mission-registry boundaries. Assertions are
 explicitly enabled even in Release builds.
 Every executable also compiles `assertions_enabled.c`, which fails compilation
@@ -125,7 +126,7 @@ commit `07b091ec5`. It is compiled only into the differential test, never the
 game. Both diagnostic variants compare all sample fields and final contact
 outputs, with a deterministic clock; every primary and crouch action is
 required to be exercised. It preserves prior policy rather than proving that
-the policy is correct for every level. The suite now contains 20 tests.
+the policy is correct for every level. That pass increased the suite to 20 tests.
 Do not change the frozen reference alongside a refactor merely to make it pass;
 intentional policy changes need separately justified expectations and acceptance.
 
@@ -136,12 +137,19 @@ voices. This is an exact MinGW64 math/PCM regression, not a listening or timing
 benchmark. Do not regenerate the expected fingerprint just to accept a refactor;
 investigate differences, including possible toolchain/libm changes. The source
 contract rejects newly added public mutators without the central guard. The
-suite now contains 23 tests.
+ownership pass increased the suite to 23 tests.
 
 Authored-interaction coverage compares 216 stage/type/object/tag-mapping cases
 against the old scanner predicate, then checks lifecycle, ownership, native
 activation bypass and the unchanged movable cue. The landmark fixture confirms
 the rock does not gain a mission-landmark voice. The scanner source contract
 rejects direct stage constants or setup-tag lookups in the generic scanner.
-The current suite contains 24 tests; this is synthetic regression evidence,
+That pass increased the suite to 24 tests; this is synthetic regression evidence,
 not new in-game puzzle or independent-user acceptance.
+
+The logger fixture uses anonymous temporary files and injected timing/I/O faults,
+never `build/accessibility.log`. It checks normal and oversized formatting,
+allocation/second-format failure cleanup, first/interval/lifecycle flush behavior,
+nonfatal write/flush failures, shutdown idempotence, and diagnostic snapshot/reset
+without recursive reporting. Both modes pass; the current suite has 26 tests.
+Injected microseconds validate accounting, not real filesystem latency or FPS.

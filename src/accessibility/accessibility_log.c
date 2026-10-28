@@ -24,6 +24,57 @@ static char g_AccessibilityLogBuffer[ACCESSIBILITY_LOG_BUFFER_SIZE];
 static char g_AccessibilityLogFormatBuffer[ACCESSIBILITY_LOG_FORMAT_BUFFER_SIZE];
 static s32 g_AccessibilityLogFailureReported = 0;
 
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+static struct accessibilitylogdiagnostics g_AccessibilityLogDiagnostics;
+static u64 g_AccessibilityLogWindowStartUs;
+
+void accessibilityLogGetDiagnostics(struct accessibilitylogdiagnostics *diagnostics)
+{
+	if (diagnostics) *diagnostics = g_AccessibilityLogDiagnostics;
+}
+
+void accessibilityLogReportPerformance(const char *reason)
+{
+	struct accessibilitylogdiagnostics d;
+	u64 now;
+	if (!g_AccessibilityLogFile || !g_AccessibilityLogDiagnostics.events) return;
+	d = g_AccessibilityLogDiagnostics;
+	now = sysGetMicroseconds();
+	/* Snapshot/reset before logging: reporting is not recursive, and its own
+	 * cost belongs to the next window rather than disappearing from accounting. */
+	memset(&g_AccessibilityLogDiagnostics, 0, sizeof(g_AccessibilityLogDiagnostics));
+	accessibilityLogEvent("performance", "log_window",
+			"version=1 reason=%s window_us=%" PRIu64 " events=%" PRIu64 " format_calls=%" PRIu64 " format_total_us=%" PRIu64 " format_max_us=%" PRIu64 " write_total_us=%" PRIu64 " write_max_us=%" PRIu64 " flushes=%" PRIu64 " flush_total_us=%" PRIu64 " flush_max_us=%" PRIu64 " allocation_attempts=%" PRIu64 " allocations=%" PRIu64 " allocated_bytes=%" PRIu64 " frees=%" PRIu64 " allocation_failures=%" PRIu64 " io_failures=%" PRIu64 " worst_write_category=%s worst_write_event=%s",
+			reason ? reason : "periodic", (uint64_t)(now - g_AccessibilityLogWindowStartUs),
+			(uint64_t)d.events, (uint64_t)d.formatcalls, (uint64_t)d.formatus,
+			(uint64_t)d.formatmaxus, (uint64_t)d.writeus, (uint64_t)d.writemaxus,
+			(uint64_t)d.flushes, (uint64_t)d.flushus, (uint64_t)d.flushmaxus,
+			(uint64_t)d.allocationattempts, (uint64_t)d.allocations,
+			(uint64_t)d.allocatedbytes, (uint64_t)d.frees,
+			(uint64_t)d.allocationfailures, (uint64_t)d.iofailures,
+			d.worstwritecategory, d.worstwriteevent);
+	g_AccessibilityLogWindowStartUs = now;
+}
+#endif
+
+static s32 accessibilityLogFlush(FILE *file)
+{
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+	u64 start = sysGetMicroseconds();
+#endif
+	s32 result = fflush(file);
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+	s32 errornum = errno;
+	u64 elapsed = sysGetMicroseconds() - start;
+	g_AccessibilityLogDiagnostics.flushes++;
+	g_AccessibilityLogDiagnostics.flushus += elapsed;
+	if (elapsed > g_AccessibilityLogDiagnostics.flushmaxus)
+		g_AccessibilityLogDiagnostics.flushmaxus = elapsed;
+	errno = errornum;
+#endif
+	return result;
+}
+
 static size_t accessibilityLogUtf8SequenceLength(const unsigned char *value)
 {
 	const unsigned char first = value[0];
@@ -129,6 +180,9 @@ static void accessibilityLogCloseAfterFailure(const char *operation)
 {
 	FILE *file = g_AccessibilityLogFile;
 	s32 errornum = errno;
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+	g_AccessibilityLogDiagnostics.iofailures++;
+#endif
 
 	g_AccessibilityLogFile = NULL;
 
@@ -150,6 +204,10 @@ s32 accessibilityLogInit(void)
 	g_AccessibilityLogFailureReported = 0;
 	g_AccessibilityLogSequence = 0;
 	g_AccessibilityLogNextFlushUs = 0;
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+	memset(&g_AccessibilityLogDiagnostics, 0, sizeof(g_AccessibilityLogDiagnostics));
+	g_AccessibilityLogWindowStartUs = sysGetMicroseconds();
+#endif
 	now = time(NULL);
 	snprintf(g_AccessibilityLogSession, sizeof(g_AccessibilityLogSession),
 			"%" PRIu64, (uint64_t)now);
@@ -185,7 +243,7 @@ void accessibilityLogShutdown(void)
 	file = g_AccessibilityLogFile;
 	g_AccessibilityLogFile = NULL;
 	errno = 0;
-	flushresult = fflush(file);
+	flushresult = accessibilityLogFlush(file);
 	errornum = errno;
 	closeresult = fclose(file);
 
@@ -244,6 +302,25 @@ void accessibilityLogEventMessage(const char *category, const char *event,
 	accessibilityLogWriteJsonString(message);
 	fputs("}\n", g_AccessibilityLogFile);
 
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+	{
+		s32 errornum = errno;
+		u64 elapsed = sysGetMicroseconds() - timestamp;
+		g_AccessibilityLogDiagnostics.events++;
+		g_AccessibilityLogDiagnostics.writeus += elapsed;
+		if (elapsed > g_AccessibilityLogDiagnostics.writemaxus) {
+			g_AccessibilityLogDiagnostics.writemaxus = elapsed;
+			snprintf(g_AccessibilityLogDiagnostics.worstwritecategory,
+					sizeof(g_AccessibilityLogDiagnostics.worstwritecategory),
+					"%s", category ? category : "");
+			snprintf(g_AccessibilityLogDiagnostics.worstwriteevent,
+					sizeof(g_AccessibilityLogDiagnostics.worstwriteevent),
+					"%s", event ? event : "");
+		}
+		errno = errornum;
+	}
+#endif
+
 	if (ferror(g_AccessibilityLogFile)) {
 		accessibilityLogCloseAfterFailure("write");
 		return;
@@ -252,7 +329,7 @@ void accessibilityLogEventMessage(const char *category, const char *event,
 	if (g_AccessibilityLogNextFlushUs == 0
 			|| timestamp >= g_AccessibilityLogNextFlushUs
 			|| (category && strcmp(category, "lifecycle") == 0)) {
-		if (fflush(g_AccessibilityLogFile) != 0) {
+		if (accessibilityLogFlush(g_AccessibilityLogFile) != 0) {
 			accessibilityLogCloseAfterFailure("flush");
 			return;
 		}
@@ -271,10 +348,18 @@ void accessibilityLogEvent(const char *category, const char *event, const char *
 	va_list args;
 	va_list copy;
 	s32 length;
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+	u64 start;
+#endif
 
 	if (!g_AccessibilityLogFile) {
 		return;
 	}
+
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+	start = sysGetMicroseconds();
+	g_AccessibilityLogDiagnostics.formatcalls++;
+#endif
 
 	if (fmt) {
 		va_start(args, fmt);
@@ -288,17 +373,30 @@ void accessibilityLogEvent(const char *category, const char *event, const char *
 		} else if ((size_t)length < sizeof(g_AccessibilityLogFormatBuffer)) {
 			message = g_AccessibilityLogFormatBuffer;
 		} else {
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+			g_AccessibilityLogDiagnostics.allocationattempts++;
+#endif
 			allocated = malloc((size_t)length + 1);
 
 			if (allocated) {
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+				g_AccessibilityLogDiagnostics.allocations++;
+				g_AccessibilityLogDiagnostics.allocatedbytes += (size_t)length + 1;
+#endif
 				if (vsnprintf(allocated, (size_t)length + 1, fmt, copy) < 0) {
 					free(allocated);
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+					g_AccessibilityLogDiagnostics.frees++;
+#endif
 					allocated = NULL;
 					message = formaterror;
 				} else {
 					message = allocated;
 				}
 			} else {
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+				g_AccessibilityLogDiagnostics.allocationfailures++;
+#endif
 				message = allocationerror;
 			}
 		}
@@ -306,6 +404,17 @@ void accessibilityLogEvent(const char *category, const char *event, const char *
 		va_end(copy);
 	}
 
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+	{
+		u64 elapsed = sysGetMicroseconds() - start;
+		g_AccessibilityLogDiagnostics.formatus += elapsed;
+		if (elapsed > g_AccessibilityLogDiagnostics.formatmaxus)
+			g_AccessibilityLogDiagnostics.formatmaxus = elapsed;
+	}
+#endif
 	accessibilityLogEventMessage(category, event, message);
+#if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
+	if (allocated) g_AccessibilityLogDiagnostics.frees++;
+#endif
 	free(allocated);
 }

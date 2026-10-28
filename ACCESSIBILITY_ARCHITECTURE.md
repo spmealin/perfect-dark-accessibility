@@ -1,6 +1,10 @@
 # Accessibility architecture notes
 
-This document records repository evidence and a proposed architecture. It deliberately separates what exists from what has not yet been implemented.
+This document records the implemented accessibility architecture, its engine
+boundaries, and explicitly labeled future work. Current behavior is described
+in the module/contracts and feature sections; historical milestone documents
+preserve the original experiments and their narrower evidence. Historical
+design language is not a claim that an implemented feature is still pending.
 
 Status labels:
 
@@ -13,15 +17,15 @@ Status labels:
 | Area | Confirmed role | Accessibility relevance |
 | --- | --- | --- |
 | `src/game/` | Reimplemented game systems | Owns menus, HUD messages, objectives, player state, targeting, inventory, and world semantics. |
-| `src/accessibility/` | Platform-independent accessibility core | Milestone 2 implements lifecycle coordination and JSONL diagnostic logging here. |
+| `src/accessibility/` | Platform-independent accessibility core | Owns semantic adapters, announcements, world scanners, targeting, cane decisions, diagnostics and speech policy. |
 | `src/lib/` | Lower-level game/runtime systems | Owns audio manager, sound, scheduler-facing and N64-compatible facilities. |
 | `src/include/` | Game and shared headers | Defines `struct player`, menu structures, platform macros, and game APIs. |
 | `port/src/` | Native PC entry point and services | Owns startup, configuration, filesystem, SDL input/video/audio, ROM loading, and logging. |
-| `port/include/` | Port service headers | Candidate home for backend and native accessibility interfaces. |
+| `port/include/` | Port service headers | Contains public native speech, tone and configuration contracts; private implementation contracts stay beside their owning modules. |
 | `src/assets/<ROMID>/` | Version-specific source asset descriptions | Do not use as an accessibility implementation directory; content differs by ROM version. |
 | `build/src/generated/<ROMID>/` | Generated build output | Never edit or commit. |
 | `dist/` | Packaging metadata and platform assets | Only relevant when an accessibility runtime dependency is deliberately packaged. |
-| `tools/` | Asset/build utilities and recomp submodule | Not a first-phase hook location. |
+| `tools/` | Asset/build utilities, diagnostic tools, regression suite and recomp submodule | `tools/test_accessibility.ps1` runs isolated MinGW64 tests; runtime game hooks do not belong here. |
 
 `CMakeLists.txt` recursively includes C and C++ sources under `src/game` and `port`, then generates asset headers for the selected `ROMID`. The explicit `SRC_ACCESSIBILITY` list now owns the coordinator, announcements, menu semantics, beacons, targeting core/source adapter, logging, and speech core. Platform backend selection compiles exactly one native or null speech implementation.
 
@@ -246,7 +250,7 @@ source.
 
 ### Lifecycle
 
-Milestone 2 implements:
+The implemented lifecycle contract, introduced in Milestone 2, is:
 
 ```c
 void accessibilityInit(void);
@@ -394,12 +398,25 @@ logging are explicitly enabled; diagnostic builds may also open it for the
 explicit accessibility-disabled graphics control. The logger truncates the
 prior session and records JSON Lines containing schema, sequence, session,
 monotonic microseconds, complete build metadata, category, event, and a detailed
-message. It is main-thread-only. A fixed 64 KiB stdio buffer and fixed 4 KiB
-format buffer avoid allocation and disk flushes for ordinary events; oversized
+message. It is main-thread-only and synchronous. A fixed 64 KiB stdio buffer
+reduces write frequency and a fixed 4 KiB format buffer avoids allocation for
+ordinary events; neither guarantees nonblocking I/O. Filling the stdio buffer
+can implicitly write during serialization. Oversized
 messages allocate exact temporary storage so diagnostic detail is not
 truncated. The first record after each one-second interval flushes the batch;
 lifecycle events and shutdown also flush. Open/write/flush/close failures
 disable the logger nonfatally.
+
+With `ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS=ON`, fixed counters measure format
+calls/time, JSON serialization/write time (including implicit buffer drains),
+explicit flush time, oversized allocation attempts/bytes/frees/failures, and I/O
+failures. `performance/log_window` reports a snapshot roughly once per second
+and before the final lifecycle stop. Reporting resets counters before writing,
+so its own work is included in the next window without recursive logging.
+Normal builds add no profiling clocks or summary records. Open/close costs,
+final stop-record/flush costs, and profiling bookkeeping are not covered by the
+reported intervals. No asynchronous queue, record loss or truncation is added.
+See [the logging profiling guide](documentation/ACCESSIBILITY_LOGGING_PROFILING.md).
 
 `accessibility_incident.c` maintains a fixed 60-entry ring sampled every 15 logical ticks, providing approximately 15 seconds of pre-capture observer, presentation, and input history without per-sample allocation or log traffic. Shift+F2 writes the ring followed by current player, objective, inventory, beacon scheduler, nearby-prop, and view-blocker state through the existing buffered logger. The beacon module additionally selects at most 16 scanner-supported props within 1,200 units and a forward dot product of at least 0.75, ordered by alignment and distance. It reevaluates each through the same private semantic, range, room, and LOS helpers into local result storage, records the exact rejection boundary, and never replaces the live scanner snapshot, schedule, identities, or counters. All semantic collection and collision work stays on the main thread after `lvTick`; the audio callback is not involved. The active-observer adapter makes the capture follow Joanna or the CamSpy consistently with other navigation features. Capture identifiers are process-local and are correlated with the logger's session field. State resets at stage teardown while the capture sequence remains session-local.
 
@@ -784,9 +801,9 @@ check enforces the scanner boundary. See the
 
 ## Regression testing
 
-The opt-in `ACCESSIBILITY_BUILD_TESTS` CMake option registers eleven current
+The opt-in `ACCESSIBILITY_BUILD_TESTS` CMake option registers twelve current
 regression fixtures with CTest in both performance-diagnostics modes plus two
-source-contract checks (24 tests total). The
+source-contract checks (26 tests total). The
 `accessibility_tests` target is excluded from normal game/package builds.
 `tools/test_accessibility.ps1` initializes MinGW64, uses the isolated
 `build/accessibility-tests` cache, builds that target and runs the suite.
@@ -836,17 +853,14 @@ This table records implemented and anticipated changes to established files so f
 
 `src/game/player.c` is a confirmed future semantic source but does not need Milestone 4 hooks. `src/game/mainmenu.c` has one read-only semantic-provider case for its custom-rendered mission list; it combines the same localized location and subtitle fields drawn by the renderer and appends the visible difficulty-completion state, while containing no speech policy.
 
-## Known uncertainties and required experiments
+## Current evidence and remaining validation
 
-1. **Windows speech technology:** Milestone 3 originally validated Tolk with NVDA 2026.1. The current experimental replacement dynamically loads the official Prism 0.18.2 x64 runtime and selects active screen readers before OneCore/SAPI fallback. Compilation and dependency inspection do not establish audible correctness; NVDA-active, NVDA-absent fallback, cancellation, Unicode, Narrator/UIA override, missing-DLL, and clean-shutdown behavior require renewed runtime and blind-user acceptance testing.
-2. **Threading:** determine whether native speech can be pumped without blocking and which calls must occur on the main thread or a COM-initialized worker.
-3. **Menu semantics:** Milestone 4 implements the stable post-input observer and current type/provider matrix. Compilation and lifecycle smoke evidence exist; callback lifetime, localization variants, compound-control usefulness, full input parity, first-focus timing, and the complete scripted interaction matrix still need runtime and blind-user verification.
-4. **Localization:** test all supported ROM configurations for string resolution and region-specific control codes. Existing game-derived menu, weapon, objective, and description text follows the normal language APIs. Accessibility-authored R-Tracker state phrases (`R-Tracker on`, `R-Tracker off`, and `No tracked targets`) remain centralized in the accessibility adapter but do not yet have language IDs or translations; add an accessibility string namespace and translation workflow before claiming non-English support rather than editing generated/ROM-derived assets.
-5. **HUD duplication:** correlate subtitle splitting, HUD duplicate suppression, objective-generated HUD messages, audio channels, and cutscene transitions.
-6. **Multiple players:** define which local player's focus/status owns speech and how simultaneous events are identified or suppressed.
-7. **Input:** determine a collision-free binding model and whether accessibility commands work while paused, in menus, and during gameplay.
-8. **Status sampling:** choose a stable tick placement and verify health, shield, weapon, ammo, death, stage changes, scripted changes, and pause behaviour.
-9. **Target truth:** define stable semantic identities and ensure target/scanner output does not reveal cloaked, occluded, scripted, or otherwise unknown entities.
-10. **Navigation model:** inspect room/portal/pad data and prototype one training path; do not assume source geometry yields a usable route graph.
-11. **Log storage:** verify `$S` resolution in portable and installed Windows modes; measure real volume and write cost before choosing buffering, size limits, or session rollover.
-12. **Shutdown/crash:** verify cancellation and cleanup during normal exit, initialization failure, window close, and crash-handler interaction without making speech a crash dependency.
+1. **Speech:** Prism is the current Windows backend, not a pending Tolk replacement. The project owner reported speech with NVDA running, OneCore fallback after restarting without NVDA, and NVDA speech again after another restart. That is bounded acceptance of those three paths, not evidence for JAWS, every supported reader, braille, Unicode edge cases, cancellation, Narrator/UIA override, missing-DLL handling or every shutdown path. Historical Tolk experiments remain in the milestone records.
+2. **Thread and latency boundaries:** gameplay/semantic collection and logger calls remain main-thread-only. Speech backend calls also originate there; being queued by a provider is not proof that every provider call is nonblocking. The tone mixer owns fixed audio-thread state and reads atomic controls, never main-thread ownership policy. Measure stalls before selecting worker/COM synchronization changes.
+3. **Menus and HUD:** menu semantics and generic non-dialogue/non-subtitle HUD speech are implemented and have project-owner testing across many screens. Complete localization, unusual callback/control combinations, burst/cutscene ordering and split-screen composition remain incomplete validation, not wholly unimplemented features.
+4. **Localization:** game-derived labels use native language APIs. Accessibility-authored glossary names, status/compass/device phrases and other English strings still need an accessibility translation namespace/workflow. Do not claim complete non-English support or edit generated/ROM assets to supply it.
+5. **Scope:** ordinary single-player missions and one-local-player Combat Simulator assistance exist. Multiple local players, cooperative output ownership, competing announcements and simultaneous perspectives remain unsupported or require separate design/testing.
+6. **Input and status:** context-sensitive F1–F12 commands, sticky scanner/cane modes, player/team status queries, radial-menu speech and configurable End/R3 reset-view are implemented. General rebinding of accessibility shortcuts and broader in-game settings remain future work; check current shortcuts against the practical guide rather than historical milestone plans.
+7. **Target and navigation truth:** viewport, relationship, lifecycle, LOS, device exposure, exact-aim and authored-target policies exist. Real level-specific geometry and script edge cases still require gameplay evidence. Cane, compass and markers do not provide pathfinding, automovement or automatic objective completion.
+8. **Logging:** the logger uses fixed stdio buffering but remains synchronous; buffer exhaustion and explicit flushes can block the game thread. Diagnostics now separate formatting, serialization/writes, explicit flushes and temporary allocations. Collect actual session windows alongside render/graphics evidence before choosing an asynchronous queue, batching changes, size limits or rollover. No logging measurement establishes the cause of the earlier graphics slowdown.
+9. **Failure and shutdown:** explicit feature/backend cleanup and nonfatal logger failure handling are implemented. Synthetic tests and normal owner use do not establish crash recovery, driver-reset behavior, every backend failure path or clean output on every assistive-technology configuration.
