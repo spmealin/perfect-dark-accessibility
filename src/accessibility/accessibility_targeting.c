@@ -31,6 +31,8 @@
 #define ACCESSIBILITY_TARGETING_TONE_BASE_FREQUENCY_HZ 440.0f
 #define ACCESSIBILITY_TARGETING_TONE_MIN_PITCH 1.5f
 #define ACCESSIBILITY_TARGETING_TONE_MAX_PITCH 3.0f
+/* Same strict bullseye boundary as frCalculateHit. */
+#define ACCESSIBILITY_TARGETING_RANGE_BULLSEYE_RADIUS 18.0f
 #define ACCESSIBILITY_TARGETING_HEAD_LOCK_MULTIPLIER 1.25f
 #define ACCESSIBILITY_TARGETING_ARM_LOCK_MULTIPLIER 0.8f
 #define ACCESSIBILITY_TARGETING_INTERRUPTED_PITCH_MULTIPLIER 0.6f
@@ -1669,7 +1671,20 @@ static void accessibilityTargetingUpdateAlignment(s32 frame60,
 	f32 quality = candidate->hasaimquality ? candidate->aimquality : 0.0f;
 	f32 frequencyhz;
 	f32 volume;
+	s32 rangebullseye = candidate->identity.source
+			== ACCESSIBILITY_TARGETING_SOURCE_FIRING_RANGE
+			&& candidate->category == ACCESSIBILITY_TARGETING_CATEGORY_RANGE_TARGET
+			&& candidate->hasaimquality
+			&& candidate->aimdistance >= 0.0f
+			&& candidate->aimdistance < ACCESSIBILITY_TARGETING_RANGE_BULLSEYE_RADIUS;
 	s32 patternflags = ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_CONTINUOUS;
+	if (candidate->identity.source == ACCESSIBILITY_TARGETING_SOURCE_FIRING_RANGE
+			&& candidate->category == ACCESSIBILITY_TARGETING_CATEGORY_RANGE_TARGET) {
+		patternflags |= ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_RANGE;
+		if (rangebullseye) {
+			patternflags |= ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_BULLSEYE;
+		}
+	}
 	s32 starting = !g_AccessibilityTargetingAlignmentActive;
 	s32 interrupted = candidate->relationship
 				== ACCESSIBILITY_TARGETING_RELATIONSHIP_PROTECTED

@@ -654,7 +654,28 @@ The PC default control scheme maps both the keyboard End key and an Xbox-compati
 
 ### Fine aiming tone
 
-The firing-range targeting alignment lane uses a centered generated sine wave instead of the former repeated `SFX_0007` cue. It activates automatically only while the game reports that the reticle is over a visible, currently shootable range target. The adapter reuses the exact non-random query-ray hit position produced while calculating `lookingatprop`; it does not include weapon spread or cast an additional ray. The range's existing scoring model measures that point's distance from the target center, with bullseye/ring boundaries at 18, 37, and 56 world units. Accessibility converts the same distance into a continuous quality value across the approximately 75-unit scoring radius. Center produces the highest pitch. A 440 Hz reference and `1.5` to `3.0` pitch range produce 660–1320 Hz. The tone stops on aim loss, a back-facing target, scope loss, pause/menu transitions, feature disable, stage teardown, or shutdown. The backend preserves oscillator phase, interpolates frequency through each audio buffer, applies a 10 ms gain ramp, and uses one fixed buffer with no runtime allocation or game sound handle. A separate 100 ms enveloped chirp voice supplies beacon pulses without interrupting the continuous aiming lane. There is no F9 prototype binding.
+The center bullseye layers the standard continuous 660 Hz enemy body-lock
+tone over the original accuracy pitch. This applies only to firing-range
+target candidates with a measured aim hit less than 18 world units from the
+target center, matching the strict bullseye boundary in `frCalculateHit`.
+At 18 units and beyond, only the existing continuous accuracy pitch remains.
+The accuracy lane uses 80% of `TargetingVolume` throughout the target; the
+added lock uses 100%. One fixed audio-thread-owned oscillator with smoothed
+gain supplies the overlay and follows the same stop/preview lifecycle.
+No raycast, configuration key, shortcut, or native hook is added. Existing target validity,
+back-facing rejection, pause/menu handling and `TargetingVolume` still apply.
+This is aim-only feedback, not a prediction of weapon spread or damage.
+
+Owner listening acceptance (2026-10-30): the initial replacement-only bullseye
+tone was confusing because it was lower than the accuracy tone. After restoring
+the accuracy pitch, reducing that lane by 20%, and layering the normal enemy
+lock over the bullseye, the owner reported "That sounds good" and approved
+commit/push. This is listening acceptance of the revised cue, not evidence of
+shot placement, scoring, or every weapon. All 26 regression tests and the
+MinGW64 Windows x64 `ntsc-final` build passed; no new runtime log was captured
+by the agent.
+
+The firing-range targeting alignment lane uses a centered generated sine wave instead of the former repeated `SFX_0007` cue. It activates automatically only while the game reports that the reticle is over a visible, currently shootable range target. The adapter reuses the exact non-random query-ray hit position produced while calculating `lookingatprop`; it does not include weapon spread or cast an additional ray. The range's existing scoring model measures that point's distance from the target center, with bullseye/ring boundaries at 18, 37, and 56 world units. Accessibility converts the same distance into a continuous quality value across the approximately 75-unit scoring radius. Outside the bullseye override, a 440 Hz reference and `1.5` to `3.0` exponential pitch mapping raise the accuracy tone as aim approaches the center. The tone stops on aim loss, a back-facing target, scope loss, pause/menu transitions, feature disable, stage teardown, or shutdown. The backend preserves oscillator phase, interpolates frequency through each audio buffer, applies a 10 ms gain ramp, and uses one fixed buffer with no runtime allocation or game sound handle. A separate 100 ms enveloped chirp voice supplies beacon pulses without interrupting the continuous aiming lane. There is no F9 prototype binding.
 
 ### Special-device target tone
 

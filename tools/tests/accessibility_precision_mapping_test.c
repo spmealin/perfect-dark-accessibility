@@ -128,6 +128,31 @@ int main(void)
 	accessibilityTargetingUpdateAlignment(6, &candidate, "weapon_fixture");
 	closeTo(capturedfrequency, 396);
 	assert(capturedflags == ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_INTERRUPTED);
-	puts("Precision mapping: direction, close-in contrast, bounds, smoothing and unchanged locks passed.");
+	/* Range bullseye retains accuracy pitch and requests a layered body lock.
+	 * Exactly 18 belongs to the next scoring ring, matching native scoring. */
+	memset(&candidate, 0, sizeof(candidate));
+	candidate.identity.source = ACCESSIBILITY_TARGETING_SOURCE_FIRING_RANGE;
+	candidate.category = ACCESSIBILITY_TARGETING_CATEGORY_RANGE_TARGET;
+	candidate.hasaimquality = 1;
+	for (i = 0; i < 3; i++) {
+		candidate.aimdistance = i == 0 ? 0.0f : i == 1 ? 9.0f : 17.999f;
+		candidate.aimquality = 1.0f - candidate.aimdistance / 75.0f;
+		accessibilityTargetingUpdateAlignment(7 + i, &candidate, "bullseye_fixture");
+		closeTo(capturedfrequency, 660.0f * powf(2.0f, candidate.aimquality));
+		assert(capturedflags == (ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_RANGE
+				| ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_BULLSEYE));
+	}
+	candidate.aimdistance = 18.0f;
+	candidate.aimquality = 1.0f - 18.0f / 75.0f;
+	accessibilityTargetingUpdateAlignment(10, &candidate, "ring_fixture");
+	closeTo(capturedfrequency, 660.0f * powf(2.0f, candidate.aimquality));
+	assert(capturedflags == ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_RANGE);
+	/* Quality from an unrelated source must not acquire the bullseye override. */
+	candidate.identity.source = ACCESSIBILITY_TARGETING_SOURCE_NONE;
+	candidate.aimdistance = 0.0f;
+	candidate.aimquality = 1.0f;
+	accessibilityTargetingUpdateAlignment(11, &candidate, "other_fixture");
+	closeTo(capturedfrequency, 1320);
+	puts("Precision mapping: direction, close-in contrast, bounds, smoothing, range bullseye and unchanged combat locks passed.");
 	return 0;
 }

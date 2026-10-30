@@ -207,6 +207,13 @@ The centered aiming tone is separate from the positioned enemy sound:
 The system reports aim and target state; it does not change weapon spread,
 damage, projectile behavior, or mission rules.
 
+In the firing range, the accuracy tone rises in pitch as your aim approaches
+the center, at 80% of the normal targeting volume. Inside the center bullseye,
+the standard solid enemy lock-on tone plays alongside that accuracy tone at
+normal targeting volume. Back-facing or otherwise invalid
+targets do not produce a lock. This describes aim, not a guarantee that weapon
+spread will put the shot in the bullseye.
+
 Mines, grenades, rockets, and a deployed Dragon in proximity-mine mode use the
 lower interrupted destructible lock when your exact aim hits them and the
 equipped attack can damage them. This does not depend on who placed the item.

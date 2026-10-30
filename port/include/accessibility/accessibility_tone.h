@@ -22,6 +22,9 @@ enum accessibilitytonealignmentpattern {
 	ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_CONTINUOUS = 0,
 	ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_INTERRUPTED = 1 << 0,
 	ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_PENETRABLE = 1 << 1,
+	/* Range accuracy keeps its pitch, at 80% gain; bullseye adds body lock. */
+	ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_RANGE = 1 << 2,
+	ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_BULLSEYE = 1 << 3,
 };
 
 enum accessibilitytonecanepattern {

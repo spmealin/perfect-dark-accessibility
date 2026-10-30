@@ -14,6 +14,8 @@ static s16 g_AccessibilityToneMixBuffer[ACCESSIBILITY_TONE_MIX_BUFFER_SAMPLES];
 static f32 g_AccessibilityTonePhase;
 static f32 g_AccessibilityToneFrequencyHz;
 static f32 g_AccessibilityToneGain;
+static f32 g_AccessibilityBullseyePhase;
+static f32 g_AccessibilityBullseyeGain;
 static s32 g_AccessibilityToneObservedPatternSequence;
 static s32 g_AccessibilityTonePatternSample;
 static f32 g_AccessibilityTonePenetrablePhase;
@@ -234,6 +236,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 	f32 targetfrequency = (f32)SDL_AtomicGet(
 			&g_AccessibilityToneFrequencyMilliHz) / 1000.0f;
 	f32 targetgain = 0.0f;
+	f32 bullseyetargetgain = 0.0f;
 	f32 hazardtargetfrequency = (f32)SDL_AtomicGet(
 			&g_AccessibilityHazardFrequencyMilliHz) / 1000.0f;
 	f32 hazardtargetgain = hazardenabled
@@ -277,6 +280,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		/* Discard audio-owned tails only at explicit preview boundaries.
 		 * Normal gameplay still uses its established smooth release paths. */
 		g_AccessibilityToneGain = 0;
+		g_AccessibilityBullseyeGain = 0;
 		g_AccessibilityHazardGain = 0;
 		g_AccessibilityCaneEdgeGain = 0;
 		g_AccessibilityHillGain = 0;
@@ -305,6 +309,12 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 				& ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_INTERRUPTED
 				? accessibilityGetInterruptedTargetingVolume()
 				: accessibilityGetTargetingVolume();
+		if (tonepatternflags & ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_RANGE) {
+			if (tonepatternflags & ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_BULLSEYE) {
+				bullseyetargetgain = targetgain;
+			}
+			targetgain *= 0.8f;
+		}
 	}
 
 	if (tonepatternsequence
@@ -812,6 +822,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 	}
 
 	if (!enabled && g_AccessibilityToneGain <= 0.0f
+			&& g_AccessibilityBullseyeGain <= 0.0f
 			&& !hazardenabled && g_AccessibilityHazardGain <= 0.0f
 			&& !caneedgeenabled && g_AccessibilityCaneEdgeGain <= 0.0f
 			&& g_AccessibilityChirpSamplesRemaining <= 0
@@ -967,6 +978,24 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 		tone = (s32)(sinf(g_AccessibilityTonePhase)
 				* g_AccessibilityToneGain * alignmentenvelope * 32767.0f);
+		/* Independent fixed voice: retain accuracy pitch while adding the
+		 * normal enemy body lock, with smooth entry/exit at the bullseye. */
+		if (g_AccessibilityBullseyeGain < bullseyetargetgain) {
+			g_AccessibilityBullseyeGain = fminf(bullseyetargetgain,
+					g_AccessibilityBullseyeGain + ACCESSIBILITY_TONE_GAIN_STEP);
+		} else if (g_AccessibilityBullseyeGain > bullseyetargetgain) {
+			g_AccessibilityBullseyeGain = fmaxf(bullseyetargetgain,
+					g_AccessibilityBullseyeGain - ACCESSIBILITY_TONE_GAIN_STEP);
+		}
+		if (g_AccessibilityBullseyeGain > 0.0f) {
+			tone += (s32)(sinf(g_AccessibilityBullseyePhase)
+					* g_AccessibilityBullseyeGain * 32767.0f);
+			g_AccessibilityBullseyePhase += TWO_PI * 660.0f
+					/ ACCESSIBILITY_TONE_SAMPLE_RATE;
+			if (g_AccessibilityBullseyePhase >= TWO_PI) {
+				g_AccessibilityBullseyePhase -= TWO_PI;
+			}
+		}
 
 		if (g_AccessibilityHazardGain < hazardtargetgain) {
 			g_AccessibilityHazardGain += ACCESSIBILITY_TONE_GAIN_STEP;

@@ -98,5 +98,52 @@ int main(int argc, char **argv)
 	assert(accessibilityToneMix(NULL, 0) == NULL);
 	assert(accessibilityToneMix(gameaudio, 3) == gameaudio);
 	assert(accessibilityToneMix(gameaudio, sizeof(gameaudio) * 3) == gameaudio);
+	/* Range layering is isolated from ordinary locks and the golden glossary.
+	 * Verify actual mixer gains, independent phases, summed PCM and cleanup. */
+	memset(gameaudio, 0, sizeof(gameaudio));
+	accessibilityToneSetAlignment(1, 1320, ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_RANGE);
+	accessibilityToneMix(gameaudio, sizeof(gameaudio));
+	assert(fabsf(g_AccessibilityToneGain - .15f * .8f) < .00001f);
+	assert(g_AccessibilityBullseyeGain == 0);
+	accessibilityToneSetAlignment(1, 1320,
+			ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_RANGE
+			| ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_BULLSEYE);
+	accessibilityToneMix(gameaudio, sizeof(gameaudio));
+	assert(fabsf(g_AccessibilityToneGain - .12f) < .00001f);
+	assert(fabsf(g_AccessibilityBullseyeGain - .15f) < .00001f);
+	assert(fabsf(g_AccessibilityToneFrequencyHz - 1320) < .01f);
+	g_AccessibilityTonePhase = .5f;
+	g_AccessibilityBullseyePhase = 1.0f;
+	{
+		s32 expected = (s32)(sinf(.5f) * .12f * 32767.0f)
+				+ (s32)(sinf(1.0f) * .15f * 32767.0f);
+		const s16 *pcm = accessibilityToneMix(gameaudio, 2 * sizeof(s16));
+		assert(abs(pcm[0] - expected) <= 1);
+		assert(pcm[0] == pcm[1]);
+	}
+	accessibilityToneSetAlignment(1, 1200, ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_RANGE);
+	accessibilityToneMix(gameaudio, sizeof(gameaudio));
+	assert(g_AccessibilityBullseyeGain == 0);
+	assert(fabsf(g_AccessibilityToneGain - .12f) < .00001f);
+	accessibilityToneSetAlignment(1, 660, 0);
+	accessibilityToneMix(gameaudio, sizeof(gameaudio));
+	assert(fabsf(g_AccessibilityToneGain - .15f) < .00001f);
+	accessibilityToneSetAlignment(1, 1320,
+			ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_RANGE
+			| ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_BULLSEYE);
+	accessibilityToneMix(gameaudio, sizeof(gameaudio));
+	accessibilityToneSetAlignment(0, 0, 0);
+	accessibilityToneMix(gameaudio, sizeof(gameaudio));
+	assert(g_AccessibilityToneGain == 0 && g_AccessibilityBullseyeGain == 0);
+	assert(accessibilityToneMix(gameaudio, sizeof(gameaudio)) == gameaudio);
+	accessibilityToneSetAlignment(1, 1320,
+			ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_RANGE
+			| ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_BULLSEYE);
+	accessibilityToneMix(gameaudio, sizeof(gameaudio));
+	accessibilityTonePreviewBegin();
+	accessibilityTonePreviewCommit(100);
+	accessibilityToneMix(gameaudio, sizeof(gameaudio));
+	assert(g_AccessibilityBullseyeGain == 0);
+	accessibilityTonePreviewStop();
 	return 0;
 }
