@@ -483,10 +483,17 @@ static void accessibilityMenuDescribeItem(struct accessibilitymenusnapshot *snap
 		strcpy(snapshot->role, "player statistics");
 		snapshot->optioncount = accessibilityMenuGetHandlerValue(item, MENUOP_GETOPTIONCOUNT);
 		snapshot->selectedindex = accessibilityMenuGetHandlerValue(item, MENUOP_GETSELECTEDINDEX);
-		accessibilityMenuGetOptionText(item, snapshot->selectedindex, option, sizeof(option));
+		snapshot->subindex = snapshot->dimmed && itemdata
+				? itemdata->dropdown.list.index : snapshot->selectedindex;
+		accessibilityMenuGetOptionText(item, snapshot->subindex, option, sizeof(option));
 		accessibilityMenuCopyNormalized(snapshot->label,
 				sizeof(snapshot->label), option);
-		snapshot->subindex = snapshot->selectedindex;
+		if (snapshot->dimmed && itemdata) {
+			/* The native stats control opens a dropdown. Its highlighted row
+			 * is not committed until activation; don't repeat stale stats. */
+			strcpy(snapshot->role, "dropdown");
+			break;
+		}
 		if (!accessibilityMenuGetProviderText(item,
 				MENUACCESSIBILITYPART_CONTROL, snapshot->selectedindex,
 				snapshot->value, sizeof(snapshot->value))) {
@@ -548,6 +555,7 @@ static void accessibilityMenuCompose(struct accessibilitymenusnapshot *snapshot,
 
 	if (snapshot->dimmed
 			&& (snapshot->itemtype == MENUITEMTYPE_DROPDOWN
+					|| snapshot->itemtype == MENUITEMTYPE_PLAYERSTATS
 					|| snapshot->itemtype == MENUITEMTYPE_SLIDER)) {
 		accessibilityMenuAppendPart(snapshot->utterance, sizeof(snapshot->utterance),
 				"open", snapshot->utterance[0] ? ", " : NULL);
