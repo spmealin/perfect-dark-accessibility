@@ -35,6 +35,22 @@ When the main menu opens, the screen reader should announce the menu title and
 focused option. Moving to another option reads only that option. Returning to a
 menu after visiting another screen reads its title again.
 
+## Mouse weapon selection
+
+Hold the weapon radial-menu binding (Q or the middle mouse button by default).
+The mouse position when the menu opens becomes its neutral center. Move in
+one of the eight directions to highlight a weapon; no click is needed. Return
+to the small center dead zone to clear the selection, or release the menu
+binding while a weapon is highlighted to equip it. Returning to center and
+releasing leaves your weapon unchanged. A long outward movement does not move
+the center: reverse that movement to return to it.
+
+This also applies to the function and bot-order radial pages. Existing
+screen-reader focus announcements still follow the highlighted item. Mouse
+capture must be active, as during ordinary mouse gameplay; unlocked mouse
+input and menus outside these gameplay radials are unchanged. Adjust Mouse
+Speed and Radial Menu Speed under Extended Options → Mouse if needed.
+
 ## Keyboard shortcuts
 
 Accessibility commands use keys that are unbound in the default PC gameplay

@@ -15,6 +15,7 @@
 #ifndef PLATFORM_N64
 #include "game/player.h"
 #include "input.h"
+#include "radialmouse.h"
 #include "accessibility/accessibility_menu.h"
 #endif
 
@@ -94,18 +95,19 @@ void amTick(void)
 #ifndef PLATFORM_N64
 				s32 newstickx = (s32)cstickx;
 				s32 newsticky = (s32)csticky;
-				if (j == 0 && g_Vars.currentplayernum == 0 && inputMouseIsLocked()) {
-					f32 mdx, mdy;
-					struct activemenu *am = &g_AmMenus[g_AmIndex];
-					inputMouseGetAbsScaledDelta(&mdx, &mdy);
-					if (mdx || mdy) {
-						am->mousex += mdx * PLAYER_EXTCFG().radialmenuspeed;
-						am->mousey += mdy * PLAYER_EXTCFG().radialmenuspeed;
-						am->mousex = (am->mousex > 127.f) ? 127.f : (am->mousex < -128.f) ? -128.f : am->mousex;
-						am->mousey = (am->mousey > 127.f) ? 127.f : (am->mousey < -128.f) ? -128.f : am->mousey;
+				s32 mouseactive = false;
+				if (g_Vars.currentplayernum == 0 && inputMouseIsLocked()) {
+					s32 mousex, mousey;
+					if (j == 0) {
+						f32 mdx, mdy;
+						inputMouseGetAbsScaledDelta(&mdx, &mdy);
+						radialMouseUpdate(g_AmIndex, mdx, mdy, PLAYER_EXTCFG().radialmenuspeed);
 					}
-					newstickx += (s32)am->mousex;
-					newsticky -= (s32)am->mousey;
+					mouseactive = radialMouseGetStick(g_AmIndex, &mousex, &mousey);
+					newstickx += mousex;
+					newsticky += mousey;
+				} else {
+					radialMouseReset(g_AmIndex);
 				}
 				cstickx = (newstickx < -128) ? -128 : (newstickx > 127) ? 127 : newstickx;
 				csticky = (newsticky < -128) ? -128 : (newsticky > 127) ? 127 : newsticky;
@@ -272,6 +274,20 @@ void amTick(void)
 
 				if (!stayopen &&
 						(g_Vars.currentplayer->activemenumode != AMMODE_EDIT || g_Menus[g_MpPlayerNum].curdialog == NULL)) {
+#ifndef PLATFORM_N64
+					/* Apply current mouse direction before closing, not the
+					 * previous sample. Neutral cancels even on release. */
+					if (mouseactive
+							&& g_Vars.currentplayer->activemenumode != AMMODE_EDIT) {
+						char text[28];
+						u32 flags;
+						slotnum = column + row * 3;
+						amGetSlotDetails(slotnum, &flags, text);
+						if (slotnum == 4 || text[0]) {
+							g_AmMenus[g_AmIndex].slotnum = slotnum;
+						}
+					}
+#endif
 					amClose();
 					break;
 				}
@@ -336,6 +352,9 @@ void amTick(void)
 
 				if (g_Vars.currentplayer->activemenumode != AMMODE_EDIT) {
 					if (slotnum == 4) {
+#ifndef PLATFORM_N64
+						if (mouseactive) g_AmMenus[g_AmIndex].returntimer = 0;
+#endif
 						if (g_AmMenus[g_AmIndex].returntimer <= 0) {
 							g_AmMenus[g_AmIndex].returntimer = 0;
 							g_AmMenus[g_AmIndex].slotnum = slotnum;
@@ -387,8 +406,7 @@ void amTick(void)
 		}
 #ifndef PLATFORM_N64
 		else {
-			g_AmMenus[g_AmIndex].mousex = 0.f;
-			g_AmMenus[g_AmIndex].mousey = 0.f;
+			radialMouseReset(g_AmIndex);
 		}
 #endif
 

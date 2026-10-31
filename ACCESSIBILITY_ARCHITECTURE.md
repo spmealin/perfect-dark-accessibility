@@ -855,6 +855,17 @@ This table records implemented and anticipated changes to established files so f
 
 ## Current evidence and remaining validation
 
+The PC radial-menu mouse adapter is separate from accessibility policy:
+`port/src/radialmouse.c` owns fixed per-player displacement anchored when
+`amOpen` resets it. Small non-N64 input bridges in `activemenu.c` and
+`activemenutick.c` feed relative mouse motion once per frame, retain the output
+for every controller sample, and bypass native delayed-neutral selection only
+after mouse use. Mouse selection is settled before release-to-apply, so center
+cancels even on the release frame. Existing accessibility observation remains
+in its settled-focus location; no speech API or new accessibility call was
+added to either file. Obsolete PC-only `activemenu.mousex/mousey` fields were
+removed from `src/include/types.h` rather than retaining duplicate state.
+
 1. **Speech:** Prism is the current Windows backend, not a pending Tolk replacement. The project owner reported speech with NVDA running, OneCore fallback after restarting without NVDA, and NVDA speech again after another restart. That is bounded acceptance of those three paths, not evidence for JAWS, every supported reader, braille, Unicode edge cases, cancellation, Narrator/UIA override, missing-DLL handling or every shutdown path. Historical Tolk experiments remain in the milestone records.
 2. **Thread and latency boundaries:** gameplay/semantic collection and logger calls remain main-thread-only. Speech backend calls also originate there; being queued by a provider is not proof that every provider call is nonblocking. The tone mixer owns fixed audio-thread state and reads atomic controls, never main-thread ownership policy. Measure stalls before selecting worker/COM synchronization changes.
 3. **Menus and HUD:** menu semantics and generic non-dialogue/non-subtitle HUD speech are implemented and have project-owner testing across many screens. Complete localization, unusual callback/control combinations, burst/cutscene ordering and split-screen composition remain incomplete validation, not wholly unimplemented features.

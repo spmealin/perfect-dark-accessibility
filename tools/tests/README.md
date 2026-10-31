@@ -40,8 +40,9 @@ Every fixture runs with `ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS=0` and `1`:
 | `tone_pcm` | Pre-refactor exact PCM fingerprint for 93 glossary cues, conflicting world commands, varied buffer sizes and ownership transitions |
 | `log` | JSON/UTF-8, full oversized messages, allocation cleanup, flush policy, nonfatal failures and diagnostic-window accounting |
 | `menu_stats` | Statistics dropdown highlighted names, change detection, composed speech, stale-summary suppression, confirmation and cancellation |
+| `radial_mouse` | Open-relative mouse anchor, eight directions, overshoot and exact return, held samples, sensitivity and per-player/reset isolation |
 
-This is **28 tests**: thirteen fixtures in both diagnostics modes, plus source
+This is **30 tests**: fourteen fixtures in both diagnostics modes, plus source
 contracts checking tone ownership and generic scanner/mission-registry boundaries. Assertions are
 explicitly enabled even in Release builds.
 Every executable also compiles `assertions_enabled.c`, which fails compilation

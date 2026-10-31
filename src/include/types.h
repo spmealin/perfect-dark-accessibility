@@ -4343,11 +4343,6 @@ struct activemenu {
 	/*0x32*/ u8 allbots; // when player holds R on the bot command screen
 	/*0x33*/ u8 prevallbots; // used when opening "Pick Target" menu for attack command
 	/*0x34*/ s8 origscreennum; // original screen number before using allbots
-
-#ifndef PLATFORM_N64
-	/*    */ f32 mousex;
-	/*    */ f32 mousey;
-#endif
 };
 
 struct briefing {

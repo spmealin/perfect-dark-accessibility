@@ -25,6 +25,9 @@
 #include "lib/str.h"
 #include "data.h"
 #include "types.h"
+#ifndef PLATFORM_N64
+#include "radialmouse.h"
+#endif
 
 struct activemenu g_AmMenus[MAX_PLAYERS];
 struct fontchar *g_AmFont1;
@@ -758,6 +761,9 @@ void amOpen(void)
 {
 	if (g_Vars.currentplayer->gunctrl.passivemode == false) {
 		g_AmIndex = g_Vars.currentplayernum;
+#ifndef PLATFORM_N64
+		radialMouseReset(g_AmIndex);
+#endif
 		g_Vars.currentplayer->activemenumode = AMMODE_VIEW;
 		g_PlayersWithControl[g_Vars.currentplayernum] = false;
 		g_AmMenus[g_AmIndex].screenindex = 0;
