@@ -36,8 +36,8 @@
 #define ACCESSIBILITY_TARGETING_HEAD_LOCK_MULTIPLIER 1.25f
 #define ACCESSIBILITY_TARGETING_ARM_LOCK_MULTIPLIER 0.8f
 #define ACCESSIBILITY_TARGETING_INTERRUPTED_PITCH_MULTIPLIER 0.6f
-#define ACCESSIBILITY_TARGETING_COMBAT_FAR_PERIOD_MS 500
-#define ACCESSIBILITY_TARGETING_COMBAT_CLOSE_PERIOD_MS 200
+#define ACCESSIBILITY_TARGETING_COMBAT_FAR_PERIOD_MS 340
+#define ACCESSIBILITY_TARGETING_COMBAT_CLOSE_PERIOD_MS 125
 #define ACCESSIBILITY_TARGETING_COMBAT_FAR_DURATION_MS 180
 #define ACCESSIBILITY_TARGETING_COMBAT_CLOSE_DURATION_MS 50
 #define ACCESSIBILITY_TARGETING_COMBAT_TRIGGER_PERIOD_DELTA_MS 40
@@ -56,6 +56,8 @@
 #define ACCESSIBILITY_TARGETING_PRECISION_VERTICAL_LIMIT 0.5f
 #define ACCESSIBILITY_TARGETING_PRECISION_FREQUENCY_SMOOTHING 0.65f
 #define ACCESSIBILITY_TARGETING_PRECISION_SWITCH_MARGIN 0.08f
+#define ACCESSIBILITY_TARGETING_PRECISION_REFERENCE_EXTENT 0.1f
+#define ACCESSIBILITY_TARGETING_PRECISION_MAX_SIZE_GAIN 64.0f
 #define ACCESSIBILITY_TARGETING_CAMERA_START_FREQUENCY_HZ 1600.0f
 #define ACCESSIBILITY_TARGETING_CAMERA_END_FREQUENCY_HZ 1000.0f
 #define ACCESSIBILITY_TARGETING_CAMERA_PERIOD_MS 500
@@ -1266,11 +1268,29 @@ static f32 accessibilityTargetingPrecisionPan(f32 offset)
 	return offset < 0.0f ? -magnitude : magnitude;
 }
 
+/* Magnify small-target errors in audio space only. At 10% viewport extent
+ * and larger keep the existing close-target mapping; missing bounds fall back.
+ * Separate axes preserve aspect ratio and use the active zoom projection. */
+static f32 accessibilityTargetingPrecisionSizeGain(f32 extent)
+{
+	if (!isfinite(extent) || extent <= 0.0f) return 1.0f;
+	return fminf(ACCESSIBILITY_TARGETING_PRECISION_MAX_SIZE_GAIN,
+			fmaxf(1.0f, ACCESSIBILITY_TARGETING_PRECISION_REFERENCE_EXTENT / extent));
+}
+
+static f32 accessibilityTargetingPrecisionCandidatePan(
+		const struct accessibilitytargetingcandidate *candidate)
+{
+	return accessibilityTargetingPrecisionPan(candidate->horizontalaimerrornormalized
+			* accessibilityTargetingPrecisionSizeGain(candidate->precisionhalfwidthnormalized));
+}
+
 static f32 accessibilityTargetingPrecisionFrequency(
 		const struct accessibilitytargetingcandidate *candidate,
 		f32 basefrequency, s32 *elevationzone)
 {
-	f32 offset = candidate->verticalaimerrornormalized;
+	f32 offset = candidate->verticalaimerrornormalized
+			* accessibilityTargetingPrecisionSizeGain(candidate->precisionhalfheightnormalized);
 	f32 normalized = accessibilityTargetingPrecisionMagnitude(offset,
 			ACCESSIBILITY_TARGETING_PRECISION_VERTICAL_LIMIT,
 			ACCESSIBILITY_TARGETING_PRECISION_MIN_PITCH_EXPONENT);
@@ -1470,13 +1490,12 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 		normalizedpan = ((f32)pan - (f32)AL_PAN_CENTER)
 				/ (f32)AL_PAN_CENTER;
 		if (precisionguidance) {
-			normalizedpan = accessibilityTargetingPrecisionPan(
-					record->candidate.horizontalaimerrornormalized);
+			normalizedpan = accessibilityTargetingPrecisionCandidatePan(&record->candidate);
 			if (restart || !voice->precisionguidance
 					|| elevationzone != voice->elevationzone
 					|| frame60 >= voice->nextprecisionlog60) {
 				accessibilityLogEvent("targeting", "precision_mapping",
-						"frame=%d propnum=%d category=%d mapping=close_in_sqrt_v1 horizontal_error=%.6f vertical_error=%.6f deadzone=%.6f min_pan=%.3f min_pitch_exponent=%.3f pan=%.4f base_frequency_hz=%.2f target_frequency_hz=%.2f smoothed_frequency_hz=%.2f elevation_zone=%d alignment_active=%d aim_loss_grace_frames=%d anchor_source=%d",
+						"frame=%d propnum=%d category=%d mapping=target_size_sqrt_v2 horizontal_error=%.6f vertical_error=%.6f deadzone=%.6f min_pan=%.3f min_pitch_exponent=%.3f pan=%.4f base_frequency_hz=%.2f target_frequency_hz=%.2f smoothed_frequency_hz=%.2f elevation_zone=%d alignment_active=%d aim_loss_grace_frames=%d anchor_source=%d half_width=%.6f half_height=%.6f horizontal_gain=%.3f vertical_gain=%.3f",
 						frame60, voice->identity.propnum, record->candidate.category,
 						record->candidate.horizontalaimerrornormalized,
 						record->candidate.verticalaimerrornormalized,
@@ -1490,7 +1509,11 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 							&& accessibilityTargetingIdentityEqual(&voice->identity,
 									&g_AccessibilityTargetingAimedIdentity),
 						g_AccessibilityTargetingAimLossFrames,
-						record->candidate.precisionaimsource);
+						record->candidate.precisionaimsource,
+						record->candidate.precisionhalfwidthnormalized,
+						record->candidate.precisionhalfheightnormalized,
+						accessibilityTargetingPrecisionSizeGain(record->candidate.precisionhalfwidthnormalized),
+						accessibilityTargetingPrecisionSizeGain(record->candidate.precisionhalfheightnormalized));
 				voice->nextprecisionlog60 = frame60 + TICKS(60);
 			}
 		}

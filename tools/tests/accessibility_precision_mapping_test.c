@@ -45,6 +45,19 @@ int main(void)
 	s32 i, zone;
 	struct accessibilitytargetingcombatslot voice = {0};
 	struct accessibilitytargetingcandidate candidate = {0};
+	assert(ACCESSIBILITY_TARGETING_PRECISION_DURATION_MS == 100);
+	assert(ACCESSIBILITY_TARGETING_PRECISION_PERIOD_MS
+			- ACCESSIBILITY_TARGETING_PRECISION_DURATION_MS == 60);
+	{
+		s32 period, duration, distancezone;
+		f32 proximity;
+		accessibilityTargetingCombatCadence(500, 100, 0,
+				&period, &duration, &distancezone, &proximity);
+		assert(period == 340 && duration == 180 && period - duration == 160);
+		accessibilityTargetingCombatCadence(100, 100, 0,
+				&period, &duration, &distancezone, &proximity);
+		assert(period == 125 && duration == 50 && period - duration == 75);
+	}
 
 	closeTo(accessibilityTargetingPrecisionPan(0), 0);
 	closeTo(accessibilityTargetingPrecisionPan(.0025f), 0);
@@ -99,6 +112,33 @@ int main(void)
 	voice.precisionguidance = 0;
 	closeTo(accessibilityTargetingPrecisionSmoothFrequency(&voice, 800, -1), 800);
 	assert(capturedcalls == 0); /* Guidance helpers cannot create a lock. */
+	/* Same fractional target error sounds the same at different projected
+	 * sizes. Small targets cannot inherit a viewport-wide centered band. */
+	closeTo(accessibilityTargetingPrecisionSizeGain(.2f), 1);
+	closeTo(accessibilityTargetingPrecisionSizeGain(.1f), 1);
+	closeTo(accessibilityTargetingPrecisionSizeGain(.01f), 10);
+	closeTo(accessibilityTargetingPrecisionSizeGain(.00001f), 64);
+	closeTo(accessibilityTargetingPrecisionSizeGain(0), 1);
+	closeTo(accessibilityTargetingPrecisionSizeGain(-1), 1);
+	closeTo(accessibilityTargetingPrecisionSizeGain(NAN), 1);
+	closeTo(accessibilityTargetingPrecisionSizeGain(INFINITY), 1);
+	candidate.precisionhalfwidthnormalized = .01f;
+	candidate.precisionhalfheightnormalized = .02f;
+	candidate.horizontalaimerrornormalized = .001f;
+	candidate.verticalaimerrornormalized = .001f;
+	assert(accessibilityTargetingPrecisionCandidatePan(&candidate) > .16f);
+	assert(accessibilityTargetingPrecisionFrequency(&candidate, 900, &zone) > 900);
+	assert(zone == 1);
+	closeTo(accessibilityTargetingPrecisionCandidatePan(&candidate),
+			accessibilityTargetingPrecisionPan(.01f));
+	closeTo(accessibilityTargetingPrecisionFrequency(&candidate, 900, &zone),
+			frequency(.005f, &zone));
+	candidate.horizontalaimerrornormalized = 0;
+	candidate.verticalaimerrornormalized = 0;
+	closeTo(accessibilityTargetingPrecisionCandidatePan(&candidate), 0);
+	closeTo(accessibilityTargetingPrecisionFrequency(&candidate, 900, &zone), 900);
+	assert(zone == 0);
+	memset(&candidate, 0, sizeof(candidate));
 
 	/* Preserve exact-lock body-region, protected and glass semantics. */
 	g_AccessibilityTargetingCurrentState = &g_AccessibilityTargetingStates[0];

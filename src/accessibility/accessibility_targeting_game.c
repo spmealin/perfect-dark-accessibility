@@ -1472,6 +1472,10 @@ static void accessibilityTargetingGameObserveNativeThreats(
 		threat->aimscreeny = g_Vars.currentplayer->crosspos[1];
 		if (viewright > viewleft && viewbottom > viewtop) {
 			threat->hasscreenaimerror = true;
+			threat->precisionhalfwidthnormalized
+					= (tracked->x2 - tracked->x1) / (viewright - viewleft);
+			threat->precisionhalfheightnormalized
+					= (tracked->y2 - tracked->y1) / (viewbottom - viewtop);
 			threat->horizontalaimerrornormalized
 					= (((threat->screenx1 + threat->screenx2) * 0.5f)
 							- threat->aimscreenx)
@@ -2470,6 +2474,10 @@ static void accessibilityTargetingObserveCombat(
 		candidate->aimscreeny = projection->aimscreeny;
 		if (viewright > viewleft && viewbottom > viewtop) {
 			candidate->hasscreenaimerror = true;
+			candidate->precisionhalfwidthnormalized
+					= (projection->x2 - projection->x1) / (viewright - viewleft);
+			candidate->precisionhalfheightnormalized
+					= (projection->y2 - projection->y1) / (viewbottom - viewtop);
 			candidate->horizontalaimerrornormalized
 					= (targetscreenx
 							- projection->aimscreenx)

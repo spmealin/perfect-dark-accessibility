@@ -223,13 +223,18 @@ shoot-detonatable weapon uses this destructible lock, not the solid enemy lock.
 Its volume uses the existing independent `InterruptedTargetingVolume` setting.
 
 The current precision-aim experiment keeps left/right separation and the
-up/down pitch difference stronger near the target. Its small level band is
-ten times narrower than before. The reference-first, altered-second beep
+up/down pitch difference stronger near the target. Small or distant targets
+now get a narrower centered band and stronger corrections based on their
+on-screen width and height, including the current scope zoom. Large targets
+retain the previous mapping. The reference-first, altered-second beep
 remains: higher means move your aim up, lower means move it down. These
 pulsed directions are acquisition guidance, not confirmation of a hit.
+While precise aim is held, each 100 ms beep retains its 60 ms gap. Ordinary
+on-screen enemy beeps now have shorter silent gaps: 160 ms at long distance
+and 75 ms near melee range, with the existing distance ramp between them.
 The separate confirmed lock-on tone, including body-region and through-glass
-feedback, is unchanged. Target-size-relative scaling is not part of this
-first experiment.
+feedback, is unchanged. Target-size-relative scaling affects only the
+directional guidance, never the exact lock-on test.
 
 Special devices reuse the alignment tone only for objects the device can
 actually affect. This includes supported Data Uplink, Door Decoder, ECM Mine,

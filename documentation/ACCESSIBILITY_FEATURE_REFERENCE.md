@@ -263,8 +263,13 @@ non-aim enemy elevation retains its original mapping and smoothing.
 
 This first experiment changes audio policy only. The viewport-normalized error,
 anchor selection and geometry-query budget are unchanged; target-relative
-scaling remains a possible later step. Guidance stays pulsed at 100 ms every
-160 ms. It does not create or enlarge a lock, modify native aim/hit detection,
+scaling is now applied as described under target-size-relative precision guidance.
+Guidance stays pulsed at 100 ms every 160 ms (60 ms silence).
+Ordinary combat-presence cadence retains 180 ms far/50 ms close beep lengths,
+but repeats every 340 ms far/125 ms close, halving its former silent gaps to
+160 ms far/75 ms close. Distance interpolation and the continuous melee-range
+cue remain intact; camera-specific chirps and precise-aim timing are unchanged.
+It does not create or enlarge a lock, modify native aim/hit detection,
 remove character aim-loss grace, or change body-region/protected/glass lock
 semantics. A level or centered guide is not by itself a confirmed firing solution.
 
@@ -651,6 +656,28 @@ rather than new playback logic.
 ### View orientation recovery
 
 The PC default control scheme maps both the keyboard End key and an Xbox-compatible controller's right thumbstick click (R3) to the configurable `Reset View` action. Pressing either during active gameplay immediately sets the camera's vertical look angle to horizontal without changing the player's compass heading. It also clears residual vertical-look and automatic-centering state so the camera does not continue drifting after the reset. The action is available in the extended controls binding menu under `Reset View`; the N64 default scheme leaves it unbound.
+
+### Target-size-relative precision guidance
+
+While precise aim is active, the existing screen-space acquisition errors
+are magnified independently by `clamp(0.1 / extent, 1, 64)`, where each extent
+is the target's projected half width or half height divided by the matching
+viewport half extent. These bounds come from the current projection, so zoom
+and resolution are honored. Missing, invalid or zero extents retain gain 1.
+This narrows the effective centered band for small targets and increases
+near-target pan/pitch contrast without changing the selected anchor, target
+selection, smoothing, hit queries, body-region feedback or native auto-aim.
+Targets occupying at least 10% of the viewport on an axis retain that axis's
+previous mapping. The 64x bound limits jitter amplification for tiny targets;
+projected bounds still cannot guarantee that centered guidance hits actual
+geometry. Only the separate lock-on tone confirms the exact accepted aim.
+
+The existing rate-limited `targeting/precision_mapping` record uses
+`mapping=target_size_sqrt_v2` and adds `half_width`, `half_height`,
+`horizontal_gain` and `vertical_gain`. No new configuration, shortcuts,
+geometry queries, allocations or native game hooks are introduced. This is
+an experiment pending owner testing with distant/small and close enemies,
+turrets, cameras, scopes and moving targets.
 
 ### Fine aiming tone
 

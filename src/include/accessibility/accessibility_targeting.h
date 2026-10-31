@@ -93,6 +93,9 @@ struct accessibilitytargetingcandidate {
 	s32 hasscreenaimerror;
 	f32 horizontalaimerrornormalized;
 	f32 verticalaimerrornormalized;
+	/* Projected half extents / viewport half extents, before clipping. */
+	f32 precisionhalfwidthnormalized;
+	f32 precisionhalfheightnormalized;
 	s32 precisionaimavailable;
 	s32 precisionaimsource;
 	s32 precisionaimhitpart;
