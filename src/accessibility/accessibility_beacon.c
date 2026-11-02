@@ -670,6 +670,14 @@ static s32 accessibilityBeaconObjectEligible(struct prop *prop, u32 *citag, cons
 	return true;
 }
 
+static s32 accessibilityBeaconPickupEligible(struct prop *prop, const char **reason);
+
+static s32 accessibilityBeaconNeedsViewport(s32 category, s32 xrayexposed)
+{
+	return category == ACCESSIBILITY_BEACON_CATEGORY_PICKUP
+			|| (category == ACCESSIBILITY_BEACON_CATEGORY_OBJECT && !xrayexposed);
+}
+
 void accessibilityBeaconCaptureGame(void)
 {
 	struct prop *prop = g_Vars.activeprops;
@@ -691,6 +699,7 @@ void accessibilityBeaconCaptureGame(void)
 
 	while (prop && traversed <= g_Vars.maxprops) {
 		struct defaultobj *obj = prop->obj;
+		const char *pickupreason;
 
 		traversed++;
 
@@ -701,7 +710,8 @@ void accessibilityBeaconCaptureGame(void)
 				&& (prop->type == PROPTYPE_DOOR
 					|| objIsPotentiallyInteractable(prop)
 					|| accessibilityInteractionGetKind(prop)
-							== ACCESSIBILITY_INTERACTION_PUSHABLE)) {
+							== ACCESSIBILITY_INTERACTION_PUSHABLE
+					|| accessibilityBeaconPickupEligible(prop, &pickupreason))) {
 			struct accessibilitybeaconprojection *projection;
 
 			if (g_AccessibilityBeaconProjectionCount
@@ -1376,8 +1386,7 @@ static s32 accessibilityBeaconScan(s32 detailed)
 		xrayexposed = eligible
 				&& accessibilityVisibilityIsXrayExposed(candidate);
 
-		if (eligible && result.category == ACCESSIBILITY_BEACON_CATEGORY_OBJECT
-				&& !xrayexposed
+		if (eligible && accessibilityBeaconNeedsViewport(result.category, xrayexposed)
 				&& !accessibilityBeaconObjectIsOnScreen(candidate, &reason)) {
 			eligible = false;
 		}
@@ -1530,6 +1539,9 @@ static struct prop *accessibilityBeaconValidateResult(struct accessibilitybeacon
 		}
 	} else if (result->kind == ACCESSIBILITY_BEACON_KIND_PICKUP) {
 		if (!accessibilityBeaconPickupEligible(prop, reason)) {
+			return NULL;
+		}
+		if (!accessibilityBeaconObjectIsOnScreen(prop, reason)) {
 			return NULL;
 		}
 	} else if (result->category == ACCESSIBILITY_BEACON_CATEGORY_OBJECT) {
@@ -3025,8 +3037,7 @@ static void accessibilityBeaconDumpDiagnosticCandidate(u64 captureid,
 	xrayexposed = accessibilityVisibilityIsXrayExposed(candidate);
 
 	if (semanticeligible && categoryactive && contexteligible
-			&& result.category == ACCESSIBILITY_BEACON_CATEGORY_OBJECT
-			&& !xrayexposed
+			&& accessibilityBeaconNeedsViewport(result.category, xrayexposed)
 			&& !accessibilityBeaconObjectIsOnScreen(candidate, &finalreason)) {
 		contexteligible = false;
 	}

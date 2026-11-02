@@ -242,6 +242,10 @@ static void doorCases(void)
 
 int main(void)
 {
+	assert(accessibilityBeaconNeedsViewport(ACCESSIBILITY_BEACON_CATEGORY_PICKUP, 0));
+	assert(accessibilityBeaconNeedsViewport(ACCESSIBILITY_BEACON_CATEGORY_PICKUP, 1));
+	assert(accessibilityBeaconNeedsViewport(ACCESSIBILITY_BEACON_CATEGORY_OBJECT, 0));
+	assert(!accessibilityBeaconNeedsViewport(ACCESSIBILITY_BEACON_CATEGORY_OBJECT, 1));
 	surfaceCases();
 	embeddedCases();
 	rotatedAndMissingCases();

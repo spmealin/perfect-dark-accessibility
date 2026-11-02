@@ -37,6 +37,10 @@ menu after visiting another screen reads its title again.
 
 ## Mouse weapon selection
 
+Pickup beacons (F8) require an item to intersect the current viewport as well
+as pass the existing line-of-sight and pickup checks. Items merely nearby or
+behind you do not chirp. Eligibility is checked again before each pickup cue.
+
 Hold the weapon radial-menu binding (Q or the middle mouse button by default).
 The mouse position when the menu opens becomes its neutral center. Move in
 one of the eight directions to highlight a weapon; no click is needed. Return
