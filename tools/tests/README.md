@@ -39,7 +39,7 @@ Every fixture runs with `ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS=0` and `1`:
 | `cane_decision` | 435,456 differential cases comparing unified resolution/materialization with the previous adapter policy |
 | `tone_pcm` | Pre-refactor exact PCM fingerprint for 93 glossary cues, conflicting world commands, varied buffer sizes and ownership transitions |
 | `log` | JSON/UTF-8, full oversized messages, allocation cleanup, flush policy, nonfatal failures and diagnostic-window accounting |
-| `menu_stats` | Statistics dropdown highlighted names, change detection, composed speech, stale-summary suppression, confirmation and cancellation |
+| `menu_stats` | Statistics dropdown highlighted names, change detection, composed speech, stale-summary suppression, confirmation/cancellation and normalized player/team ranking punctuation |
 | `radial_mouse` | Open-relative mouse anchor, eight directions, overshoot and exact return, held samples, sensitivity and per-player/reset isolation |
 
 This is **30 tests**: fourteen fixtures in both diagnostics modes, plus source

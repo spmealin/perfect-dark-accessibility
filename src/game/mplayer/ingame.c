@@ -20,6 +20,7 @@
 #include "lib/main.h"
 #include "data.h"
 #include "types.h"
+#include "accessibility/accessibility_menu.h"
 
 struct menudialogdef g_MpEndscreenChallengeCompletedMenuDialog;
 struct menudialogdef g_MpEndscreenIndGameOverMenuDialog;
@@ -68,7 +69,6 @@ static MenuItemHandlerResult mpRankingAccessibilityHandler(s32 operation,
 {
 	struct ranking rankings[MAX_MPCHRS];
 	char row[256];
-	char value[32];
 	s32 team;
 	s32 count;
 	s32 i;
@@ -90,18 +90,10 @@ static MenuItemHandlerResult mpRankingAccessibilityHandler(s32 operation,
 				? g_BossFile.teamnames[ranking->teamnum]
 				: ranking->mpchr->name;
 
-		row[0] = '\0';
-		mpAccessibilityAppend(row, sizeof(row), name);
-
-		if (!team) {
-			snprintf(value, sizeof(value), "%d", ranking->mpchr->numdeaths);
-			mpAccessibilityAppendValue(row, sizeof(row),
-					langGet(L_MPMENU_277), value); // "Deaths"
-		}
-
-		snprintf(value, sizeof(value), "%d", ranking->score);
-		mpAccessibilityAppendValue(row, sizeof(row),
-				langGet(L_MPMENU_278), value); // "Score"
+		accessibilityMenuFormatRankingRow(row, sizeof(row), name,
+				team ? NULL : langGet(L_MPMENU_277), // "Deaths"
+				team ? 0 : ranking->mpchr->numdeaths,
+				langGet(L_MPMENU_278), ranking->score); // "Score"
 		mpAccessibilityAppend(data->accessibility.buffer,
 				data->accessibility.bufferlen, row);
 	}

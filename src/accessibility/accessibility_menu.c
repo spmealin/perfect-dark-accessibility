@@ -168,6 +168,25 @@ static void accessibilityMenuAppend(char *dst, size_t dstlen, const char *text)
 	snprintf(dst + used, dstlen - used, "%s", text);
 }
 
+void accessibilityMenuFormatRankingRow(char *buffer, u32 bufferlen,
+		const char *name, const char *deathslabel, s32 deaths,
+		const char *scorelabel, s32 score)
+{
+	char normalizedname[ACCESSIBILITY_MENU_FIELD_MAX];
+	char normalizeddeaths[ACCESSIBILITY_MENU_FIELD_MAX];
+	char normalizedscore[ACCESSIBILITY_MENU_FIELD_MAX];
+	if (!buffer || !bufferlen) return;
+	accessibilityMenuCopyNormalized(normalizedname, sizeof(normalizedname), name);
+	accessibilityMenuCopyNormalized(normalizeddeaths, sizeof(normalizeddeaths), deathslabel);
+	accessibilityMenuCopyNormalized(normalizedscore, sizeof(normalizedscore), scorelabel);
+	if (deathslabel) {
+		snprintf(buffer, bufferlen, "%s: %s %d, %s %d",
+				normalizedname, normalizeddeaths, deaths, normalizedscore, score);
+	} else {
+		snprintf(buffer, bufferlen, "%s: %s %d", normalizedname, normalizedscore, score);
+	}
+}
+
 static void accessibilityMenuAppendPart(char *dst, size_t dstlen, const char *text,
 		const char *separator)
 {
@@ -468,7 +487,7 @@ static void accessibilityMenuDescribeItem(struct accessibilitymenusnapshot *snap
 				snapshot->selectedindex, snapshot->value, sizeof(snapshot->value));
 		break;
 	case MENUITEMTYPE_RANKING:
-		strcpy(snapshot->role, "ranking table");
+		strcpy(snapshot->role, "table");
 		if (!accessibilityMenuGetProviderText(item,
 				MENUACCESSIBILITYPART_CONTROL, -1,
 				snapshot->value, sizeof(snapshot->value))
@@ -541,9 +560,11 @@ static void accessibilityMenuCompose(struct accessibilitymenusnapshot *snapshot,
 	accessibilityMenuAppendPart(snapshot->utterance, sizeof(snapshot->utterance),
 			snapshot->label, snapshot->utterance[0] ? ". " : NULL);
 	accessibilityMenuAppendPart(snapshot->utterance, sizeof(snapshot->utterance),
-			snapshot->role, snapshot->utterance[0] ? ", " : NULL);
+			snapshot->role, snapshot->utterance[0]
+				? snapshot->itemtype == MENUITEMTYPE_RANKING ? " " : ", " : NULL);
 	accessibilityMenuAppendPart(snapshot->utterance, sizeof(snapshot->utterance),
-			snapshot->value, snapshot->utterance[0] ? ", " : NULL);
+			snapshot->value, snapshot->utterance[0]
+				? snapshot->itemtype == MENUITEMTYPE_RANKING ? ". " : ", " : NULL);
 
 	if (snapshot->subindex >= 0 && snapshot->optioncount > 0
 			&& snapshot->subindex < snapshot->optioncount) {

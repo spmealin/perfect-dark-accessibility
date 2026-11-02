@@ -815,6 +815,14 @@ changed. See [the test guide](tools/tests/README.md) for boundaries and replay.
 
 This table records implemented and anticipated changes to established files so future diffs remain deliberate.
 
+Ranking narration formatting: the existing `mplayer/ingame.c` ranking provider
+passes native names, localized Deaths/Score labels and numeric values to
+`accessibilityMenuFormatRankingRow` in the core. It normalizes trailing native
+line breaks and formats `Name: Deaths X, Score Y` (team rows: `Name: Score Y`).
+The menu composer presents the localized ranking title followed by the existing
+English table role, then a sentence per row. This changes the existing provider
+only; it adds no gameplay event, direct speech call or renderer hook.
+
 | Established file | Proposed narrow hook or reason | Semantic payload | Why polling alone may be insufficient | Status |
 | --- | --- | --- | --- | --- |
 | `src/game/propobj.c`, `src/include/game/propobj.h` (monitor state) | Expose a pure `tvscreenIsShowingImage` query and share the existing image resolver with the unchanged setter | The native screen program selected by image ID | A puzzle's live visual state can lead activation-flag cleanup during resets; copying color/program tables would drift from the renderer | Implemented; no accessibility call or policy added to game code |

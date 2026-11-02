@@ -1,5 +1,14 @@
 # Combat Simulator statistics player selector
 
+Ranking-page formatting was subsequently refined from owner capture 1 in
+session `1793638320`: the player table now reads `Player Ranking table.
+Name: Deaths X, Score Y.` Names and localized column labels are normalized
+before punctuation is added, preserving internal colons such as `EasySim:4`.
+Each player is one sentence. Team tables similarly use `Name: Score Y` without
+inventing a deaths column. The Game Over and per-player statistics strings
+are unchanged. The shared formatter and composed header are regression-tested;
+owner listening acceptance of this revised format is still pending.
+
 ## Evidence
 
 Owner report: a menu was not reading. Capture 1 in local session `1793402493`

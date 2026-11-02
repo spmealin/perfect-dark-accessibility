@@ -86,6 +86,32 @@ int main(void)
 	accessibilityMenuDescribeItem(&snapshot, &data);
 	assert(!strcmp(snapshot.label, names[3]));
 	assert(!strcmp(snapshot.value, "Stats for EasySim:3"));
+	/* Exact owner-requested punctuation, including native trailing newlines
+	 * and the colon that is already part of a simulant's name. */
+	memset(&snapshot, 0, sizeof(snapshot));
+	snapshot.itemtype = MENUITEMTYPE_RANKING;
+	strcpy(snapshot.title, "Player Ranking");
+	strcpy(snapshot.role, "table");
+	snapshot.subindex = -1;
+	accessibilityMenuFormatRankingRow(snapshot.value, sizeof(snapshot.value),
+			"Player 1\n", "Deaths\n", 2, "Score\n", 20);
+	assert(!strcmp(snapshot.value, "Player 1: Deaths 2, Score 20"));
+	accessibilityMenuCompose(&snapshot, 1, 0);
+	assert(!strcmp(snapshot.utterance,
+			"Player Ranking table. Player 1: Deaths 2, Score 20."));
+	accessibilityMenuFormatRankingRow(snapshot.value, sizeof(snapshot.value),
+			"EasySim:4 \n", "Deaths", 10, "Score", 13);
+	assert(!strcmp(snapshot.value, "EasySim:4: Deaths 10, Score 13"));
+	accessibilityMenuFormatRankingRow(snapshot.value, sizeof(snapshot.value),
+			"Blue Team\n", NULL, 0, "Score", -1);
+	assert(!strcmp(snapshot.value, "Blue Team: Score -1"));
+	{
+		char shortbuffer[5];
+		accessibilityMenuFormatRankingRow(shortbuffer, sizeof(shortbuffer),
+				"Long player name", "Deaths", 100, "Score", 200);
+		assert(shortbuffer[sizeof(shortbuffer) - 1] == '\0');
+		accessibilityMenuFormatRankingRow(NULL, 0, "", NULL, 0, "", 0);
+	}
 	puts("Stats selector: highlighted rows, stale-summary suppression and selected stats passed.");
 	return 0;
 }
