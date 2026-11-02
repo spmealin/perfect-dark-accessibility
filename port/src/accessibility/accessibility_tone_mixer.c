@@ -4,10 +4,11 @@
 #include "constants.h"
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_tone.h"
+#include "accessibility/accessibility_spatial.h"
 #include "accessibility_tone_internal.h"
 
-/* Audio-thread-owned fixed storage. Preserve phase, envelope and arithmetic
- * order: this is a mechanical split, not a change to sound synthesis. */
+/* Audio-thread-owned fixed storage. Legacy phase/envelope arithmetic remains
+ * intact; optional mono spatial buses are rendered before final summation. */
 static s32 g_AccessibilityPreviewObservedSequence;
 static s32 g_AccessibilityPreviewSamplesRemaining;
 static s16 g_AccessibilityToneMixBuffer[ACCESSIBILITY_TONE_MIX_BUFFER_SAMPLES];
@@ -69,6 +70,9 @@ static s32 g_AccessibilityCombatCycleSample[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT
 static f32 g_AccessibilityCombatPhase[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static f32 g_AccessibilityCombatPan[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static f32 g_AccessibilityCombatGain[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+static s32 g_AccessibilitySpatialRoute[ACCESSIBILITY_SPATIAL_VOICES];
+#endif
 static s32 g_AccessibilityProjectileObservedSequence[ACCESSIBILITY_TONE_PROJECTILE_SLOT_COUNT];
 static s32 g_AccessibilityProjectileCycleSample[ACCESSIBILITY_TONE_PROJECTILE_SLOT_COUNT];
 static f32 g_AccessibilityProjectilePhase[ACCESSIBILITY_TONE_PROJECTILE_SLOT_COUNT];
@@ -164,10 +168,39 @@ static f32 accessibilityToneCombatWave(f32 phase)
 			+ sinf(phase * 2.0f) * ACCESSIBILITY_COMBAT_OCTAVE_GAIN;
 }
 
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+static void accessibilityToneSpatialPathDirection(s32 slot, s32 first, s32 second, f32 fraction)
+{
+	s32 count = SDL_AtomicGet(&g_AccessibilitySpatialPathCount[slot]);
+	f32 direction[3];
+	s32 axis;
+	if (count <= 0) return;
+	if (first >= count) first = count - 1;
+	if (second >= count) second = count - 1;
+	for (axis = 0; axis < 3; axis++) {
+		f32 a = SDL_AtomicGet(&g_AccessibilitySpatialPath[slot][first][axis]) / 1000.0f;
+		f32 b = SDL_AtomicGet(&g_AccessibilitySpatialPath[slot][second][axis]) / 1000.0f;
+		direction[axis] = a + (b - a) * fraction;
+	}
+	accessibilitySpatialDirection(ACCESSIBILITY_SPATIAL_CANE + slot, direction[0], direction[1], direction[2]);
+}
+#endif
+
 
 const s16 *accessibilityToneMix(const s16 *input, u32 len)
 {
 	s32 preview = SDL_AtomicGet(&g_AccessibilityPreviewActive);
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+	s32 spatial = !preview && accessibilitySpatialEnabled();
+	s32 spatialroute[ACCESSIBILITY_SPATIAL_VOICES];
+	for (s32 n = 0; n < ACCESSIBILITY_SPATIAL_VOICES; n++) {
+		spatialroute[n] = spatial && SDL_AtomicGet(&g_AccessibilitySpatialValid[n]);
+		if (spatialroute[n] != g_AccessibilitySpatialRoute[n]) {
+			accessibilitySpatialReset(n);
+			g_AccessibilitySpatialRoute[n] = spatialroute[n];
+		}
+	}
+#endif
 	s32 previewsequence = SDL_AtomicGet(&g_AccessibilityPreviewSequence);
 	s32 enabled = SDL_AtomicGet(&g_AccessibilityToneEnabled);
 	s32 tonepatternflags = SDL_AtomicGet(&g_AccessibilityTonePatternFlags);
@@ -273,6 +306,9 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 	}
 
 	if (previewsequence != g_AccessibilityPreviewObservedSequence) {
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+		for (slot = 0; slot < ACCESSIBILITY_SPATIAL_VOICES; slot++) accessibilitySpatialReset(slot);
+#endif
 		g_AccessibilityPreviewObservedSequence = previewsequence;
 		g_AccessibilityPreviewSamplesRemaining = (s32)(
 				ACCESSIBILITY_TONE_SAMPLE_RATE / 1000.0f
@@ -366,6 +402,9 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 				|| g_AccessibilityCombatGain[slot] > 0.0f;
 
 		if (sequence != g_AccessibilityCombatObservedSequence[slot]) {
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+			accessibilitySpatialReset(slot);
+#endif
 			g_AccessibilityCombatObservedSequence[slot] = sequence;
 			/* Golden-ratio offsets keep independently repeating voices from
 			 * starting together even when the first few slots are occupied. */
@@ -480,6 +519,9 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 				|| g_AccessibilityFriendlyGain[slot] > 0.0f;
 
 		if (sequence != g_AccessibilityFriendlyObservedSequence[slot]) {
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+			accessibilitySpatialReset(ACCESSIBILITY_SPATIAL_FRIENDLY + slot);
+#endif
 			g_AccessibilityFriendlyObservedSequence[slot] = sequence;
 			g_AccessibilityFriendlyPhaseBase[slot] = 0.0f;
 			g_AccessibilityFriendlyPhaseThird[slot] = 0.0f;
@@ -500,6 +542,9 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		anydoorenabled |= doorenabled[slot];
 
 		if (sequence != g_AccessibilityDoorObservedSequence[slot]) {
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+			accessibilitySpatialReset(ACCESSIBILITY_SPATIAL_DOOR + slot);
+#endif
 			s32 sample = g_AccessibilityDoorCycleSample
 					- slot * ACCESSIBILITY_DOOR_PERIOD_SAMPLES
 						/ ACCESSIBILITY_TONE_DOOR_SLOT_COUNT;
@@ -579,6 +624,9 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		s32 sequence = SDL_AtomicGet(&g_AccessibilityCaneSequence[slot]);
 
 		if (sequence != g_AccessibilityCaneObservedSequence[slot]) {
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+			accessibilitySpatialReset(ACCESSIBILITY_SPATIAL_CANE + slot);
+#endif
 			g_AccessibilityCaneObservedSequence[slot] = sequence;
 
 			if (SDL_AtomicGet(&g_AccessibilityCaneEnabled[slot])) {
@@ -695,6 +743,10 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 #endif
 
 	if (chirpsequence != g_AccessibilityChirpObservedSequence) {
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+		accessibilitySpatialReset(ACCESSIBILITY_SPATIAL_PICKUP);
+		accessibilitySpatialReset(ACCESSIBILITY_SPATIAL_OBJECT);
+#endif
 		g_AccessibilityChirpObservedSequence = chirpsequence;
 
 		if (SDL_AtomicGet(&g_AccessibilityChirpEnabled)) {
@@ -839,6 +891,9 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			&& !anymarkerenabled
 			&& g_AccessibilityMarkerIdentitySlot < 0
 			&& g_AccessibilityMarkerPendingRemovalMask == 0) {
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+		for (slot = 0; slot < ACCESSIBILITY_SPATIAL_VOICES; slot++) accessibilitySpatialReset(slot);
+#endif
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 		SDL_AtomicSet(&g_AccessibilityCaneActiveMask, 0);
 		SDL_AtomicAdd(&g_AccessibilityTonePassthroughCalls, 1);
@@ -871,6 +926,10 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			/ (f32)frames;
 
 	for (i = 0; i < frames; i++) {
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+		float spatialmono[ACCESSIBILITY_SPATIAL_VOICES] = {0};
+		s32 spatialleft = 0, spatialright = 0;
+#endif
 		s32 tone;
 		f32 alignmentenvelope = 1.0f;
 		s32 chirpleft = 0;
@@ -1043,6 +1102,12 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 					* g_AccessibilityCaneEdgeGain * 32767.0f;
 			caneedgeleft = (s32)(edge * leftpan);
 			caneedgeright = (s32)(edge * rightpan);
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+			if (spatialroute[ACCESSIBILITY_SPATIAL_EDGE]) {
+				spatialmono[ACCESSIBILITY_SPATIAL_EDGE] += edge / 32767.0f;
+				caneedgeleft = caneedgeright = 0;
+			}
+#endif
 		}
 
 		if (g_AccessibilityChirpSamplesRemaining > 0) {
@@ -1152,6 +1217,15 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			}
 			chirpleft = (s32)(chirp * leftpan);
 			chirpright = (s32)(chirp * rightpan);
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+			int chirpslot = g_AccessibilityChirpCurrentStyle == ACCESSIBILITY_CHIRP_STYLE_PICKUP
+					? ACCESSIBILITY_SPATIAL_PICKUP : ACCESSIBILITY_SPATIAL_OBJECT;
+			if (g_AccessibilityChirpCurrentStyle != ACCESSIBILITY_CHIRP_STYLE_STANDARD
+					&& spatialroute[chirpslot]) {
+				spatialmono[chirpslot] += chirp / 32767.0f;
+				chirpleft = chirpright = 0;
+			}
+#endif
 
 			if (g_AccessibilityChirpCurrentStyle
 					!= ACCESSIBILITY_CHIRP_STYLE_MOVABLE_LANDMARK) {
@@ -1388,8 +1462,14 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 						g_AccessibilityCombatPhase[slot])
 						* g_AccessibilityCombatGain[slot] * 32767.0f;
 
-				combatleft += (s32)(combat * leftpan);
-				combatright += (s32)(combat * rightpan);
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+				if (spatialroute[slot]) spatialmono[slot] += combat / 32767.0f;
+				else
+#endif
+				{
+					combatleft += (s32)(combat * leftpan);
+					combatright += (s32)(combat * rightpan);
+				}
 				g_AccessibilityCombatPhase[slot] += TWO_PI
 						* combatfrequency[slot] / ACCESSIBILITY_TONE_SAMPLE_RATE;
 				if (g_AccessibilityCombatPhase[slot] >= TWO_PI) {
@@ -1437,8 +1517,14 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 							g_AccessibilityCombatPhase[slot]) * envelope
 							* combatvolume[slot] * combatmastervolume
 							* 32767.0f;
-					combatleft += (s32)(combat * leftpan);
-					combatright += (s32)(combat * rightpan);
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+					if (spatialroute[slot]) spatialmono[slot] += combat / 32767.0f;
+					else
+#endif
+					{
+						combatleft += (s32)(combat * leftpan);
+						combatright += (s32)(combat * rightpan);
+					}
 					g_AccessibilityCombatPhase[slot] += TWO_PI
 							* frequency / ACCESSIBILITY_TONE_SAMPLE_RATE;
 
@@ -1681,8 +1767,15 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 					+ sinf(g_AccessibilityFriendlyPhaseThird[slot])
 						* thirdgain;
 			friendly = wave * g_AccessibilityFriendlyGain[slot] * 32767.0f;
-			friendlyleft += (s32)(friendly * leftpan);
-			friendlyright += (s32)(friendly * rightpan);
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+			if (spatialroute[ACCESSIBILITY_SPATIAL_FRIENDLY + slot])
+				spatialmono[ACCESSIBILITY_SPATIAL_FRIENDLY + slot] += friendly / 32767.0f;
+			else
+#endif
+			{
+				friendlyleft += (s32)(friendly * leftpan);
+				friendlyright += (s32)(friendly * rightpan);
+			}
 
 			g_AccessibilityFriendlyPhaseBase[slot] += TWO_PI
 					* ACCESSIBILITY_FRIENDLY_BASE_FREQUENCY_HZ
@@ -1757,8 +1850,15 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 				door = sinf(phase) * envelope
 						* doorvolume[slot] * ACCESSIBILITY_DOOR_VOLUME
 						* 32767.0f;
-				doorleft += (s32)(door * leftpan);
-				doorright += (s32)(door * rightpan);
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+				if (spatialroute[ACCESSIBILITY_SPATIAL_DOOR + slot])
+					spatialmono[ACCESSIBILITY_SPATIAL_DOOR + slot] += door / 32767.0f;
+				else
+#endif
+				{
+					doorleft += (s32)(door * leftpan);
+					doorright += (s32)(door * rightpan);
+				}
 			}
 		}
 
@@ -2041,6 +2141,10 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 						if (step >= count) step = count - 1;
 						within = g_AccessibilityCaneSample[slot]
 								- step * stepduration;
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+						if (spatialroute[ACCESSIBILITY_SPATIAL_CANE + slot] && (i % 32 == 0 || within == 0))
+							accessibilityToneSpatialPathDirection(slot, step, step, 0);
+#endif
 						frequency = g_AccessibilityCanePathFrequencyHzState[slot][step];
 						canevolume = g_AccessibilityCanePathVolumeState[slot][step];
 						canepan = g_AccessibilityCanePathPanState[slot][step];
@@ -2076,6 +2180,10 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 								fraction = position - (f32)segment;
 							}
 							frequency = g_AccessibilityCanePathFrequencyHzState[slot][segment];
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+							if (spatialroute[ACCESSIBILITY_SPATIAL_CANE + slot] && i % 32 == 0)
+								accessibilityToneSpatialPathDirection(slot, segment, segment + 1, fraction);
+#endif
 							canevolume = g_AccessibilityCanePathVolumeState[slot][segment];
 							canepan = g_AccessibilityCanePathPanState[slot][segment];
 							if (segment + 1 < floorcount) {
@@ -2099,6 +2207,10 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 							canevolume = g_AccessibilityCanePathVolumeState[slot][count - 1];
 							canepan = g_AccessibilityCanePathPanState[slot][count - 1];
 							wallstep = 1;
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+							if (spatialroute[ACCESSIBILITY_SPATIAL_CANE + slot] && i % 32 == 0)
+								accessibilityToneSpatialPathDirection(slot, count - 1, count - 1, 0);
+#endif
 							sounding = wallsample
 									>= ACCESSIBILITY_CANE_PATH_WALL_GAP_SAMPLES;
 							localsample = sounding
@@ -2144,8 +2256,15 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 									: sinf(g_AccessibilityCanePhase[slot])) * envelope
 							* canevolume * 32767.0f
 							: 0.0f;
-					caneleft += (s32)(cane * leftpan);
-					caneright += (s32)(cane * rightpan);
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+					if (spatialroute[ACCESSIBILITY_SPATIAL_CANE + slot])
+						spatialmono[ACCESSIBILITY_SPATIAL_CANE + slot] += cane / 32767.0f;
+					else
+#endif
+					{
+						caneleft += (s32)(cane * leftpan);
+						caneright += (s32)(cane * rightpan);
+					}
 					g_AccessibilityCanePhase[slot] += TWO_PI
 							* frequency
 							/ ACCESSIBILITY_TONE_SAMPLE_RATE;
@@ -2350,7 +2469,19 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			g_AccessibilityMarkerSweepSample = 0;
 		}
 
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+		for (slot = 0; slot < ACCESSIBILITY_SPATIAL_VOICES; slot++) {
+			if (spatialroute[slot]) {
+				float l, r;
+				accessibilitySpatialSample(slot, spatialmono[slot], &l, &r);
+				spatialleft += (s32)(l * 32767.0f); spatialright += (s32)(r * 32767.0f);
+			}
+		}
+#endif
 		g_AccessibilityToneMixBuffer[index] = accessibilityToneClamp(
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+				spatialleft +
+#endif
 				(s32)g_AccessibilityToneMixBuffer[index] + tone + chirpleft
 						+ targetpresenceleft + threatalertleft
 					+ hazardleft + caneedgeleft + combatleft + projectileleft
@@ -2359,6 +2490,9 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 						+ markerleft + toggletone + compasstone
 						+ weaponfunctiontone);
 		g_AccessibilityToneMixBuffer[index + 1] = accessibilityToneClamp(
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+				spatialright +
+#endif
 				(s32)g_AccessibilityToneMixBuffer[index + 1] + tone + chirpright
 						+ targetpresenceright + threatalertright
 					+ hazardright + caneedgeright + combatright + projectileright

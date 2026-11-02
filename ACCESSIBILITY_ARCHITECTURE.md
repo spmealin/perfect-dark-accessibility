@@ -813,6 +813,30 @@ changed. See [the test guide](tools/tests/README.md) for boundaries and replay.
 
 ## Upstream hook ledger
 
+The uncommitted 3D experiment's Shift+F2 placement diagnostics add only an
+accessibility-core-to-port capture call in `accessibility_incident.c`; they add
+no hooks to established gameplay files. Fixed main-thread source snapshots and
+capture-only door anchor/panel records are documented in
+`documentation/ACCESSIBILITY_BINAURAL_EXPERIMENT.md`. They do not change scanner
+queries, cue scheduling, or mixer behavior.
+
+Experimental binaural boundary: `port/src/audio.c` initializes and reports the
+port-owned Steam Audio adapter, and `port/src/main.c` closes the SDL device and
+releases its context/effects through `audioShutdown` after accessibility stops.
+The core targeting and pickup schedulers publish source positions through the
+existing tone/backend boundary. Twenty-nine fixed HRTF voices cover ten combat
+slots, pickup and interactable lanes, three doors, three people, ten cane slots
+and the moving drop-edge lane. Cane path positions follow the existing contour
+interpolation and runway step order, without new geometry queries.
+`port/src/optionsmenu.c` adds the standard checkbox under Extended Audio,
+backed by the saved BinauralAudio setting. Effects are preallocated even when
+saved off, so live toggling creates no resources or device changes.
+Positions are transformed against the active
+observer's camera and look vector, including pitch (camera roll is not modeled).
+The tone command ownership gate still protects glossary previews. Fixed HRTF
+state is allocated/warmed at initialization, reset at source/route/preview
+boundaries, and released at shutdown. No native game source gains a hook.
+
 This table records implemented and anticipated changes to established files so future diffs remain deliberate.
 
 Ranking narration formatting: the existing `mplayer/ingame.c` ranking provider

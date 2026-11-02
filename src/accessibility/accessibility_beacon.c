@@ -1965,6 +1965,9 @@ static void accessibilityBeaconUpdateDoorChirps(void)
 		normalizedpan = ((f32)pan - (f32)AL_PAN_CENTER)
 				/ (f32)AL_PAN_CENTER;
 
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+		accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_DOOR + slot, &doorwayposition);
+#endif
 		accessibilityToneSetDoorSlot(slot, volume > 0,
 				normalizedvolume, normalizedpan, door->restart);
 		door->restart = false;
@@ -2137,6 +2140,13 @@ static void accessibilityBeaconUpdateFriendlyDrones(void)
 		normalizedpan = ((f32)pan - (f32)AL_PAN_CENTER)
 				/ (f32)AL_PAN_CENTER;
 
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+		{
+			struct coord position = prop->pos;
+			if (prop->chr) position.y = prop->chr->manground + prop->chr->height * .5f;
+			accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_FRIENDLY + slot, &position);
+		}
+#endif
 		accessibilityToneSetFriendlySlot(slot, volume > 0,
 				normalizedvolume, normalizedpan,
 				drone->result.relationship
@@ -2352,6 +2362,7 @@ static void accessibilityBeaconRefreshActive(void)
 		}
 	}
 
+
 	for (i = 0; i < g_AccessibilityBeaconScheduleCount; i++) {
 		s32 index = g_AccessibilityBeaconSchedule[i];
 
@@ -2446,11 +2457,22 @@ static void accessibilityBeaconPulse(s32 category,
 	}
 
 	if (selected->kind == ACCESSIBILITY_BEACON_KIND_MOVABLE_PUZZLE) {
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+		accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_OBJECT, &prop->pos);
+#endif
 		accessibilityTonePlayMovableLandmark(normalizedvolume, normalizedpan);
 		pattern = "crossing_sweep_low_tail";
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+	} else if (selected->kind == ACCESSIBILITY_BEACON_KIND_PICKUP) {
+		accessibilityTonePlayPickupChirp(frequencyhz, normalizedvolume, normalizedpan, &prop->pos);
+#endif
 	} else {
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+		accessibilityTonePlayObjectChirp(frequencyhz, normalizedvolume, normalizedpan, pulses, gain, &prop->pos);
+#else
 		accessibilityTonePlayChirpPattern(frequencyhz, normalizedvolume,
 				normalizedpan, pulses, gain);
+#endif
 	}
 	g_AccessibilityBeaconPulseCount++;
 
@@ -3270,6 +3292,36 @@ void accessibilityBeaconDumpDiagnostics(u64 captureid)
 				(unsigned long long)captureid, i,
 				g_AccessibilityBeaconSchedule[i],
 				i == g_AccessibilityBeaconScheduleCursor);
+	}
+
+	/* Capture the anchor separately from prop/model position. Do not revalidate
+	 * visibility here: diagnostics must not change the live scanner or cast rays. */
+	for (i = 0; i < ACCESSIBILITY_TONE_DOOR_SLOT_COUNT; i++) {
+		struct accessibilitybeacondoorslot *slot = &g_AccessibilityBeaconDoorSlots[i];
+		struct prop *prop;
+		struct coord anchor;
+		struct doorobj *sibling;
+		s32 panel = 0;
+		if (!slot->active || !g_Vars.props || slot->result.propnum < 0
+				|| slot->result.propnum >= g_Vars.maxprops) continue;
+		prop = &g_Vars.props[slot->result.propnum];
+		if (prop->type != PROPTYPE_DOOR || !prop->door
+				|| prop->obj != slot->result.entity) continue;
+		accessibilityBeaconDoorwayPosition(prop, &anchor);
+		accessibilityLogEvent("incident", "door_audio_anchor",
+				"capture=%llu door_slot=%d spatial_slot=%d propnum=%d canonical_propnum=%d model=%d anchor_kind=closed_doorway_center anchor=%.3f,%.3f,%.3f prop_position=%.3f,%.3f,%.3f open_fraction=%.6f",
+				(unsigned long long)captureid, i, ACCESSIBILITY_SPATIAL_DOOR + i,
+				slot->result.propnum, slot->result.canonicalpropnum, prop->obj->modelnum,
+				anchor.x, anchor.y, anchor.z, prop->pos.x, prop->pos.y, prop->pos.z, prop->door->frac);
+		sibling = prop->door;
+		do {
+			accessibilityLogEvent("incident", "door_audio_panel",
+					"capture=%llu door_slot=%d panel=%d door=%p closed_center=%.3f,%.3f,%.3f open_fraction=%.6f",
+					(unsigned long long)captureid, i, panel, sibling,
+					sibling->startpos.x, sibling->startpos.y, sibling->startpos.z, sibling->frac);
+			sibling = sibling->sibling;
+		} while (sibling && sibling != prop->door
+				&& ++panel < ACCESSIBILITY_BEACON_MAX_DOOR_SIBLINGS);
 	}
 
 	accessibilityBeaconDumpDiagnosticFocus(captureid);

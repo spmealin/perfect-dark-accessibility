@@ -15,6 +15,7 @@
 #include "input.h"
 #include "config.h"
 #include "accessibility/accessibility_options.h"
+#include "accessibility/accessibility_spatial.h"
 
 static s32 g_ExtMenuPlayer = 0;
 static struct menudialogdef *g_ExtNextDialog = NULL;
@@ -1255,7 +1256,21 @@ static MenuItemHandlerResult menuhandlerDisableMpDeathMusic(s32 operation, struc
 	return 0;
 }
 
+static MenuItemHandlerResult menuhandlerBinauralAudio(s32 operation, struct menuitem *item, union handlerdata *data)
+{
+	switch (operation) {
+	case MENUOP_GET: return accessibilitySpatialGetEnabled();
+	case MENUOP_SET: accessibilitySpatialSetEnabled(data->checkbox.value); break;
+	case MENUOP_CHECKDISABLED: return !accessibilitySpatialAvailable();
+	}
+	return 0;
+}
+
 struct menuitem g_ExtendedAudioMenuItems[] = {
+	{
+		MENUITEMTYPE_CHECKBOX, 0, MENUITEMFLAG_LITERAL_TEXT,
+		(uintptr_t)"3D Accessibility Audio", 0, menuhandlerBinauralAudio,
+	},
 	{
 		MENUITEMTYPE_CHECKBOX,
 		0,

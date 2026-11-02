@@ -1,15 +1,200 @@
+#include <ultra64.h>
 #include <math.h>
 #include <string.h>
 #include <SDL.h>
 #include "constants.h"
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_tone.h"
+#include "accessibility/accessibility_spatial.h"
+#include "accessibility/accessibility_observer.h"
+#include "accessibility/accessibility_log.h"
+#include "system.h"
 #include "accessibility_tone_ownership.h"
 
 #include "accessibility_tone_internal.h"
 
 /* Main-thread publication only. The mixer owns all non-atomic playback state. */
 SDL_atomic_t g_AccessibilityPreviewActive;
+SDL_atomic_t g_AccessibilitySpatialValid[ACCESSIBILITY_SPATIAL_VOICES];
+SDL_atomic_t g_AccessibilitySpatialPathCount[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
+SDL_atomic_t g_AccessibilitySpatialPath[ACCESSIBILITY_TONE_CANE_SLOT_COUNT][ACCESSIBILITY_CANE_PATH_MAX_STEPS][3];
+
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+/* Fixed main-thread snapshots, separate from the atomic DSP mailboxes. A
+ * stopped slot can retain its last source: capture labels age/request state
+ * explicitly rather than pretending that a saved position is still audible. */
+static struct {
+	u64 publishedus;
+	struct accessibilityobserver observer;
+	struct coord points[ACCESSIBILITY_CANE_PATH_MAX_STEPS];
+	f32 vector[3];
+	s32 seen, count;
+} spatialdiagnostics[ACCESSIBILITY_SPATIAL_VOICES];
+
+static s32 accessibilityToneSpatialVector(const struct coord *position, f32 *out)
+{
+	struct accessibilityobserver observer;
+	f32 x, y, z, rx, rz, length, ux, uy, uz;
+	if (!position || !accessibilityObserverGet(&observer)) return false;
+	rx = -observer.look.z; rz = observer.look.x;
+	length = sqrtf(rx*rx + rz*rz);
+	if (length < .00001f) return false;
+	rx /= length; rz /= length;
+	ux = -rz * observer.look.y;
+	uy = rz * observer.look.x - rx * observer.look.z;
+	uz = rx * observer.look.y;
+	x = position->x - observer.camera.x;
+	y = position->y - observer.camera.y;
+	z = position->z - observer.camera.z;
+	out[0] = x*rx + z*rz; out[1] = x*ux + y*uy + z*uz;
+	out[2] = -(x*observer.look.x + y*observer.look.y + z*observer.look.z);
+	return isfinite(out[0]) && isfinite(out[1]) && isfinite(out[2]);
+}
+#endif
+
+void accessibilityToneSetSpatialPosition(s32 slot, const struct coord *position)
+{
+	if (!accessibilityToneOwnershipCanPublish()) {
+		return;
+	}
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+	f32 vector[3];
+	if (slot < 0 || slot >= ACCESSIBILITY_SPATIAL_VOICES) return;
+	spatialdiagnostics[slot].count = 0;
+	SDL_AtomicSet(&g_AccessibilitySpatialValid[slot], 0);
+	if (slot >= ACCESSIBILITY_SPATIAL_CANE && slot < ACCESSIBILITY_SPATIAL_EDGE)
+		SDL_AtomicSet(&g_AccessibilitySpatialPathCount[slot - ACCESSIBILITY_SPATIAL_CANE], 0);
+	if (!accessibilitySpatialEnabled() || !accessibilityToneSpatialVector(position, vector)) return;
+	accessibilitySpatialDirection(slot, vector[0], vector[1], vector[2]);
+	SDL_AtomicSet(&g_AccessibilitySpatialValid[slot], 1);
+	spatialdiagnostics[slot].seen = true;
+	spatialdiagnostics[slot].publishedus = sysGetMicroseconds();
+	accessibilityObserverGet(&spatialdiagnostics[slot].observer);
+	spatialdiagnostics[slot].points[0] = *position;
+	memcpy(spatialdiagnostics[slot].vector, vector, sizeof(vector));
+	spatialdiagnostics[slot].count = 1;
+#endif
+}
+
+void accessibilityToneSetSpatialPath(s32 slot, s32 count, const struct coord *positions)
+{
+	if (!accessibilityToneOwnershipCanPublish()) {
+		return;
+	}
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+	s32 i, axis, local = slot - ACCESSIBILITY_SPATIAL_CANE;
+	f32 vector[3];
+	if (local < 0 || local >= ACCESSIBILITY_TONE_CANE_SLOT_COUNT) return;
+	accessibilityToneSetSpatialPosition(slot, count > 0 ? positions : NULL);
+	if (!positions || !SDL_AtomicGet(&g_AccessibilitySpatialValid[slot])) return;
+	if (count > ACCESSIBILITY_CANE_PATH_MAX_STEPS) count = ACCESSIBILITY_CANE_PATH_MAX_STEPS;
+	for (i = 0; i < count; i++) {
+		if (!accessibilityToneSpatialVector(&positions[i], vector)) return;
+		for (axis = 0; axis < 3; axis++) {
+			SDL_AtomicSet(&g_AccessibilitySpatialPath[local][i][axis],
+					(s32)(fmaxf(-1000000, fminf(1000000, vector[axis])) * 1000));
+		}
+	}
+	SDL_AtomicSet(&g_AccessibilitySpatialPathCount[local], count);
+	memcpy(spatialdiagnostics[slot].points, positions, count * sizeof(*positions));
+	spatialdiagnostics[slot].count = count;
+#endif
+}
+
+void accessibilityToneDumpSpatialDiagnostics(u64 captureid)
+{
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+	u64 now = sysGetMicroseconds();
+	s32 slot, i;
+	accessibilityLogEvent("incident", "spatial_state",
+			"capture=%llu available=%d enabled=%d slots=%d coordinate_frame=right_up_back roll_mode=ignored snapshot=latest_published_commands not_instantaneous_audibility=1",
+			(unsigned long long)captureid, accessibilitySpatialAvailable(),
+			accessibilitySpatialEnabled(), ACCESSIBILITY_SPATIAL_VOICES);
+	for (slot = 0; slot < ACCESSIBILITY_SPATIAL_VOICES; slot++) {
+		struct accessibilityobserver *observer = &spatialdiagnostics[slot].observer;
+		const char *family = slot < ACCESSIBILITY_SPATIAL_PICKUP ? "enemy"
+				: slot == ACCESSIBILITY_SPATIAL_PICKUP ? "pickup"
+				: slot == ACCESSIBILITY_SPATIAL_OBJECT ? "object"
+				: slot < ACCESSIBILITY_SPATIAL_FRIENDLY ? "door"
+				: slot < ACCESSIBILITY_SPATIAL_CANE ? "person"
+				: slot < ACCESSIBILITY_SPATIAL_EDGE ? "cane" : "drop_edge";
+		f32 direction[3] = {0};
+		s32 requested, local = slot - ACCESSIBILITY_SPATIAL_CANE;
+		s32 directionvalid = accessibilitySpatialGetDirection(slot, direction);
+		if (slot < ACCESSIBILITY_SPATIAL_PICKUP)
+			requested = SDL_AtomicGet(&g_AccessibilityCombatEnabled[slot]);
+		else if (slot <= ACCESSIBILITY_SPATIAL_OBJECT)
+			requested = SDL_AtomicGet(&g_AccessibilityChirpEnabled)
+					&& (SDL_AtomicGet(&g_AccessibilityChirpStyle)
+						== (slot == ACCESSIBILITY_SPATIAL_PICKUP ? ACCESSIBILITY_CHIRP_STYLE_PICKUP
+								: ACCESSIBILITY_CHIRP_STYLE_OBJECT)
+						|| (slot == ACCESSIBILITY_SPATIAL_OBJECT
+							&& SDL_AtomicGet(&g_AccessibilityChirpStyle) == ACCESSIBILITY_CHIRP_STYLE_MOVABLE_LANDMARK));
+		else if (slot < ACCESSIBILITY_SPATIAL_FRIENDLY)
+			requested = SDL_AtomicGet(&g_AccessibilityDoorEnabled[slot - ACCESSIBILITY_SPATIAL_DOOR]);
+		else if (slot < ACCESSIBILITY_SPATIAL_CANE)
+			requested = SDL_AtomicGet(&g_AccessibilityFriendlyEnabled[slot - ACCESSIBILITY_SPATIAL_FRIENDLY]);
+		else if (slot < ACCESSIBILITY_SPATIAL_EDGE)
+			requested = SDL_AtomicGet(&g_AccessibilityCaneEnabled[local]);
+		else requested = SDL_AtomicGet(&g_AccessibilityCaneEdgeEnabled);
+		accessibilityLogEvent("incident", "spatial_source",
+				"capture=%llu slot=%d family=%s seen=%d requested=%d spatial_valid=%d age_ms=%.3f points=%d observer_prop=%p remote=%d camera=%.3f,%.3f,%.3f look=%.6f,%.6f,%.6f published_relative=%.3f,%.3f,%.3f backend_direction_valid=%d backend_direction=%.6f,%.6f,%.6f",
+				(unsigned long long)captureid, slot, family, spatialdiagnostics[slot].seen,
+				requested, SDL_AtomicGet(&g_AccessibilitySpatialValid[slot]),
+				spatialdiagnostics[slot].seen ? (now - spatialdiagnostics[slot].publishedus) / 1000.0 : -1.0,
+				spatialdiagnostics[slot].count, observer->prop, observer->isremote,
+				observer->camera.x, observer->camera.y, observer->camera.z,
+				observer->look.x, observer->look.y, observer->look.z,
+				spatialdiagnostics[slot].vector[0], spatialdiagnostics[slot].vector[1], spatialdiagnostics[slot].vector[2],
+				directionvalid, direction[0], direction[1], direction[2]);
+		for (i = 0; i < spatialdiagnostics[slot].count; i++) {
+			struct coord *point = &spatialdiagnostics[slot].points[i];
+			f32 relative[3] = {0};
+			s32 currentvalid = accessibilityToneSpatialVector(point, relative);
+			accessibilityLogEvent("incident", "spatial_point",
+					"capture=%llu slot=%d point=%d world=%.3f,%.3f,%.3f current_relative_valid=%d current_relative=%.3f,%.3f,%.3f current_azimuth_deg=%.3f current_elevation_deg=%.3f cane_pattern=%d frequency_hz=%.3f volume=%.6f",
+					(unsigned long long)captureid, slot, i, point->x, point->y, point->z,
+					currentvalid, relative[0], relative[1], relative[2],
+					atan2f(relative[0], -relative[2]) * 180.0f / M_PI,
+					atan2f(relative[1], sqrtf(relative[0]*relative[0] + relative[2]*relative[2])) * 180.0f / M_PI,
+					local >= 0 && local < ACCESSIBILITY_TONE_CANE_SLOT_COUNT ? SDL_AtomicGet(&g_AccessibilityCanePattern[local]) : -1,
+					local >= 0 && local < ACCESSIBILITY_TONE_CANE_SLOT_COUNT
+						? SDL_AtomicGet(&g_AccessibilityCanePathCount[local]) > 0
+							? SDL_AtomicGet(&g_AccessibilityCanePathFrequencyMilliHz[local][i]) / 1000.0f
+							: SDL_AtomicGet(&g_AccessibilityCaneFrequencyMilliHz[local]) / 1000.0f : 0.0f,
+					local >= 0 && local < ACCESSIBILITY_TONE_CANE_SLOT_COUNT
+						? SDL_AtomicGet(&g_AccessibilityCanePathCount[local]) > 0
+							? SDL_AtomicGet(&g_AccessibilityCanePathVolumeMillionths[local][i]) / 1000000.0f
+							: SDL_AtomicGet(&g_AccessibilityCaneVolumeMillionths[local]) / 1000000.0f : 0.0f);
+		}
+	}
+#else
+	(void)captureid;
+#endif
+}
+
+static void accessibilityTonePublishChirp(f32 frequencyhz, f32 volume, f32 pan,
+		s32 pulses, f32 gain, s32 style);
+
+void accessibilityTonePlayPickupChirp(f32 frequencyhz, f32 volume, f32 pan,
+		const struct coord *position)
+{
+	if (!accessibilityToneOwnershipCanPublish()) {
+		return;
+	}
+	accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_PICKUP, position);
+	accessibilityTonePublishChirp(frequencyhz, volume, pan, 3, 1.0f, ACCESSIBILITY_CHIRP_STYLE_PICKUP);
+}
+
+void accessibilityTonePlayObjectChirp(f32 frequencyhz, f32 volume, f32 pan,
+		s32 pulses, f32 gain, const struct coord *position)
+{
+	if (!accessibilityToneOwnershipCanPublish()) {
+		return;
+	}
+	accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_OBJECT, position);
+	accessibilityTonePublishChirp(frequencyhz, volume, pan, pulses, gain, ACCESSIBILITY_CHIRP_STYLE_OBJECT);
+}
 SDL_atomic_t g_AccessibilityPreviewSequence;
 SDL_atomic_t g_AccessibilityPreviewDurationMs;
 
@@ -181,6 +366,12 @@ void accessibilityTonePlayChirpPattern(f32 frequencyhz, f32 volume, f32 pan,
 	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
+	accessibilityTonePublishChirp(frequencyhz, volume, pan, pulses, gain, ACCESSIBILITY_CHIRP_STYLE_STANDARD);
+}
+
+static void accessibilityTonePublishChirp(f32 frequencyhz, f32 volume, f32 pan,
+		s32 pulses, f32 gain, s32 style)
+{
 	if (frequencyhz < 1.0f) {
 		frequencyhz = 1.0f;
 	}
@@ -219,7 +410,7 @@ void accessibilityTonePlayChirpPattern(f32 frequencyhz, f32 volume, f32 pan,
 			(s32)(pan * 1000000.0f));
 	SDL_AtomicSet(&g_AccessibilityChirpPulses, pulses);
 	SDL_AtomicSet(&g_AccessibilityChirpStyle,
-			ACCESSIBILITY_CHIRP_STYLE_STANDARD);
+			style);
 	SDL_AtomicSet(&g_AccessibilityChirpEnabled, volume > 0.0f);
 	SDL_AtomicAdd(&g_AccessibilityChirpSequence, 1);
 }

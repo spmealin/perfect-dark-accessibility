@@ -1615,6 +1615,9 @@ static void accessibilityTargetingUpdateCombatPresence(s32 frame60,
 					normalizedvolume, normalizedpan);
 			voice->nextcadencelog60 = frame60 + TICKS(60);
 		}
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+		accessibilityToneSetSpatialPosition(slot, precisionguidance ? NULL : &record->candidate.position);
+#endif
 		accessibilityToneSetCombatSlot(slot, true,
 				startfrequency, endfrequency,
 				normalizedvolume, normalizedpan, periodms, durationms,

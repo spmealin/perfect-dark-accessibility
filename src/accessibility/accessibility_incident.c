@@ -27,6 +27,7 @@
 #include "accessibility/accessibility_observer.h"
 #ifndef PLATFORM_N64
 #include "input.h"
+#include "accessibility/accessibility_tone.h"
 #endif
 
 #define ACCESSIBILITY_INCIDENT_SAMPLE_TICKS TICKS(15)
@@ -725,6 +726,9 @@ static void accessibilityIncidentCapture(void)
 	accessibilityIncidentDumpObjectives(captureid);
 	accessibilityIncidentDumpInventory(captureid);
 	accessibilityBeaconDumpDiagnostics(captureid);
+#ifndef PLATFORM_N64
+	accessibilityToneDumpSpatialDiagnostics(captureid);
+#endif
 	accessibilityIncidentDumpProps(captureid);
 	accessibilityIncidentDumpViewBlocker(captureid);
 	accessibilityLogEvent("incident", "capture_end",

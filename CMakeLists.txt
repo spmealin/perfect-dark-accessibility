@@ -214,6 +214,27 @@ endif()
 
 # Dependencies
 
+option(ACCESSIBILITY_BINAURAL_EXPERIMENT "Experimental enemy/pickup Steam Audio HRTF" OFF)
+if(ACCESSIBILITY_BINAURAL_EXPERIMENT)
+  if(NOT MINGW OR NOT TARGET_IS_64BIT)
+    message(FATAL_ERROR "The binaural experiment currently supports MinGW64 Windows only.")
+  endif()
+  set(STEAMAUDIO_SDK_ROOT "${CMAKE_BINARY_DIR}/deps/sdk/steamaudio" CACHE PATH "Steam Audio 4.8.1 SDK root")
+  if(NOT EXISTS "${STEAMAUDIO_SDK_ROOT}/include/phonon.h")
+    file(DOWNLOAD
+      "https://github.com/ValveSoftware/steam-audio/releases/download/v4.8.1/steamaudio_4.8.1.zip"
+      "${CMAKE_BINARY_DIR}/deps/steamaudio_4.8.1.zip"
+      EXPECTED_HASH SHA256=4a0aa5ec1176f38f0b0993a37c2259d9e86f27e22d5e24f83ec4c3cb9a1d5449
+      TLS_VERIFY ON)
+    file(ARCHIVE_EXTRACT INPUT "${CMAKE_BINARY_DIR}/deps/steamaudio_4.8.1.zip"
+      DESTINATION "${CMAKE_BINARY_DIR}/deps/sdk")
+  endif()
+  include_directories(SYSTEM "${STEAMAUDIO_SDK_ROOT}/include")
+  add_compile_definitions(ACCESSIBILITY_BINAURAL_EXPERIMENT=1)
+  configure_file("${STEAMAUDIO_SDK_ROOT}/lib/windows-x64/phonon.dll"
+    "${CMAKE_BINARY_DIR}/phonon.dll" COPYONLY)
+endif()
+
 set(LIBS )
 
 # SDL2
@@ -396,6 +417,28 @@ add_custom_target(pd_headers ALL DEPENDS ${JSON_HEADERS})
 
 set(BIN_NAME "pd${BIN_REGION}.${TARGET_ARCH}")
 add_executable(pd ${SRC})
+if(ACCESSIBILITY_BINAURAL_EXPERIMENT)
+  add_custom_target(steamaudio_runtime_files ALL
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+      "${STEAMAUDIO_SDK_ROOT}/lib/windows-x64/phonon.dll" "${CMAKE_BINARY_DIR}/phonon.dll")
+  add_dependencies(pd steamaudio_runtime_files)
+  foreach(spatial_test spatial_smoke spatial_mixer_smoke spatial_menu_test)
+    add_executable(accessibility_${spatial_test} EXCLUDE_FROM_ALL
+      "tools/tests/accessibility_${spatial_test}.c" "tools/tests/assertions_enabled.c")
+    target_compile_definitions(accessibility_${spatial_test} PRIVATE ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS=0)
+    target_compile_options(accessibility_${spatial_test} PRIVATE -O2 -UNDEBUG)
+    if(spatial_test STREQUAL "spatial_menu_test")
+      target_compile_options(accessibility_${spatial_test} PRIVATE -fwhole-program)
+    endif()
+    target_link_libraries(accessibility_${spatial_test} PRIVATE "${SDL2_LIBRARY}" m)
+    add_dependencies(accessibility_${spatial_test} pd_headers steamaudio_runtime_files)
+  endforeach()
+  add_custom_target(accessibility_spatial_checks
+    COMMAND $<TARGET_FILE:accessibility_spatial_smoke>
+    COMMAND $<TARGET_FILE:accessibility_spatial_mixer_smoke>
+    COMMAND $<TARGET_FILE:accessibility_spatial_menu_test>
+    DEPENDS accessibility_spatial_smoke accessibility_spatial_mixer_smoke accessibility_spatial_menu_test)
+endif()
 target_compile_definitions(pd PRIVATE
   ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS=$<BOOL:${ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS}>)
 add_dependencies(pd pd_headers)
@@ -468,6 +511,11 @@ if(WIN32 AND MINGW)
     @ONLY
   )
 
+  if(ACCESSIBILITY_BINAURAL_EXPERIMENT)
+    add_custom_target(pd_zip
+      COMMAND "${CMAKE_COMMAND}" -E echo "Disable ACCESSIBILITY_BINAURAL_EXPERIMENT before creating a public package."
+      COMMAND "${CMAKE_COMMAND}" -E false)
+  else()
   add_custom_target(pd_zip
     COMMAND "${CMAKE_COMMAND}"
       "-DPD_PACKAGE_BINARY=${CMAKE_BINARY_DIR}/${BIN_NAME}.exe"
@@ -491,6 +539,7 @@ if(WIN32 AND MINGW)
       "${CMAKE_SOURCE_DIR}/LICENSE"
     VERBATIM
   )
+  endif()
 endif()
 
 # Additional commands for specific platforms.

@@ -13,7 +13,8 @@ foreach(declaration IN LISTS declarations)
   string(REGEX MATCH "accessibilityTone[A-Za-z0-9_]+" name "${declaration}")
   # Preview transactions manage ownership; diagnostic reads do not publish.
   if(name MATCHES "^accessibilityTonePreview(Begin|Commit|Stop|Commands)$"
-      OR name STREQUAL "accessibilityToneGetDiagnostics")
+      OR name STREQUAL "accessibilityToneGetDiagnostics"
+      OR name STREQUAL "accessibilityToneDumpSpatialDiagnostics")
     continue()
   endif()
   if(NOT source MATCHES "void[ \t\r\n]+${name}\\([^{}]*\\)[ \t\r\n]*\\{[ \t\r\n]*if[ \t]*\\(!accessibilityToneOwnershipCanPublish\\(\\)\\)")

@@ -1466,6 +1466,9 @@ static void accessibilityCanePlayCorridorRunway(
 	f32 frequencies[ACCESSIBILITY_CANE_CORRIDOR_STATIONS * 2];
 	f32 volumes[ACCESSIBILITY_CANE_CORRIDOR_STATIONS * 2];
 	f32 pans[ACCESSIBILITY_CANE_CORRIDOR_STATIONS * 2];
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+	struct coord spatialpoints[ACCESSIBILITY_CANE_CORRIDOR_STATIONS * 2];
+#endif
 	f32 maximumvolume = 0.0f;
 	f32 baseelevation = 0.0f;
 	s32 count = 0;
@@ -1509,6 +1512,9 @@ static void accessibilityCanePlayCorridorRunway(
 				havebaseelevation = true;
 			}
 			source = side->point;
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+			spatialpoints[count] = source;
+#endif
 			deltax = source.x - observer->origin.x;
 			deltaz = source.z - observer->origin.z;
 			distance = sqrtf(deltax * deltax + deltaz * deltaz);
@@ -1546,6 +1552,9 @@ static void accessibilityCanePlayCorridorRunway(
 	}
 
 	if (count == 0) return;
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+	accessibilityToneSetSpatialPath(ACCESSIBILITY_SPATIAL_CANE + ACCESSIBILITY_CANE_CONTEXT_SLOT, count, spatialpoints);
+#endif
 	accessibilityTonePlayCaneSlot(ACCESSIBILITY_CANE_CONTEXT_SLOT,
 			ACCESSIBILITY_CANE_RUNWAY_FREQUENCY_HZ,
 			ACCESSIBILITY_CANE_RUNWAY_FREQUENCY_HZ,
@@ -1998,6 +2007,14 @@ static void accessibilityCaneUpdateEdgeSound(
 	volume = (f32)nativevolume / (f32)AL_VOL_FULL
 			* accessibilityGetVirtualCaneVolume();
 	pan = ((f32)nativepan - (f32)AL_PAN_CENTER) / (f32)AL_PAN_CENTER;
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+	{
+		struct coord spatialsource = source;
+		spatialsource.y = g_AccessibilityCaneEdgePoints[i].y
+				+ (g_AccessibilityCaneEdgePoints[i + 1].y - g_AccessibilityCaneEdgePoints[i].y) * progress;
+		accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_EDGE, &spatialsource);
+	}
+#endif
 	accessibilityToneSetCaneEdge(true, volume, pan);
 }
 
@@ -2978,6 +2995,23 @@ static void accessibilityCanePlaySample(
 				* sample->corridoraudioscale;
 	}
 
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+	{
+		s32 slot = ACCESSIBILITY_SPATIAL_CANE + (sample - g_AccessibilityCaneSamples);
+		if (sample->pathphrase.count > 0) {
+			struct coord points[ACCESSIBILITY_CANE_PATH_PHRASE_STEPS];
+			for (i = 0; i < sample->pathphrase.count; i++) {
+				points[i].x = sample->origin.x + sample->direction.x * sample->pathphrase.steps[i].distance;
+				points[i].z = sample->origin.z + sample->direction.z * sample->pathphrase.steps[i].distance;
+				points[i].y = i >= sample->pathphrase.floorcount ? sample->audiosource.y
+						: sample->pathdiagnostic.path.nodes[0].floor.ground + sample->pathphrase.steps[i].elevation;
+			}
+			accessibilityToneSetSpatialPath(slot, sample->pathphrase.count, points);
+		} else {
+			accessibilityToneSetSpatialPosition(slot, &sample->audiosource);
+		}
+	}
+#endif
 	accessibilityTonePlayCaneSlot(sample - g_AccessibilityCaneSamples,
 			sample->frequency, sample->endfrequency,
 			sample->effectivevolume, sample->normalizedpan,
@@ -3341,6 +3375,9 @@ void accessibilityCaneObserveHoverbikeMove(struct coord *requestedvelocity,
 			/ (f32)AL_PAN_CENTER;
 	volume = accessibilityGetVirtualCaneVolume() * 0.9f;
 
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+	accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_CANE + ACCESSIBILITY_CANE_CONTEXT_SLOT, &source);
+#endif
 	accessibilityTonePlayCaneSlot(ACCESSIBILITY_CANE_CONTEXT_SLOT,
 			ACCESSIBILITY_CANE_VEHICLE_BLOCKED_START_HZ,
 			ACCESSIBILITY_CANE_VEHICLE_BLOCKED_END_HZ,

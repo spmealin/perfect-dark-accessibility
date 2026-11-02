@@ -37,10 +37,6 @@ menu after visiting another screen reads its title again.
 
 ## Mouse weapon selection
 
-Pickup beacons (F8) require an item to intersect the current viewport as well
-as pass the existing line-of-sight and pickup checks. Items merely nearby or
-behind you do not chirp. Eligibility is checked again before each pickup cue.
-
 Hold the weapon radial-menu binding (Q or the middle mouse button by default).
 The mouse position when the menu opens becomes its neutral center. Move in
 one of the eight directions to highlight a weapon; no click is needed. Return
@@ -155,6 +151,32 @@ sound list, reachable with the same navigation controls; the ordinary cancel
 button also returns to Accessibility.
 
 ## World scanners
+
+Pickup beacons (F8) require an item to intersect the current viewport as well
+as pass the existing line-of-sight and pickup checks. Items merely nearby or
+behind you do not chirp. Eligibility is checked again before each pickup cue.
+
+### Experimental 3D headphone audio
+
+The current experimental build uses binaural headphone audio for ordinary
+enemy beacons, all four object/person scanners, and the virtual cane (including
+contours, boundary sequences and the moving drop-edge warning).
+It adds front/back and elevation filtering
+while retaining their existing pitch patterns, cadence, range and visibility.
+Other cues and original game audio are unchanged. Held-aim directional
+guidance and the exact lock-on tone deliberately keep their existing sound.
+Use ordinary stereo headphones; avoid stacking another virtual-surround effect.
+
+Use Options → Extended → Audio → **3D Accessibility Audio** to switch between
+3D and the previous stereo behavior immediately. The checkbox defaults on,
+and its choice is saved as `Accessibility.BinauralAudio` in `pd.ini`.
+It is unavailable in builds without the experimental backend or when the SDK
+cannot initialize. No restart is needed to change it from the menu.
+If the adjacent `phonon.dll` cannot initialize, cues fall back to stereo.
+This is an uncommitted listening experiment, not part of the public release.
+The audio glossary still plays its original stereo examples.
+
+### Scanner behavior
 
 Four player-controlled scanners provide spatial sounds during gameplay:
 

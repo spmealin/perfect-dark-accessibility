@@ -681,6 +681,27 @@ turrets, cameras, scopes and moving targets.
 
 ### Fine aiming tone
 
+The current uncommitted 3D-audio build adds a native checkbox at Options →
+Extended → Audio → `3D Accessibility Audio`, default on and saved as
+`Accessibility.BinauralAudio=1`. It switches live without allocating or
+enumerating devices. It is disabled when the SDK/backend is unavailable.
+The setting now covers ordinary enemy presence, all F5–F8 scanner sounds,
+cane rays/contours, corridor boundary sequences and the moving drop warning.
+Existing patterns, visibility, distance curves and scheduling remain unchanged.
+Cane source positions follow its existing interpolated floor path or ordered
+boundary stations; no extra collision queries are performed. Exact lock-on,
+held-aim precision, original game audio and glossary samples remain unchanged.
+The earlier enemy/pickup prototype has owner listening acceptance; these added
+routes still await testing. See `ACCESSIBILITY_BINAURAL_EXPERIMENT.md` for
+29-voice resource, performance, fallback, test and rollback details.
+
+In this experimental build, Shift+F2 captures also include the last published
+3D source positions, listener orientation, source age, backend direction and
+cane path pitches, plus door voice-to-prop mappings and closed-doorway anchors.
+These capture-only records do not modify sounds or visibility. They describe
+published commands rather than guaranteeing that a short cue was audible at
+the instant of capture. No additional setting or shortcut is needed.
+
 The center bullseye layers the standard continuous 660 Hz enemy body-lock
 tone over the original accuracy pitch. This applies only to firing-range
 target candidates with a measured aim hit less than 18 world units from the

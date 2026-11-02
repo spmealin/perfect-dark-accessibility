@@ -88,6 +88,7 @@ static void cleanup(void)
 {
 	sysLogPrintf(LOG_NOTE, "shutdown");
 	accessibilityShutdown();
+	audioShutdown();
 	inputSaveBinds();
 	configSave(CONFIG_PATH);
 	videoShutdown();

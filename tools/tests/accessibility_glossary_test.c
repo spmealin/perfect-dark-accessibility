@@ -4,6 +4,11 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#if ACCESSIBILITY_SPATIAL_CAPTURE_TEST
+#include <stdarg.h>
+static char spatialcapturerecords[64][2048];
+static int spatialcapturerecordcount;
+#endif
 #define SDL_MAIN_HANDLED
 #include "types.h"
 #include "../../port/src/accessibility/accessibility_tone_ownership.c"
@@ -36,7 +41,18 @@ void accessibilityGetProjectileHazardTuning(f32 *a, f32 *volume)
 void accessibilityGetVirtualCanePitch(f32 *nearhz, f32 *farhz)
 { *nearhz = 600; *farhz = 300; }
 void accessibilityLogEvent(const char *category, const char *event,
-		const char *format, ...) { }
+		const char *format, ...)
+{
+#if ACCESSIBILITY_SPATIAL_CAPTURE_TEST
+	if (!strcmp(category, "incident") && !strncmp(event, "spatial_", 8)) {
+		va_list args;
+		assert(spatialcapturerecordcount < 64);
+		va_start(args, format);
+		vsnprintf(spatialcapturerecords[spatialcapturerecordcount++], 2048, format, args);
+		va_end(args);
+	}
+#endif
+}
 
 static s32 nonzero(const s16 *pcm, s32 samples)
 {

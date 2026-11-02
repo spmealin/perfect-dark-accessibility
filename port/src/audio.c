@@ -6,6 +6,7 @@
 #include "audio.h"
 #include "system.h"
 #include "accessibility/accessibility_tone.h"
+#include "accessibility/accessibility_spatial.h"
 
 static SDL_AudioDeviceID dev;
 static const s16 *nextBuf;
@@ -38,6 +39,7 @@ s32 audioInit(void)
 	}
 
 	SDL_PauseAudioDevice(dev, 0);
+	accessibilitySpatialInit();
 
 	return 0;
 }
@@ -68,6 +70,18 @@ void audioEndFrame(void)
 		nextBuf = NULL;
 		nextSize = 0;
 	}
+	if (accessibilitySpatialEnabled()) accessibilitySpatialReport(audioGetSamplesBuffered());
+}
+
+void audioShutdown(void)
+{
+	if (dev) {
+		SDL_PauseAudioDevice(dev, 1);
+		SDL_ClearQueuedAudio(dev);
+		SDL_CloseAudioDevice(dev);
+		dev = 0;
+	}
+	accessibilitySpatialShutdown();
 }
 
 PD_CONSTRUCTOR static void audioConfigInit(void)
