@@ -67,6 +67,9 @@ static f32 g_AccessibilityCaneEdgePan;
 static s32 g_AccessibilityCombatObservedSequence[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static s32 g_AccessibilityCombatObservedTriggerSequence[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static s32 g_AccessibilityCombatCycleSample[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
+/* Separate onsets, not whole beeps: dense combat must stay responsive. */
+static s32 g_AccessibilityCombatLastStarted = -1;
+static s32 g_AccessibilityCombatStartWait;
 static f32 g_AccessibilityCombatPhase[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static f32 g_AccessibilityCombatPan[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
 static f32 g_AccessibilityCombatGain[ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT];
@@ -258,6 +261,9 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 	f32 markervolume[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
 	f32 markerpan[ACCESSIBILITY_TONE_MARKER_VOICE_COUNT];
 	s32 anycombatenabled = 0;
+	s32 combatperiodiccount = 0;
+	s32 combatminimumperiod = 0;
+	s32 combatstartgap = (s32)(ACCESSIBILITY_TONE_SAMPLE_RATE * .050f);
 	s32 anyprojectileenabled = 0;
 	s32 anytrackerenabled = 0;
 	s32 anyfriendlyenabled = 0;
@@ -400,18 +406,23 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 				&g_AccessibilityCombatContinuous[slot]);
 		anycombatenabled |= combatenabled[slot]
 				|| g_AccessibilityCombatGain[slot] > 0.0f;
+		if (combatenabled[slot] && !combatcontinuous[slot]) {
+			combatperiodiccount++;
+			if (!combatminimumperiod || combatperiodsamples[slot] < combatminimumperiod)
+				combatminimumperiod = combatperiodsamples[slot];
+		}
 
 		if (sequence != g_AccessibilityCombatObservedSequence[slot]) {
 #if ACCESSIBILITY_BINAURAL_EXPERIMENT
 			accessibilitySpatialReset(slot);
 #endif
 			g_AccessibilityCombatObservedSequence[slot] = sequence;
-			/* Golden-ratio offsets keep independently repeating voices from
-			 * starting together even when the first few slots are occupied. */
+			/* Preserve isolated glossary playback; gameplay submits a due
+			 * request to the shared onset scheduler instead of free-running. */
 			offset = ((slot * 618) % 1000)
 					* combatperiodsamples[slot] / 1000;
-			g_AccessibilityCombatCycleSample[slot] = offset == 0 ? 0
-					: combatperiodsamples[slot] - offset;
+			g_AccessibilityCombatCycleSample[slot] = !preview ? combatperiodsamples[slot]
+					: offset == 0 ? 0 : combatperiodsamples[slot] - offset;
 			g_AccessibilityCombatPhase[slot] = 0.0f;
 			g_AccessibilityCombatPan[slot] = combatpan[slot];
 		}
@@ -419,10 +430,22 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		if (triggersequence
 				!= g_AccessibilityCombatObservedTriggerSequence[slot]) {
 			g_AccessibilityCombatObservedTriggerSequence[slot] = triggersequence;
-			g_AccessibilityCombatCycleSample[slot] = 0;
+			g_AccessibilityCombatCycleSample[slot] = preview ? 0 : combatperiodsamples[slot];
 			g_AccessibilityCombatPhase[slot] = 0.0f;
 			g_AccessibilityCombatPan[slot] = combatpan[slot];
 		}
+	}
+	if (!combatperiodiccount || preview) {
+		g_AccessibilityCombatStartWait = 0;
+		g_AccessibilityCombatLastStarted = -1;
+	} else {
+		/* At ten voices, shorten the gap rather than slowing the entire
+		 * scan to ten full beep durations. Never admit simultaneous onsets. */
+		s32 densegap = combatminimumperiod / combatperiodiccount;
+		if (densegap < 1) densegap = 1;
+		if (densegap < combatstartgap) combatstartgap = densegap;
+		if (g_AccessibilityCombatStartWait > combatstartgap)
+			g_AccessibilityCombatStartWait = combatstartgap;
 	}
 
 	for (slot = 0; slot < ACCESSIBILITY_TONE_PROJECTILE_SLOT_COUNT; slot++) {
@@ -1433,6 +1456,25 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			g_AccessibilityWeaponFunctionSamplesRemaining--;
 		}
 
+		if (!preview && combatperiodiccount) {
+			s32 offset;
+			if (g_AccessibilityCombatStartWait > 0) g_AccessibilityCombatStartWait--;
+			if (!g_AccessibilityCombatStartWait) {
+				for (offset = 1; offset <= ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT; offset++) {
+					s32 next = (g_AccessibilityCombatLastStarted + offset)
+							% ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT;
+					if (!combatenabled[next] || combatcontinuous[next]
+							|| g_AccessibilityCombatGain[next] > 0.0f
+							|| g_AccessibilityCombatCycleSample[next] < combatperiodsamples[next]) continue;
+					g_AccessibilityCombatCycleSample[next] = 0;
+					g_AccessibilityCombatPhase[next] = 0.0f;
+					g_AccessibilityCombatLastStarted = next;
+					g_AccessibilityCombatStartWait = combatstartgap;
+					break;
+				}
+			}
+		}
+
 		for (slot = 0; slot < ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT; slot++) {
 			f32 targetcombatgain = combatenabled[slot] && combatcontinuous[slot]
 					? combatvolume[slot] * combatmastervolume
@@ -1533,8 +1575,9 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 					}
 				}
 
-				g_AccessibilityCombatCycleSample[slot]++;
-				if (g_AccessibilityCombatCycleSample[slot]
+				if (preview || g_AccessibilityCombatCycleSample[slot] < combatperiodsamples[slot])
+					g_AccessibilityCombatCycleSample[slot]++;
+				if (preview && g_AccessibilityCombatCycleSample[slot]
 						>= combatperiodsamples[slot]) {
 					g_AccessibilityCombatCycleSample[slot] = 0;
 					g_AccessibilityCombatPhase[slot] = 0.0f;

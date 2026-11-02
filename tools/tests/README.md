@@ -155,3 +155,11 @@ allocation/second-format failure cleanup, first/interval/lifecycle flush behavio
 nonfatal write/flush failures, shutdown idempotence, and diagnostic snapshot/reset
 without recursive reporting. Both modes passed in that verification run.
 Injected microseconds validate accounting, not real filesystem latency or FPS.
+
+## Combat onset scheduler
+
+`accessibility_combat_scheduler_test.c` exercises the production mixer with
+one, three and ten periodic voices, fast cadences, repeated simultaneous
+restarts, continuous proximity tones, and stop/resume. It asserts minimum
+onset separation and service of every active slot. The existing glossary PCM
+fingerprint also checks that isolated demonstrations remain unchanged.

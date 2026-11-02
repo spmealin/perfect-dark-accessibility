@@ -681,6 +681,18 @@ turrets, cameras, scopes and moving targets.
 
 ### Fine aiming tone
 
+Ordinary repeating combat beacons share an audio-sample-clock onset scheduler.
+Due voices start in round-robin order with a 50 ms minimum start separation for
+sparse encounters. For dense or fast cadences, separation shrinks to the
+fastest active period divided by the number of repeating voices (at least one
+sample), preserving responsiveness across ten slots. Beep tails may overlap;
+whole events are not serialized. Restarts and immediate-retrigger requests
+still pass through the shared onset gate. Continuous close-range tones,
+exact lock-on and glossary demonstrations are unchanged. No new INI option or
+gameplay hook is added. This addresses near-synchronous independent beeps
+reported in session `1793659964`, capture 1; owner listening acceptance of the
+new scheduler remains pending.
+
 The current uncommitted 3D-audio build adds a native checkbox at Options →
 Extended → Audio → `3D Accessibility Audio`, default on and saved as
 `Accessibility.BinauralAudio=1`. It switches live without allocating or
