@@ -1190,7 +1190,7 @@ static const char *accessibilityTargetingGameScopeReason(void)
 }
 
 /**
- * Mirror sightDraw's decision to render the native target marker.
+ * Recognize the ordinary target marker and the FarSight's own aiming reticle.
  *
  * gunsightoff only describes the full fine-aim sight, so using it directly
  * suppresses alignment for ordinary weapons when Always Show Target renders
@@ -1217,6 +1217,13 @@ static s32 accessibilityTargetingGameTargetIndicatorVisible(void)
 	}
 
 	sighton = g_Vars.currentplayer->gunsightoff == 0;
+	/* sightHasTargetWhileAiming describes the extra central marker, not
+	 * sightDrawMaian's visible reticle. Both FarSight functions draw that
+	 * reticle while aiming, so neither may lose a valid native ray lock. */
+	if (sighton && sight == SIGHT_MAIAN
+			&& bgunGetWeaponNum(HAND_RIGHT) == WEAPON_FARSIGHT) {
+		return true;
+	}
 
 	return (optionsGetAlwaysShowTarget(g_Vars.currentplayerstats->mpindex)
 			&& !sighton)

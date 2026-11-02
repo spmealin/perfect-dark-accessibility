@@ -681,6 +681,14 @@ turrets, cameras, scopes and moving targets.
 
 ### Fine aiming tone
 
+The FarSight's visible Maian aiming reticle permits exact lock-on in both
+manual-depth and Target Locator modes. The generic extra target-marker rule
+alone does not describe this reticle. This exception still respects Sight on
+Screen, active menus, passive mode and death; it does not turn a locator-selected
+enemy into a hit. Existing native aim-ray geometry, body-part, visibility and
+shootability rules remain authoritative. Owner testing of this correction is
+pending; it adds no collision query, configuration key or engine hook.
+
 Ordinary repeating combat beacons share an audio-sample-clock onset scheduler.
 Due voices start in round-robin order with a 50 ms minimum start separation for
 sparse encounters. For dense or fast cadences, separation shrinks to the

@@ -163,3 +163,11 @@ one, three and ten periodic voices, fast cadences, repeated simultaneous
 restarts, continuous proximity tones, and stop/resume. It asserts minimum
 onset separation and service of every active slot. The existing glossary PCM
 fingerprint also checks that isolated demonstrations remain unchanged.
+
+## FarSight reticle
+
+`accessibility_farsight_reticle_test.c` exercises the actual targeting adapter's
+reticle-visibility gate for both FarSight functions, with Always Show Target on
+and off. It checks Sight on Screen, hip-fire, menu, passive, death and missing
+player guards, plus unchanged ordinary-weapon behavior. This is not a geometry,
+firing or blind-user acceptance test.
