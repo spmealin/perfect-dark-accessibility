@@ -167,6 +167,8 @@ Player markers (including ID chirps) and authored mission landmarks also use
 3D positioning; marker deletion confirmations stay centered.
 Rocket warnings, moving laser cues and threat-detector alerts also use 3D
 positions without changing their visibility rules or warning patterns.
+IR-scanner highlights use the same 3D positioning as R-Tracker contacts,
+retaining their existing faster cue and on-screen filtering.
 It adds front/back and elevation filtering
 while retaining their existing pitch patterns, cadence, range and visibility.
 Other cues and original game audio are unchanged. Held-aim directional

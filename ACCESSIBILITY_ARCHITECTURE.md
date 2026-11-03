@@ -833,6 +833,9 @@ landmarks; marker drones and ID chirps use the same per-marker source. They
 add no established-game hooks or geometry queries. Radar event queues
 retain their native marker's world position; centered status cues have none.
 These are accessibility-module changes with no new established-game hooks.
+IR highlights use the R-Tracker's existing exclusive source mode, sharing its
+ten HRTF buses and source-change reset rather than adding new effects. Native
+highlight, viewport and distance eligibility remain unchanged.
 Four projectile buses, one laser bus and one threat bus also receive existing
 semantic positions. Laser motion preserves the beam's interpolated source;
 threat alerts capture the current detected object's position at emission.

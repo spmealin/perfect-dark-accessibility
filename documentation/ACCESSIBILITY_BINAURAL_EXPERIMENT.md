@@ -19,7 +19,9 @@ empty and unavailable confirmations remain centered. R-Tracker targets refresh
 from existing observations and retain their round-robin scheduler. Hill cues use
 the existing hill center and radar/LOS rules. All use the existing 3D option;
 there are no new keys, collision queries or runtime SDK allocations. IR tracking
-still uses stereo at this step. Each new family has production-mixer HRTF tests;
+now shares those ten 3D voices, using its existing faster pattern and native
+highlight/viewport rules. Switching tracker source stops and restarts those
+voices without allocating. Each new family has production-mixer HRTF tests;
 listening acceptance remains pending.
 
 Player-marker drones and their ID chirps share each marker's actual world
@@ -135,7 +137,7 @@ unchanged by the instrumentation.
 
 Verification collected without launching Perfect Dark or replacing player logs:
 
-- Existing 30 regression tests pass with the experimental option OFF, including
+- All 34 regression tests pass with the experimental option OFF, including
   the unchanged 93-cue PCM fingerprint and tone-command ownership contract.
 - Real SDK smoke checks verify left/right energy, distinct above/below filters,
   29 simultaneously active voices, no allocations after warm-up, balanced
@@ -149,8 +151,15 @@ Verification collected without launching Perfect Dark or replacing player logs:
   item/handler is checked for presence, default-on, get/set and unavailable state.
 - Temporarily withholding the DLL confirmed clean stereo fallback, then the
   original DLL was restored. No game executable was launched.
-- The experimental Windows x64 `ntsc-final` RelWithDebInfo build is generated
-  with performance diagnostics OFF; dedicated spatial timing remains enabled.
+- The current Windows x64 `ntsc-final` RelWithDebInfo build keeps full performance
+  diagnostics ON for the ongoing graphics investigation. VSync is OFF with a
+  60 FPS software limit. These diagnostic/personal settings are not new defaults.
+- The expanded 62-effect synthetic workload rendered one second with every
+  voice continuously active in approximately 81 ms wall time (69 ms DSP), with
+  5,302 startup allocations balanced by 5,302 frees and zero after warm-up.
+  Actual cues are sparse; this is an all-voices stress benchmark, not gameplay
+  frame timing or listening acceptance. Mixer checks exercise each added family,
+  centered non-world confirmations, source changes, stop, previews and fallback.
 
 ## Owner listening tests and limitations
 
@@ -169,11 +178,13 @@ retained for comparison, and a richer cue may be a later experiment. Pickup
 direction is captured at each short three-chirp event; enemy direction refreshes
 with normal observations. The owner reported the initial enemy/pickup prototype
 "working really well" on 2026-11-02. This is listening acceptance of that first
-scope, not the newly extended scanner/cane routes. No new game was launched by
-the agent and no extension session ID exists yet. Persistent graphics-driver
-instability is not claimed fixed.
+scope, not the newly added radar, marker, hazard and IR routes. Later captures
+in sessions `1793659964` and `1793664599` informed timing/graphics diagnosis,
+not acceptance of these new routes. The agent has not launched the game for
+this extension. Persistent graphics-driver instability is not claimed fixed.
 
 Rollback: turn the menu option off live, or rebuild with
-`-DACCESSIBILITY_BINAURAL_EXPERIMENT=OFF`. Revert only the uncommitted experiment
-to remove it entirely; commits `adf434db7` (ranking formatting) and `9afbf0927`
-(pickup viewport) must remain.
+`-DACCESSIBILITY_BINAURAL_EXPERIMENT=OFF`. To remove the implementation through
+Git, revert the spatial-extension commits newest-first, followed by the base
+`28a5c6e9c` spatial-audio commit. Preserve unrelated targeting/scheduler fixes
+and commits `adf434db7` (ranking formatting) and `9afbf0927` (pickup viewport).

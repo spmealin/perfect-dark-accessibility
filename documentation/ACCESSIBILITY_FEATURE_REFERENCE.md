@@ -681,6 +681,12 @@ turrets, cameras, scopes and moving targets.
 
 ### Fine aiming tone
 
+IR-scanner highlights now use the same 3D tracker voices as R-Tracker contacts.
+The two modes remain exclusive, with existing source-change stop/restart and
+no additional allocations. IR's current native-highlight and on-screen gates,
+frequency/cadence and distance rules are unchanged. Source-switching and HRTF
+direction tests pass; owner listening acceptance of these new routes is pending.
+
 Rocket warnings, moving laser sweeps and threat-detector alerts now use their
 existing world positions through the 3D option. The moving laser retains height
 and its existing along-beam sweep. Four projectile effects plus one laser and
@@ -691,15 +697,15 @@ pending. No new keys, collision queries or engine hooks are added.
 Player-marker drones and ID chirps, plus authored mission landmarks, now use
 the existing 3D option and source positions. Deletion confirmations stay
 centered. Their ID timing, visibility, mission-state rules and attenuation are
-unchanged. Fifteen extra fixed effects bring this increment to 56 voices;
+unchanged. Fifteen dedicated fixed effects serve these marker families;
 owner listening acceptance is pending.
 
 The 3D option also covers R-Tracker contacts, spatial Combat Simulator radar
 events and the King of the Hill guide. Radar event positions are captured with
 their native marker and transformed at emission; status/command earcons stay
 centered. Existing cadence, pitch patterns, visibility and information limits
-are unchanged. The backend now preallocates 41 voices. IR-scanner contacts are
-not yet included in this increment. Owner listening acceptance is pending.
+are unchanged. Ten contact effects plus dedicated radar and hill effects are
+preallocated. Owner listening acceptance is pending.
 
 The FarSight's visible Maian aiming reticle permits exact lock-on in both
 manual-depth and Target Locator modes. The generic extra target-marker rule
@@ -721,19 +727,20 @@ gameplay hook is added. This addresses near-synchronous independent beeps
 reported in session `1793659964`, capture 1; owner listening acceptance of the
 new scheduler remains pending.
 
-The current uncommitted 3D-audio build adds a native checkbox at Options →
+The current experimental 3D-audio build adds a native checkbox at Options →
 Extended → Audio → `3D Accessibility Audio`, default on and saved as
 `Accessibility.BinauralAudio=1`. It switches live without allocating or
 enumerating devices. It is disabled when the SDK/backend is unavailable.
 The setting now covers ordinary enemy presence, all F5–F8 scanner sounds,
-cane rays/contours, corridor boundary sequences and the moving drop warning.
+cane rays/contours, corridor boundary sequences, the moving drop warning,
+radar/R-Tracker/IR contacts, markers/landmarks and rocket/laser/threat warnings.
 Existing patterns, visibility, distance curves and scheduling remain unchanged.
 Cane source positions follow its existing interpolated floor path or ordered
 boundary stations; no extra collision queries are performed. Exact lock-on,
 held-aim precision, original game audio and glossary samples remain unchanged.
 The earlier enemy/pickup prototype has owner listening acceptance; these added
 routes still await testing. See `ACCESSIBILITY_BINAURAL_EXPERIMENT.md` for
-29-voice resource, performance, fallback, test and rollback details.
+62-voice resource, performance, fallback, test and rollback details.
 
 In this experimental build, Shift+F2 captures also include the last published
 3D source positions, listener orientation, source age, backend direction and

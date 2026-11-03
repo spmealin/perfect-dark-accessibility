@@ -199,8 +199,25 @@ int main(void)
 	accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_THREAT, &position);
 	accessibilityTonePlayThreatAlert(.5f, 0);
 	renderEnergy(&left, &right); assert(right > left && left > 0);
+	/* IR and R-Tracker are mutually exclusive sources of the same tracker
+	 * scheduler. A source change must not retain the old direction or tail. */
+	simulateWorldSuppression(); renderEnergy(&left, &right);
+	position = (struct coord){100, -50, 100};
+	accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_TRACKER, &position);
+	accessibilityToneSetTrackerSlot(0, 1, 700, .5f, 0, 180, -1, 0, 1);
+	renderEnergy(&left, &right); assert(left > right && right > 0);
+	assert(SDL_AtomicGet(&voices[ACCESSIBILITY_SPATIAL_TRACKER].direction[0]) < 0);
+	assert(SDL_AtomicGet(&voices[ACCESSIBILITY_SPATIAL_TRACKER].direction[1]) < 0);
+	accessibilityToneStopTracker(); renderEnergy(&left, &right);
+	position = (struct coord){-100, 50, 100};
+	accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_TRACKER, &position);
+	accessibilityToneSetTrackerSlot(0, 1, 700, .5f, 0, 180, 1, 0, 1);
+	renderEnergy(&left, &right); assert(right > left && left > 0);
+	assert(SDL_AtomicGet(&voices[ACCESSIBILITY_SPATIAL_TRACKER].direction[0]) > 0);
+	assert(SDL_AtomicGet(&voices[ACCESSIBILITY_SPATIAL_TRACKER].direction[1]) > 0);
+	assert(allocations == warmAllocations);
 	accessibilitySpatialShutdown();
 	assert(allocations == frees);
-	puts("Spatial mixer: enemy, pickup, object, person, door, cane, edge, moving path, live toggle, stop and preview checks passed.");
+	puts("Spatial mixer: world scanners, cane, radar, trackers/IR, markers/landmarks, hazards, live toggle, stop and preview passed.");
 	return 0;
 }
