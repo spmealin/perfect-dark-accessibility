@@ -2,13 +2,14 @@
 
 ## Scope and controls
 
-Steam Audio 4.8.1 renders 56 fixed voices through its built-in RMS-normalized
+Steam Audio 4.8.1 renders 62 fixed voices through its built-in RMS-normalized
 HRTF: ten enemies, pickup and interactable/movable-object lanes, three doors,
 three friendly/neutral people, ten cane slots, one drop edge, ten R-Tracker
 contacts, one combat-radar contact, one King of the Hill guide, four player
-markers and eleven mission landmarks. Visibility,
+markers, eleven mission landmarks, four rockets, one moving laser and one
+threat alert. Visibility,
 LOS, distance attenuation, voice budgets and scheduling remain authoritative.
-Original game sound, speech, threats,
+Original game sound, speech,
 range-target presence, glossary previews and exact lock-on are unchanged.
 Manual precision guidance retains its existing exaggerated stereo mapping.
 
@@ -28,6 +29,15 @@ remain centered, because the marker is gone. Existing ID cadence, mission-state
 suppression, LOS, volume, range and placement rules are unchanged. Source
 capture records identify marker versus landmark lanes. Mixer tests cover both
 families and centered removal; owner listening acceptance remains pending.
+
+Rockets, moving-laser sweeps and threat-detector alerts now use independent
+3D voices. Rockets refresh at the existing observed projectile positions;
+lasers retain the actual interpolated beam point, including height; threat
+alerts use the detected object's position at emission. Their selection, range,
+hostility, visibility and original patterns remain unchanged. Projectile and
+one-shot threat histories reset on replacement. No new collision queries or
+runtime SDK allocations are introduced. Production-mixer tests cover all three,
+including moving a laser source left-to-right; listening acceptance is pending.
 
 `ACCESSIBILITY_BINAURAL_EXPERIMENT` defaults OFF in CMake. The local test build
 has it ON. In such builds `Accessibility.BinauralAudio=1` is the startup default;
@@ -63,7 +73,7 @@ do not distribute this prototype without completing dependency/license packaging
 ## Implementation and lifetime
 
 - `port/src/accessibility/accessibility_spatial.c` dynamically loads the C API
-  from the executable directory, creates one context/HRTF plus 56 effects,
+  from the executable directory, creates one context/HRTF plus 62 effects,
   and warms all effects before gameplay, even with the saved setting off.
   Live toggling only changes routing/reset state and never creates an SDK
   context or allocates. Initialization failure tears down

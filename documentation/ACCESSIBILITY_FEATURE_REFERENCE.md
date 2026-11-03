@@ -681,6 +681,13 @@ turrets, cameras, scopes and moving targets.
 
 ### Fine aiming tone
 
+Rocket warnings, moving laser sweeps and threat-detector alerts now use their
+existing world positions through the 3D option. The moving laser retains height
+and its existing along-beam sweep. Four projectile effects plus one laser and
+one threat effect bring capacity to 62 fixed voices. Warning patterns,
+visibility, scope and urgency rules are unchanged; listening acceptance is
+pending. No new keys, collision queries or engine hooks are added.
+
 Player-marker drones and ID chirps, plus authored mission landmarks, now use
 the existing 3D option and source positions. Deletion confirmations stay
 centered. Their ID timing, visibility, mission-state rules and attenuation are

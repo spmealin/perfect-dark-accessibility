@@ -373,6 +373,9 @@ static void accessibilityHazardUpdateSound(void)
 	normalizedvolume = (f32)volume / (f32)AL_VOL_FULL;
 	normalizedpan = ((f32)pan - (f32)AL_PAN_CENTER)
 			/ (f32)AL_PAN_CENTER;
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+	accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_LASER, &source);
+#endif
 	accessibilityToneSetHazard(1, ACCESSIBILITY_HAZARD_FREQUENCY_HZ,
 			normalizedvolume, normalizedpan);
 

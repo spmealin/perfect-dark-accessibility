@@ -319,6 +319,9 @@ static void accessibilityProjectileApply(s32 slot,
 	volume = (f32)gamevolume / (f32)AL_VOL_FULL * mastervolume;
 	pan = ((f32)gamepan - (f32)AL_PAN_CENTER) / (f32)AL_PAN_CENTER;
 
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+	accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_PROJECTILE + slot, &candidate->position);
+#endif
 	accessibilityToneSetProjectileSlot(slot, true, frequency, volume, pan,
 			period, duration, restart);
 

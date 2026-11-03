@@ -165,6 +165,8 @@ contacts, Combat Simulator radar contacts and King of the Hill guidance.
 Radar launch/empty/unavailable confirmations remain centered.
 Player markers (including ID chirps) and authored mission landmarks also use
 3D positioning; marker deletion confirmations stay centered.
+Rocket warnings, moving laser cues and threat-detector alerts also use 3D
+positions without changing their visibility rules or warning patterns.
 It adds front/back and elevation filtering
 while retaining their existing pitch patterns, cadence, range and visibility.
 Other cues and original game audio are unchanged. Held-aim directional

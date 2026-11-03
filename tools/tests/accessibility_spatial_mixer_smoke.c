@@ -31,7 +31,7 @@ static void renderEnergy(double *left, double *right)
 int main(void)
 {
 	struct coord position = { -100, 0, 100 }; /* Right in native +Z-forward world. */
-	double left, right;
+	double left, right, laserratio;
 	s16 silence[512] = {0};
 	assert(glossaryFixtureMain() == 0);
 	accessibilitySpatialInit();
@@ -176,6 +176,29 @@ int main(void)
 	simulateWorldSuppression(); renderEnergy(&left, &right);
 	accessibilityTonePlayMarkerRemoval(0);
 	renderEnergy(&left, &right); assert(left == right && left > 0);
+	simulateWorldSuppression(); renderEnergy(&left, &right);
+	accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_PROJECTILE, &position);
+	accessibilityToneSetProjectileSlot(0, 1, 400, .5f, 0, 300, 120, 1);
+	renderEnergy(&left, &right); assert(left > right && right > 0);
+	simulateWorldSuppression(); renderEnergy(&left, &right);
+	accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_LASER, &position);
+	accessibilityToneSetHazard(1, 220, .5f, 0);
+	renderEnergy(&left, &right);
+	/* A 220 Hz HRTF cue localizes chiefly by timing; its left/right energy
+	 * ordering is not a reliable directional contract. Check actual direction
+	 * and changed filtering instead of assuming a louder near ear. */
+	assert(left > 0 && right > 0);
+	assert(SDL_AtomicGet(&voices[ACCESSIBILITY_SPATIAL_LASER].direction[0]) < 0);
+	laserratio = left / right;
+	position.x = -100;
+	accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_LASER, &position);
+	renderEnergy(&left, &right); assert(left > 0 && right > 0);
+	assert(SDL_AtomicGet(&voices[ACCESSIBILITY_SPATIAL_LASER].direction[0]) > 0);
+	assert(fabs(left / right - laserratio) > .001);
+	simulateWorldSuppression(); renderEnergy(&left, &right);
+	accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_THREAT, &position);
+	accessibilityTonePlayThreatAlert(.5f, 0);
+	renderEnergy(&left, &right); assert(right > left && left > 0);
 	accessibilitySpatialShutdown();
 	assert(allocations == frees);
 	puts("Spatial mixer: enemy, pickup, object, person, door, cane, edge, moving path, live toggle, stop and preview checks passed.");

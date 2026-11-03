@@ -550,6 +550,9 @@ static void accessibilityTargetingUpdateThreatAlerts(
 				normalizedvolume = (f32)volume / (f32)AL_VOL_FULL;
 				normalizedpan = ((f32)pan - (f32)AL_PAN_CENTER)
 						/ (f32)AL_PAN_CENTER;
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+				accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_THREAT, &position);
+#endif
 				accessibilityTonePlayThreatAlert(
 						normalizedvolume, normalizedpan);
 				state->threatalertscount++;
@@ -679,6 +682,9 @@ static void accessibilityTargetingUpdateThreatAim(
 		}
 
 		if (!recentnewalert) {
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+			accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_THREAT, &position);
+#endif
 			accessibilityTonePlayThreatAlert(
 					normalizedvolume, normalizedpan);
 			state->lastthreatsound60 = observation->frame60;

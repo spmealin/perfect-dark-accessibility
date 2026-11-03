@@ -476,6 +476,9 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 		if (sequence != g_AccessibilityProjectileObservedSequence[slot]) {
 			g_AccessibilityProjectileObservedSequence[slot] = sequence;
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+			accessibilitySpatialReset(ACCESSIBILITY_SPATIAL_PROJECTILE + slot);
+#endif
 			offset = ((slot * 618) % 1000)
 					* projectileperiodsamples[slot] / 1000;
 			g_AccessibilityProjectileCycleSample[slot] = offset == 0 ? 0
@@ -846,6 +849,9 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 	if (threatalertsequence != g_AccessibilityThreatAlertObservedSequence) {
 		g_AccessibilityThreatAlertObservedSequence = threatalertsequence;
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+		accessibilitySpatialReset(ACCESSIBILITY_SPATIAL_THREAT);
+#endif
 
 		if (SDL_AtomicGet(&g_AccessibilityThreatAlertEnabled)) {
 			g_AccessibilityThreatAlertVolume
@@ -1113,8 +1119,15 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			f32 hazard = sinf(g_AccessibilityHazardPhase)
 					* g_AccessibilityHazardGain * 32767.0f;
 
-			hazardleft = (s32)(hazard * leftpan);
-			hazardright = (s32)(hazard * rightpan);
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+			if (spatialroute[ACCESSIBILITY_SPATIAL_LASER])
+				spatialmono[ACCESSIBILITY_SPATIAL_LASER] += hazard / 32767.0f;
+			else
+#endif
+			{
+				hazardleft = (s32)(hazard * leftpan);
+				hazardright = (s32)(hazard * rightpan);
+			}
 		}
 		if (g_AccessibilityCaneEdgeGain < caneedgetargetgain) {
 			g_AccessibilityCaneEdgeGain += ACCESSIBILITY_TONE_GAIN_STEP;
@@ -1342,8 +1355,15 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 					g_AccessibilityThreatAlertPhase) * envelope
 					* g_AccessibilityThreatAlertVolume
 					* combatmastervolume * 32767.0f;
-			threatalertleft = (s32)(alert * leftpan);
-			threatalertright = (s32)(alert * rightpan);
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+			if (spatialroute[ACCESSIBILITY_SPATIAL_THREAT])
+				spatialmono[ACCESSIBILITY_SPATIAL_THREAT] += alert / 32767.0f;
+			else
+#endif
+			{
+				threatalertleft = (s32)(alert * leftpan);
+				threatalertright = (s32)(alert * rightpan);
+			}
 			g_AccessibilityThreatAlertPhase += TWO_PI * frequencyhz
 					/ ACCESSIBILITY_TONE_SAMPLE_RATE;
 			if (g_AccessibilityThreatAlertPhase >= TWO_PI) {
@@ -1629,8 +1649,15 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 							+ sinf(phase * 3.0f) * 0.10f;
 					projectile = wave * envelope * projectilevolume[slot]
 							* 32767.0f;
-					projectileleft += (s32)(projectile * leftpan);
-					projectileright += (s32)(projectile * rightpan);
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+					if (spatialroute[ACCESSIBILITY_SPATIAL_PROJECTILE + slot])
+						spatialmono[ACCESSIBILITY_SPATIAL_PROJECTILE + slot] += projectile / 32767.0f;
+					else
+#endif
+					{
+						projectileleft += (s32)(projectile * leftpan);
+						projectileright += (s32)(projectile * rightpan);
+					}
 					g_AccessibilityProjectilePhase[slot] += TWO_PI
 							* projectilefrequency[slot]
 							/ ACCESSIBILITY_TONE_SAMPLE_RATE;

@@ -122,7 +122,10 @@ void accessibilityToneDumpSpatialDiagnostics(u64 captureid)
 				: slot < ACCESSIBILITY_SPATIAL_RADAR ? "tracker"
 				: slot == ACCESSIBILITY_SPATIAL_RADAR ? "radar"
 				: slot == ACCESSIBILITY_SPATIAL_HILL ? "hill"
-				: slot < ACCESSIBILITY_SPATIAL_LANDMARK ? "marker" : "landmark";
+				: slot < ACCESSIBILITY_SPATIAL_LANDMARK ? "marker"
+				: slot < ACCESSIBILITY_SPATIAL_PROJECTILE ? "landmark"
+				: slot < ACCESSIBILITY_SPATIAL_LASER ? "projectile"
+				: slot == ACCESSIBILITY_SPATIAL_LASER ? "laser" : "threat";
 		f32 direction[3] = {0};
 		s32 requested, local = slot - ACCESSIBILITY_SPATIAL_CANE;
 		s32 directionvalid = accessibilitySpatialGetDirection(slot, direction);
@@ -149,7 +152,13 @@ void accessibilityToneDumpSpatialDiagnostics(u64 captureid)
 			requested = SDL_AtomicGet(&g_AccessibilityRadarEnabled);
 		else if (slot == ACCESSIBILITY_SPATIAL_HILL)
 			requested = SDL_AtomicGet(&g_AccessibilityHillEnabled);
-		else requested = SDL_AtomicGet(&g_AccessibilityMarkerEnabled[slot - ACCESSIBILITY_SPATIAL_MARKER]);
+		else if (slot < ACCESSIBILITY_SPATIAL_PROJECTILE)
+			requested = SDL_AtomicGet(&g_AccessibilityMarkerEnabled[slot - ACCESSIBILITY_SPATIAL_MARKER]);
+		else if (slot < ACCESSIBILITY_SPATIAL_LASER)
+			requested = SDL_AtomicGet(&g_AccessibilityProjectileEnabled[slot - ACCESSIBILITY_SPATIAL_PROJECTILE]);
+		else if (slot == ACCESSIBILITY_SPATIAL_LASER)
+			requested = SDL_AtomicGet(&g_AccessibilityHazardEnabled);
+		else requested = SDL_AtomicGet(&g_AccessibilityThreatAlertEnabled);
 		accessibilityLogEvent("incident", "spatial_source",
 				"capture=%llu slot=%d family=%s seen=%d requested=%d spatial_valid=%d age_ms=%.3f points=%d observer_prop=%p remote=%d camera=%.3f,%.3f,%.3f look=%.6f,%.6f,%.6f published_relative=%.3f,%.3f,%.3f backend_direction_valid=%d backend_direction=%.6f,%.6f,%.6f",
 				(unsigned long long)captureid, slot, family, spatialdiagnostics[slot].seen,
