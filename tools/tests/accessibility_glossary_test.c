@@ -6,7 +6,7 @@
 #include <math.h>
 #if ACCESSIBILITY_SPATIAL_CAPTURE_TEST
 #include <stdarg.h>
-static char spatialcapturerecords[64][2048];
+static char spatialcapturerecords[256][2048];
 static int spatialcapturerecordcount;
 #endif
 #define SDL_MAIN_HANDLED
@@ -46,7 +46,7 @@ void accessibilityLogEvent(const char *category, const char *event,
 #if ACCESSIBILITY_SPATIAL_CAPTURE_TEST
 	if (!strcmp(category, "incident") && !strncmp(event, "spatial_", 8)) {
 		va_list args;
-		assert(spatialcapturerecordcount < 64);
+		assert(spatialcapturerecordcount < 256);
 		va_start(args, format);
 		vsnprintf(spatialcapturerecords[spatialcapturerecordcount++], 2048, format, args);
 		va_end(args);

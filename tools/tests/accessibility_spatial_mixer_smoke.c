@@ -146,6 +146,25 @@ int main(void)
 		renderEnergy(&left, &right); assert(right > left);
 		assert(allocations == before);
 	}
+	/* Radar contacts and tracker retain their patterns on separate HRTF buses.
+	 * Radar command/status earcons without a world source stay centered. */
+	simulateWorldSuppression(); accessibilityToneMix(silence, sizeof(silence));
+	position = (struct coord){100, 40, 100};
+	accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_TRACKER, &position);
+	accessibilityToneSetTrackerSlot(0, 1, 1000, .5f, 0, 300, 0, 0, 1);
+	renderEnergy(&left, &right); assert(left > right && right > 0);
+	simulateWorldSuppression(); accessibilityToneMix(silence, sizeof(silence));
+	accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_RADAR, &position);
+	accessibilityTonePlayRadarPing(900, .5f, 0, 0, 0, ACCESSIBILITY_TONE_RADAR_ENEMY);
+	renderEnergy(&left, &right); assert(left > right && right > 0);
+	simulateWorldSuppression(); accessibilityToneMix(silence, sizeof(silence));
+	accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_RADAR, NULL);
+	accessibilityTonePlayRadarPing(900, .5f, 0, 0, 0, ACCESSIBILITY_TONE_RADAR_EMPTY);
+	renderEnergy(&left, &right); assert(left == right && left > 0);
+	simulateWorldSuppression(); accessibilityToneMix(silence, sizeof(silence));
+	accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_HILL, &position);
+	accessibilityToneSetHillBeacon(1, .5f, 0, 1, 0, 0, 1);
+	renderEnergy(&left, &right); assert(left > right && right > 0);
 	accessibilitySpatialShutdown();
 	assert(allocations == frees);
 	puts("Spatial mixer: enemy, pickup, object, person, door, cane, edge, moving path, live toggle, stop and preview checks passed.");

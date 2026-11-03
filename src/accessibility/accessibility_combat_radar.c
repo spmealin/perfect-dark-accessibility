@@ -121,6 +121,8 @@ struct accessibilitycombatradarcontact {
 };
 
 struct accessibilitycombatradarevent {
+	struct coord position;
+	s32 hasposition;
 	s32 type;
 	s32 priority;
 	s32 dueframe;
@@ -638,6 +640,10 @@ static void accessibilityCombatRadarFillMarkerEvent(
 			|| type == ACCESSIBILITY_COMBAT_RADAR_EVENT_EMPTY
 			|| type == ACCESSIBILITY_COMBAT_RADAR_EVENT_UNAVAILABLE;
 	event->identity = marker ? marker->identity : 0;
+	if (marker) {
+		event->position = marker->position;
+		event->hasposition = true;
+	}
 	event->propnum = marker ? marker->propnum : -1;
 	event->category = marker ? marker->category
 			: ACCESSIBILITY_COMBAT_RADAR_CATEGORY_OTHER;
@@ -1135,6 +1141,10 @@ static void accessibilityCombatRadarEmitNext(void)
 	}
 	g_AccessibilityCombatRadarEventCount--;
 
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+	accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_RADAR,
+			event.hasposition ? &event.position : NULL);
+#endif
 	accessibilityTonePlayRadarPing(event.frequencyhz, event.gain, event.pan,
 			event.height, event.rear,
 			accessibilityCombatRadarToneKind(&event));

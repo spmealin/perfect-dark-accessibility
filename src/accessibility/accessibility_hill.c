@@ -228,6 +228,9 @@ void accessibilityHillTick(void)
 			|| g_AccessibilityHillLocal != local
 			|| g_AccessibilityHillScoring != scoring;
 
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+	accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_HILL, &g_ScenarioData.koh.hillpos);
+#endif
 	accessibilityToneSetHillBeacon(gain > 0.0f, gain, normalizedpan,
 			rear, gain > 0.0f, scoring, restart);
 

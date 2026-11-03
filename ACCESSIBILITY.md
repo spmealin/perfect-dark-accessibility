@@ -160,7 +160,9 @@ behind you do not chirp. Eligibility is checked again before each pickup cue.
 
 The current experimental build uses binaural headphone audio for ordinary
 enemy beacons, all four object/person scanners, and the virtual cane (including
-contours, boundary sequences and the moving drop-edge warning).
+contours, boundary sequences and the moving drop-edge warning), R-Tracker
+contacts, Combat Simulator radar contacts and King of the Hill guidance.
+Radar launch/empty/unavailable confirmations remain centered.
 It adds front/back and elevation filtering
 while retaining their existing pitch patterns, cadence, range and visibility.
 Other cues and original game audio are unchanged. Held-aim directional
@@ -173,7 +175,7 @@ and its choice is saved as `Accessibility.BinauralAudio` in `pd.ini`.
 It is unavailable in builds without the experimental backend or when the SDK
 cannot initialize. No restart is needed to change it from the menu.
 If the adjacent `phonon.dll` cannot initialize, cues fall back to stereo.
-This is an uncommitted listening experiment, not part of the public release.
+This is a listening experiment, not part of the public release.
 The audio glossary still plays its original stereo examples.
 
 ### Scanner behavior

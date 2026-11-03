@@ -681,6 +681,13 @@ turrets, cameras, scopes and moving targets.
 
 ### Fine aiming tone
 
+The 3D option also covers R-Tracker contacts, spatial Combat Simulator radar
+events and the King of the Hill guide. Radar event positions are captured with
+their native marker and transformed at emission; status/command earcons stay
+centered. Existing cadence, pitch patterns, visibility and information limits
+are unchanged. The backend now preallocates 41 voices. IR-scanner contacts are
+not yet included in this increment. Owner listening acceptance is pending.
+
 The FarSight's visible Maian aiming reticle permits exact lock-on in both
 manual-depth and Target Locator modes. The generic extra target-marker rule
 alone does not describe this reticle. This exception still respects Sight on

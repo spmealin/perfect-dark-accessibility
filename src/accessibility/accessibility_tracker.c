@@ -712,6 +712,10 @@ static void accessibilityTrackerUpdateSlots(s32 source)
 					candidate->forwarddot, slot->rear);
 		}
 
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+		accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_TRACKER + slotnum,
+				source == ACCESSIBILITY_TRACKER_SOURCE_RTRACKER ? &candidate->position : NULL);
+#endif
 		accessibilityToneSetTrackerSlot(slotnum, true,
 				candidate->frequencyhz, candidate->volume,
 				candidate->pan, candidate->periodms, slot->height, slot->rear,

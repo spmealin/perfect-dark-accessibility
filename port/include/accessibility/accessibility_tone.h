@@ -9,7 +9,10 @@ struct coord;
 #define ACCESSIBILITY_SPATIAL_FRIENDLY 15
 #define ACCESSIBILITY_SPATIAL_CANE 18
 #define ACCESSIBILITY_SPATIAL_EDGE 28
-#define ACCESSIBILITY_SPATIAL_VOICES 29
+#define ACCESSIBILITY_SPATIAL_TRACKER 29
+#define ACCESSIBILITY_SPATIAL_RADAR 39
+#define ACCESSIBILITY_SPATIAL_HILL 40
+#define ACCESSIBILITY_SPATIAL_VOICES 41
 void accessibilityToneSetSpatialPosition(s32 slot, const struct coord *position);
 void accessibilityToneSetSpatialPath(s32 slot, s32 count, const struct coord *positions);
 /* Main-thread, capture-only diagnostics; never called by the audio mixer. */

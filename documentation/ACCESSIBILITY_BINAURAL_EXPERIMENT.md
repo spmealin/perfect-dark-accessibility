@@ -1,14 +1,24 @@
-# Uncommitted scanner and cane binaural experiment
+# Accessibility binaural experiment
 
 ## Scope and controls
 
-Steam Audio 4.8.1 renders 29 fixed voices through its built-in RMS-normalized
+Steam Audio 4.8.1 renders 41 fixed voices through its built-in RMS-normalized
 HRTF: ten enemies, pickup and interactable/movable-object lanes, three doors,
-three friendly/neutral people, ten cane slots and one drop edge. Visibility,
+three friendly/neutral people, ten cane slots, one drop edge, ten R-Tracker
+contacts, one combat-radar contact and one King of the Hill guide. Visibility,
 LOS, distance attenuation, voice budgets and scheduling remain authoritative.
 Original game sound, speech, markers, threats,
 range-target presence, glossary previews and exact lock-on are unchanged.
 Manual precision guidance retains its existing exaggerated stereo mapping.
+
+Combat-radar contacts retain the world position from their queued native-radar
+observation and transform it against the observer when played. Radar launch,
+empty and unavailable confirmations remain centered. R-Tracker targets refresh
+from existing observations and retain their round-robin scheduler. Hill cues use
+the existing hill center and radar/LOS rules. All use the existing 3D option;
+there are no new keys, collision queries or runtime SDK allocations. IR tracking
+still uses stereo at this step. Each new family has production-mixer HRTF tests;
+listening acceptance remains pending.
 
 `ACCESSIBILITY_BINAURAL_EXPERIMENT` defaults OFF in CMake. The local test build
 has it ON. In such builds `Accessibility.BinauralAudio=1` is the startup default;
@@ -44,7 +54,7 @@ do not distribute this prototype without completing dependency/license packaging
 ## Implementation and lifetime
 
 - `port/src/accessibility/accessibility_spatial.c` dynamically loads the C API
-  from the executable directory, creates one context/HRTF plus 29 effects,
+  from the executable directory, creates one context/HRTF plus 41 effects,
   and warms all effects before gameplay, even with the saved setting off.
   Live toggling only changes routing/reset state and never creates an SDK
   context or allocates. Initialization failure tears down

@@ -510,6 +510,9 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 		if (sequence != g_AccessibilityTrackerObservedSequence[slot]) {
 			g_AccessibilityTrackerObservedSequence[slot] = sequence;
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+			accessibilitySpatialReset(ACCESSIBILITY_SPATIAL_TRACKER + slot);
+#endif
 			g_AccessibilityTrackerDueSamples[slot] = 0;
 			g_AccessibilityTrackerPhase[slot] = 0.0f;
 			g_AccessibilityTrackerModulationPhase[slot] = 0.0f;
@@ -586,6 +589,9 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 	if (radarsequence != g_AccessibilityRadarObservedSequence) {
 		g_AccessibilityRadarObservedSequence = radarsequence;
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+		accessibilitySpatialReset(ACCESSIBILITY_SPATIAL_RADAR);
+#endif
 		g_AccessibilityRadarSample = 0;
 		g_AccessibilityRadarPhase = 0.0f;
 		g_AccessibilityRadarModulationPhase = 0.0f;
@@ -635,6 +641,9 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 	if (hillsequence != g_AccessibilityHillObservedSequence) {
 		g_AccessibilityHillObservedSequence = hillsequence;
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+		accessibilitySpatialReset(ACCESSIBILITY_SPATIAL_HILL);
+#endif
 		g_AccessibilityHillSweepSample = 0;
 		g_AccessibilityHillChirpSample = 0;
 		g_AccessibilityHillPhaseA = 0.0f;
@@ -1730,8 +1739,15 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 				tracker = sinf(g_AccessibilityTrackerPhase[trackerslot]) * envelope
 						* modulation * trackervolume[trackerslot]
 						* ACCESSIBILITY_TRACKER_VOLUME * 32767.0f;
-				trackerleft += (s32)(tracker * leftpan);
-				trackerright += (s32)(tracker * rightpan);
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+				if (spatialroute[ACCESSIBILITY_SPATIAL_TRACKER + trackerslot])
+					spatialmono[ACCESSIBILITY_SPATIAL_TRACKER + trackerslot] += tracker / 32767.0f;
+				else
+#endif
+				{
+					trackerleft += (s32)(tracker * leftpan);
+					trackerright += (s32)(tracker * rightpan);
+				}
 				g_AccessibilityTrackerPhase[trackerslot] += TWO_PI
 						* trackerfrequency[trackerslot] * frequencymultiplier
 						/ ACCESSIBILITY_TONE_SAMPLE_RATE;
@@ -1999,8 +2015,15 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 				radar = wave * envelope * modulation
 						* g_AccessibilityRadarVolume * 32767.0f;
-				radarleft = (s32)(radar * leftpan);
-				radarright = (s32)(radar * rightpan);
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+				if (spatialroute[ACCESSIBILITY_SPATIAL_RADAR])
+					spatialmono[ACCESSIBILITY_SPATIAL_RADAR] += radar / 32767.0f;
+				else
+#endif
+				{
+					radarleft = (s32)(radar * leftpan);
+					radarright = (s32)(radar * rightpan);
+				}
 				g_AccessibilityRadarPhase += TWO_PI
 						* g_AccessibilityRadarFrequencyHz
 						* frequencymultiplier
@@ -2089,8 +2112,15 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 				}
 			}
 
-			hillleft = (s32)(hill * leftpan);
-			hillright = (s32)(hill * rightpan);
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+			if (spatialroute[ACCESSIBILITY_SPATIAL_HILL])
+				spatialmono[ACCESSIBILITY_SPATIAL_HILL] += hill / 32767.0f;
+			else
+#endif
+			{
+				hillleft = (s32)(hill * leftpan);
+				hillright = (s32)(hill * rightpan);
+			}
 			g_AccessibilityHillPhaseA += TWO_PI
 					* frequencya / ACCESSIBILITY_TONE_SAMPLE_RATE;
 			g_AccessibilityHillPhaseB += TWO_PI
