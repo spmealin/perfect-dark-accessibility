@@ -730,6 +730,9 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 		if (sequence != g_AccessibilityMarkerObservedSequence[slot]) {
 			g_AccessibilityMarkerObservedSequence[slot] = sequence;
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+			accessibilitySpatialReset(ACCESSIBILITY_SPATIAL_MARKER + slot);
+#endif
 			g_AccessibilityMarkerDueSample[slot]
 					= slot < ACCESSIBILITY_TONE_MARKER_SLOT_COUNT
 							&& markerenabled[slot] ? 0 : -1;
@@ -2409,8 +2412,15 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 					marker *= 0.65f + 0.35f * triangle;
 				}
 
-				markerleft += (s32)(marker * leftpan);
-				markerright += (s32)(marker * rightpan);
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+				if (spatialroute[ACCESSIBILITY_SPATIAL_MARKER + slot])
+					spatialmono[ACCESSIBILITY_SPATIAL_MARKER + slot] += marker / 32767.0f;
+				else
+#endif
+				{
+					markerleft += (s32)(marker * leftpan);
+					markerright += (s32)(marker * rightpan);
+				}
 				g_AccessibilityMarkerPhaseA[slot] += TWO_PI
 						* frequencya / ACCESSIBILITY_TONE_SAMPLE_RATE;
 				g_AccessibilityMarkerPhaseB[slot] += TWO_PI
@@ -2519,8 +2529,16 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 				chirp = sinf(g_AccessibilityMarkerIdentityPhase)
 						* envelope * gain * 32767.0f;
-				markerleft += (s32)(chirp * leftpan);
-				markerright += (s32)(chirp * rightpan);
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+				if (!g_AccessibilityMarkerIdentityRemoval
+						&& spatialroute[ACCESSIBILITY_SPATIAL_MARKER + identityslot])
+					spatialmono[ACCESSIBILITY_SPATIAL_MARKER + identityslot] += chirp / 32767.0f;
+				else
+#endif
+				{
+					markerleft += (s32)(chirp * leftpan);
+					markerright += (s32)(chirp * rightpan);
+				}
 				g_AccessibilityMarkerIdentityPhase += TWO_PI
 						* frequency / ACCESSIBILITY_TONE_SAMPLE_RATE;
 				if (g_AccessibilityMarkerIdentityPhase >= TWO_PI) {

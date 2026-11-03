@@ -163,6 +163,8 @@ enemy beacons, all four object/person scanners, and the virtual cane (including
 contours, boundary sequences and the moving drop-edge warning), R-Tracker
 contacts, Combat Simulator radar contacts and King of the Hill guidance.
 Radar launch/empty/unavailable confirmations remain centered.
+Player markers (including ID chirps) and authored mission landmarks also use
+3D positioning; marker deletion confirmations stay centered.
 It adds front/back and elevation filtering
 while retaining their existing pitch patterns, cadence, range and visibility.
 Other cues and original game audio are unchanged. Held-aim directional

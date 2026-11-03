@@ -165,6 +165,17 @@ int main(void)
 	accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_HILL, &position);
 	accessibilityToneSetHillBeacon(1, .5f, 0, 1, 0, 0, 1);
 	renderEnergy(&left, &right); assert(left > right && right > 0);
+	simulateWorldSuppression(); renderEnergy(&left, &right);
+	accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_MARKER, &position);
+	accessibilityToneSetMarkerSlot(0, 1, .5f, 0, 1);
+	renderEnergy(&left, &right); assert(left > right && right > 0);
+	simulateWorldSuppression(); renderEnergy(&left, &right);
+	accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_LANDMARK, &position);
+	accessibilityToneSetLandmarkSlot(0, 1, .5f, 0, ACCESSIBILITY_TONE_LANDMARK_STANDARD, 1);
+	renderEnergy(&left, &right); assert(left > right && right > 0);
+	simulateWorldSuppression(); renderEnergy(&left, &right);
+	accessibilityTonePlayMarkerRemoval(0);
+	renderEnergy(&left, &right); assert(left == right && left > 0);
 	accessibilitySpatialShutdown();
 	assert(allocations == frees);
 	puts("Spatial mixer: enemy, pickup, object, person, door, cane, edge, moving path, live toggle, stop and preview checks passed.");

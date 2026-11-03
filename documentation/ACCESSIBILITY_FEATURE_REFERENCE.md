@@ -681,6 +681,12 @@ turrets, cameras, scopes and moving targets.
 
 ### Fine aiming tone
 
+Player-marker drones and ID chirps, plus authored mission landmarks, now use
+the existing 3D option and source positions. Deletion confirmations stay
+centered. Their ID timing, visibility, mission-state rules and attenuation are
+unchanged. Fifteen extra fixed effects bring this increment to 56 voices;
+owner listening acceptance is pending.
+
 The 3D option also covers R-Tracker contacts, spatial Combat Simulator radar
 events and the King of the Hill guide. Radar event positions are captured with
 their native marker and transformed at emission; status/command earcons stay

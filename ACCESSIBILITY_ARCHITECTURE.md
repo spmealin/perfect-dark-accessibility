@@ -827,7 +827,10 @@ The core targeting and pickup schedulers publish source positions through the
 existing tone/backend boundary. Fixed HRTF voices cover ten combat
 slots, pickup and interactable lanes, three doors, three people, ten cane slots
 and the moving drop-edge lane. Ten additional voices serve R-Tracker contacts;
-combat radar and hill guidance have independent voices. Radar event queues
+combat radar and hill guidance have independent voices. Additional buses serve
+four player markers and eleven mission
+landmarks; marker drones and ID chirps use the same per-marker source. They
+add no established-game hooks or geometry queries. Radar event queues
 retain their native marker's world position; centered status cues have none.
 These are accessibility-module changes with no new established-game hooks.
 Cane path positions follow the existing contour

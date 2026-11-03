@@ -579,6 +579,9 @@ static void accessibilityLandmarkUpdate(
 		state->audible = state->gain > 0.0f;
 		state->pan = normalizedpan;
 		audiblecount += state->audible;
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+		accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_LANDMARK + slot, &targetpos);
+#endif
 		accessibilityToneSetLandmarkSlot(slot, state->audible,
 				state->gain, normalizedpan,
 				spec->toneprofile,

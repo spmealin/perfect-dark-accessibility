@@ -313,6 +313,9 @@ static void accessibilityMarkerUpdateAudio(
 		if (marker->audible) {
 			audiblemask |= 1 << slot;
 		}
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+		accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_MARKER + slot, &marker->position);
+#endif
 		accessibilityToneSetMarkerSlot(slot, marker->audible,
 				gain, normalizedpan, restart);
 	}
