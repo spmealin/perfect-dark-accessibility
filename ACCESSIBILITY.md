@@ -156,6 +156,12 @@ Pickup beacons (F8) require an item to intersect the current viewport as well
 as pass the existing line-of-sight and pickup checks. Items merely nearby or
 behind you do not chirp. Eligibility is checked again before each pickup cue.
 
+Mine pickups add a low 220 Hz drone beneath the usual three pickup chirps,
+including the gaps, to distinguish them from other items. This covers timed,
+proximity, remote, and ECM mines that already qualify for the pickup scanner;
+it does not add detection of otherwise ineligible deployed mines. Try **Mine
+pickup** in the audio glossary to hear the difference.
+
 ### Accessibility mix protection
 
 Overload protection is enabled by default. It keeps the stereo channels linked

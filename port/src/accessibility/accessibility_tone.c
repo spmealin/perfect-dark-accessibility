@@ -150,6 +150,8 @@ void accessibilityToneDumpSpatialDiagnostics(u64 captureid)
 					&& (SDL_AtomicGet(&g_AccessibilityChirpStyle)
 						== (slot == ACCESSIBILITY_SPATIAL_PICKUP ? ACCESSIBILITY_CHIRP_STYLE_PICKUP
 								: ACCESSIBILITY_CHIRP_STYLE_OBJECT)
+						|| (slot == ACCESSIBILITY_SPATIAL_PICKUP
+							&& SDL_AtomicGet(&g_AccessibilityChirpStyle) == ACCESSIBILITY_CHIRP_STYLE_MINE_PICKUP)
 						|| (slot == ACCESSIBILITY_SPATIAL_OBJECT
 							&& SDL_AtomicGet(&g_AccessibilityChirpStyle) == ACCESSIBILITY_CHIRP_STYLE_MOVABLE_LANDMARK));
 		else if (slot < ACCESSIBILITY_SPATIAL_FRIENDLY)
@@ -230,6 +232,16 @@ void accessibilityTonePlayObjectChirp(f32 frequencyhz, f32 volume, f32 pan,
 	}
 	accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_OBJECT, position);
 	accessibilityTonePublishChirp(frequencyhz, volume, pan, pulses, gain, ACCESSIBILITY_CHIRP_STYLE_OBJECT);
+}
+
+void accessibilityTonePlayMinePickupChirp(f32 frequencyhz, f32 volume, f32 pan,
+		const struct coord *position)
+{
+	if (!accessibilityToneOwnershipCanPublish()) {
+		return;
+	}
+	accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_PICKUP, position);
+	accessibilityTonePublishChirp(frequencyhz, volume, pan, 3, 1.0f, ACCESSIBILITY_CHIRP_STYLE_MINE_PICKUP);
 }
 SDL_atomic_t g_AccessibilityPreviewSequence;
 SDL_atomic_t g_AccessibilityPreviewDurationMs;

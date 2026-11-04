@@ -663,6 +663,13 @@ Pickup eligibility normally follows `objTestForPickup` object types and flags. T
 
 The current F7 viewport policy supersedes the earlier remote-only character rule: non-hostile people require the renderer's `PROPFLAG_ONTHISSCREENTHISTICK` state for both Joanna and remote observers. An off-screen character therefore cannot retain or start a friendly drone even when room and visual-ray tests pass.
 
+Mine pickup classification remains in the accessibility scanner after native
+pickup eligibility. Timed, proximity, remote, and ECM mines publish the existing
+three-chirp pattern with an added 220 Hz drone on the same fixed pickup voice.
+The port mixer owns its phase/envelope and spatializes the combined signal;
+stop, preview ownership, attenuation, and scheduling remain shared. No native
+game hook or additional runtime allocation is introduced.
+
 ### Navigation
 
 The player-authored marker module owns four fixed coordinate/room snapshots.

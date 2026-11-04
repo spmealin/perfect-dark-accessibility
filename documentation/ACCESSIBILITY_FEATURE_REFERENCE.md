@@ -344,6 +344,17 @@ until the left hand's actual in-use value changes.
 
 When the active camera is a deployed CamSpy, door scanning transfers to the CamSpy prop, rooms, position, and camera heading on the same logical tick as the visible perspective change. Returning to Joanna transfers it back without requiring F6 to be toggled. Interactable and pickup categories deliberately pause while viewing through the CamSpy because those cues describe things Joanna can physically use or collect, then resume from her position after returning. At that point, the inactive CamSpy itself can enter F8 from Joanna's perspective.
 
+Mine pickup cues retain the three 880 Hz chirps and add a 220 Hz sine drone
+at 45% of the chirp gain across the entire approximately 155 ms sequence,
+including its gaps. The drone has an 8 ms attack and 15 ms release, shares
+the pickup's position, distance attenuation, F8 state, and scheduling, and
+stops with the chirps. Timed, proximity, remote, and ECM weapon objects use
+this variant only after passing existing pickup eligibility and visibility
+checks. No new deployed-mine detection is implied. The `Mine pickup` glossary
+entry auditions the same command; pulse logs identify the variant as
+`pickup_chirps_with_220hz_drone`. There is no additional setting or shortcut.
+Owner listening acceptance is pending.
+
 ### X-Ray-visible interaction states: Pelagic II reactor switches
 
 `accessibility_interaction.c` resolves the current stage's puzzle aliases

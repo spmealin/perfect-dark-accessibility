@@ -218,6 +218,10 @@ int main(void)
 	assert(allocations == warmAllocations);
 	testmixenabled = 1;
 	renderEnergy(&left, &right); assert(right > left && left > 0);
+	simulateWorldSuppression(); renderEnergy(&left, &right);
+	accessibilityTonePlayMinePickupChirp(880, .5f, 0, &position);
+	renderEnergy(&left, &right); assert(right > left && left > 0);
+	assert(SDL_AtomicGet(&g_AccessibilitySpatialValid[ACCESSIBILITY_SPATIAL_PICKUP]));
 	assert(g_AccessibilityMixState.frames > 0);
 	assert(g_AccessibilityMixState.outputpeak <= .98001f);
 	assert(allocations == warmAllocations);

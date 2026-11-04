@@ -22,6 +22,9 @@ static u64 testclock;
 static s32 testenabled = 1;
 static s32 testpops;
 static s32 testmixenabled;
+/* The historical PCM fixture replays only its original catalog, including
+ * during warm-up, so added examples cannot shift its clocks or phases. */
+static s32 testoriginalcatalog;
 void accessibilityGetAudioMixTuning(s32 *enabled, f32 *worldgain, f32 *feedbackgain, f32 *headroomdb)
 { *enabled = testmixenabled; *worldgain = *feedbackgain = 1; *headroomdb = 3; }
 
@@ -115,9 +118,16 @@ int main(void)
 	assert(!accessibilityToneOwnershipIsPreview());
 	glossaryListHandler(MENUOP_SET, NULL, &data);
 	assert(testpops == 1);
-	assert(g_Glossary[5].durationms == 4000 && g_Glossary[5].variant == 1);
+	{
+		s32 friendly = -1;
+		for (s32 i = 0; i < accessibilityGlossaryGetCount(); i++)
+			if (g_Glossary[i].kind == PERSON && g_Glossary[i].variant == 1) friendly = i;
+		assert(friendly >= 0 && g_Glossary[friendly].durationms == 4000);
+	}
 
 	for (index = 0; index < accessibilityGlossaryGetCount(); index++) {
+		if (testoriginalcatalog && g_Glossary[index].kind == PICKUP
+				&& g_Glossary[index].variant == 1) continue;
 		u64 started = testclock;
 		for (other = 0; other < index; other++) {
 			assert(strcmp(accessibilityGlossaryGetName(index),

@@ -1271,10 +1271,24 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 						* ACCESSIBILITY_CHIRP_VOLUME
 						* 32767.0f : 0.0f;
 			}
+			if (g_AccessibilityChirpCurrentStyle == ACCESSIBILITY_CHIRP_STYLE_MINE_PICKUP) {
+				/* Keep the ordinary chirps untouched; the low layer spans their
+				 * gaps and shares their source, gain, deadline and stop command. */
+				f32 droneenvelope = fminf(1, fminf(
+						(f32)g_AccessibilityChirpSample / ACCESSIBILITY_MINE_DRONE_ATTACK_SAMPLES,
+						(f32)g_AccessibilityChirpSamplesRemaining / ACCESSIBILITY_MINE_DRONE_RELEASE_SAMPLES));
+				chirp += sinf(g_AccessibilityChirpPhaseB) * droneenvelope
+						* g_AccessibilityChirpVolume * g_AccessibilityChirpGain
+						* ACCESSIBILITY_CHIRP_VOLUME * ACCESSIBILITY_MINE_DRONE_GAIN * 32767.0f;
+				g_AccessibilityChirpPhaseB += TWO_PI * ACCESSIBILITY_MINE_DRONE_FREQUENCY_HZ
+						/ ACCESSIBILITY_TONE_SAMPLE_RATE;
+				if (g_AccessibilityChirpPhaseB >= TWO_PI) g_AccessibilityChirpPhaseB -= TWO_PI;
+			}
 			chirpleft = (s32)(chirp * leftpan);
 			chirpright = (s32)(chirp * rightpan);
 #if ACCESSIBILITY_BINAURAL_EXPERIMENT
-			int chirpslot = g_AccessibilityChirpCurrentStyle == ACCESSIBILITY_CHIRP_STYLE_PICKUP
+			int chirpslot = (g_AccessibilityChirpCurrentStyle == ACCESSIBILITY_CHIRP_STYLE_PICKUP
+					|| g_AccessibilityChirpCurrentStyle == ACCESSIBILITY_CHIRP_STYLE_MINE_PICKUP)
 					? ACCESSIBILITY_SPATIAL_PICKUP : ACCESSIBILITY_SPATIAL_OBJECT;
 			if (g_AccessibilityChirpCurrentStyle != ACCESSIBILITY_CHIRP_STYLE_STANDARD
 					&& spatialroute[chirpslot]) {

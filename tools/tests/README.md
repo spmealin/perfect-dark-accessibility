@@ -168,6 +168,17 @@ restarts, continuous proximity tones, and stop/resume. It asserts minimum
 onset separation and service of every active slot. The existing glossary PCM
 fingerprint also checks that isolated demonstrations remain unchanged.
 
+## Mine pickup layer
+
+`accessibility_mine_pickup_test.c` checks the added 220 Hz drone against its
+sample-by-sample envelope, confirms that it fills the original chirp gaps,
+stops with the existing sequence, and respects preview ownership. Visibility
+fixtures check the four mine weapon types without widening pickup eligibility.
+The original 93-cue PCM baseline excludes the new example during both warm-up
+and playback; the full glossary fixture separately covers all 94 entries.
+The real-SDK spatial mixer smoke check verifies the combined cue's direction
+with mix protection enabled and no additional runtime allocations.
+
 ## FarSight reticle
 
 `accessibility_farsight_reticle_test.c` exercises the actual targeting adapter's

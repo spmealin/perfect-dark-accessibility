@@ -23,6 +23,7 @@ void accessibilityToneSetSpatialPath(s32 slot, s32 count, const struct coord *po
 /* Main-thread, capture-only diagnostics; never called by the audio mixer. */
 void accessibilityToneDumpSpatialDiagnostics(u64 captureid);
 void accessibilityTonePlayPickupChirp(f32 frequencyhz, f32 volume, f32 pan, const struct coord *position);
+void accessibilityTonePlayMinePickupChirp(f32 frequencyhz, f32 volume, f32 pan, const struct coord *position);
 void accessibilityTonePlayObjectChirp(f32 frequencyhz, f32 volume, f32 pan,
 		s32 pulses, f32 gain, const struct coord *position);
 

@@ -2425,6 +2425,16 @@ static void accessibilityBeaconRescanActive(const char *reason)
 			= g_Vars.lvframe60 + ACCESSIBILITY_BEACON_REFRESH_TICKS;
 }
 
+static s32 accessibilityBeaconIsMinePickup(const struct prop *prop)
+{
+	s32 weapon;
+	if (!prop || (prop->type != PROPTYPE_WEAPON && prop->type != PROPTYPE_OBJ)
+			|| !prop->obj || prop->obj->type != OBJTYPE_WEAPON) return false;
+	weapon = ((struct weaponobj *)prop->obj)->weaponnum;
+	return weapon == WEAPON_TIMEDMINE || weapon == WEAPON_PROXIMITYMINE
+			|| weapon == WEAPON_REMOTEMINE || weapon == WEAPON_ECMMINE;
+}
+
 static void accessibilityBeaconPulse(s32 category,
 		struct accessibilitybeaconresult *selected, struct prop *prop)
 {
@@ -2462,10 +2472,13 @@ static void accessibilityBeaconPulse(s32 category,
 #endif
 		accessibilityTonePlayMovableLandmark(normalizedvolume, normalizedpan);
 		pattern = "crossing_sweep_low_tail";
-#if ACCESSIBILITY_BINAURAL_EXPERIMENT
 	} else if (selected->kind == ACCESSIBILITY_BEACON_KIND_PICKUP) {
-		accessibilityTonePlayPickupChirp(frequencyhz, normalizedvolume, normalizedpan, &prop->pos);
-#endif
+		if (accessibilityBeaconIsMinePickup(prop)) {
+			accessibilityTonePlayMinePickupChirp(frequencyhz, normalizedvolume, normalizedpan, &prop->pos);
+			pattern = "pickup_chirps_with_220hz_drone";
+		} else {
+			accessibilityTonePlayPickupChirp(frequencyhz, normalizedvolume, normalizedpan, &prop->pos);
+		}
 	} else {
 #if ACCESSIBILITY_BINAURAL_EXPERIMENT
 		accessibilityTonePlayObjectChirp(frequencyhz, normalizedvolume, normalizedpan, pulses, gain, &prop->pos);

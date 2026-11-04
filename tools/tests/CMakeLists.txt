@@ -5,7 +5,7 @@ add_custom_target(accessibility_tests)
 
 set(accessibility_fixture_names
   cane_result cane_path landmark glossary monitor_image interaction
-  precision_mapping weapon_target farsight_reticle visibility cane_decision tone_pcm combat_scheduler mix log menu_stats radial_mouse)
+  precision_mapping weapon_target farsight_reticle visibility cane_decision tone_pcm combat_scheduler mix mine_pickup log menu_stats radial_mouse)
 
 foreach(diagnostics RANGE 0 1)
   foreach(fixture IN LISTS accessibility_fixture_names)
@@ -29,7 +29,7 @@ foreach(diagnostics RANGE 0 1)
     elseif(fixture STREQUAL "radial_mouse")
       target_sources(${target} PRIVATE
         "${PROJECT_SOURCE_DIR}/port/src/radialmouse.c")
-    elseif(fixture STREQUAL "glossary" OR fixture STREQUAL "tone_pcm" OR fixture STREQUAL "combat_scheduler" OR fixture STREQUAL "mix")
+    elseif(fixture STREQUAL "glossary" OR fixture STREQUAL "tone_pcm" OR fixture STREQUAL "combat_scheduler" OR fixture STREQUAL "mix" OR fixture STREQUAL "mine_pickup")
       target_link_libraries(${target} PRIVATE "${SDL2_LIBRARY}")
     else()
       # Discard unrelated engine functions in implementation-including fixtures.

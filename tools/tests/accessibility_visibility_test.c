@@ -242,6 +242,23 @@ static void doorCases(void)
 
 int main(void)
 {
+	{
+		struct weaponobj mine = {0};
+		struct prop pickup = {0};
+		const s32 mines[] = {WEAPON_TIMEDMINE, WEAPON_PROXIMITYMINE, WEAPON_REMOTEMINE, WEAPON_ECMMINE};
+		pickup.type = PROPTYPE_WEAPON;
+		pickup.obj = &mine.base;
+		mine.base.type = OBJTYPE_WEAPON;
+		for (s32 i = 0; i < ARRAYCOUNT(mines); i++) {
+			mine.weaponnum = mines[i];
+			assert(accessibilityBeaconIsMinePickup(&pickup));
+		}
+		mine.weaponnum = WEAPON_DRAGON; assert(!accessibilityBeaconIsMinePickup(&pickup));
+		mine.weaponnum = WEAPON_TIMEDMINE;
+		pickup.type = PROPTYPE_OBJ; assert(accessibilityBeaconIsMinePickup(&pickup));
+		pickup.type = PROPTYPE_CHR; assert(!accessibilityBeaconIsMinePickup(&pickup));
+		assert(!accessibilityBeaconIsMinePickup(NULL));
+	}
 	assert(accessibilityBeaconNeedsViewport(ACCESSIBILITY_BEACON_CATEGORY_PICKUP, 0));
 	assert(accessibilityBeaconNeedsViewport(ACCESSIBILITY_BEACON_CATEGORY_PICKUP, 1));
 	assert(accessibilityBeaconNeedsViewport(ACCESSIBILITY_BEACON_CATEGORY_OBJECT, 0));

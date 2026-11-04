@@ -116,6 +116,7 @@ static const struct glossaryentry g_Glossary[] = {
 	{ "Double-crouching", STANCE, CROUCHPOS_SQUAT, 180 },
 	{ "Weapon primary function", FUNCTION, 0, 55 },
 	{ "Weapon secondary function", FUNCTION, 1, 120 },
+	{ "Mine pickup", PICKUP, 1, 170 },
 	{ "X-Ray puzzle: reset switch", OBJECT, 1, 120 },
 };
 
@@ -173,7 +174,8 @@ void accessibilityGlossaryPlay(s32 index)
 		accessibilityTonePlayChirp(v ? 660.0f : 880.0f, 1.0f, 0.0f);
 		break;
 	case PICKUP:
-		accessibilityTonePlayChirpPattern(880.0f, 1.0f, 0.0f, 3, 1.0f);
+		if (v) accessibilityTonePlayMinePickupChirp(880.0f, 1.0f, 0.0f, NULL);
+		else accessibilityTonePlayChirpPattern(880.0f, 1.0f, 0.0f, 3, 1.0f);
 		break;
 	case MOVABLE:
 		accessibilityTonePlayMovableLandmark(1.0f, 0.0f);

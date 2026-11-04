@@ -11,6 +11,7 @@ static void conflictingWorldCommands(void)
 	accessibilityToneSetAlignment(1, 777, ACCESSIBILITY_TONE_ALIGNMENT_PATTERN_INTERRUPTED);
 	accessibilityTonePlayChirp(555, .2f, -.5f);
 	accessibilityTonePlayChirpPattern(888, .2f, .5f, 3, 1);
+	accessibilityTonePlayMinePickupChirp(880, .2f, -.5f, NULL);
 	accessibilityTonePlayMovableLandmark(.2f, .2f);
 	accessibilityTonePlayTargetPresence(900, .2f, -.2f);
 	accessibilityTonePlayThreatAlert(.2f, .3f);
@@ -41,10 +42,13 @@ int main(int argc, char **argv)
 	s16 gameaudio[1024];
 	uint64_t hash = UINT64_C(14695981039346656037);
 	s32 entry, block, i;
+	testoriginalcatalog = 1;
 	assert(glossaryFixtureMain() == 0);
 	testenabled = 1;
 	for (i = 0; i < ARRAYCOUNT(gameaudio); i++) gameaudio[i] = (i % 7 - 3) * 7000;
 	for (entry = 0; entry < accessibilityGlossaryGetCount(); entry++) {
+		/* Preserve the original 93-cue golden independently of added sounds. */
+		if (g_Glossary[entry].kind == PICKUP && g_Glossary[entry].variant == 1) continue;
 		u64 frames = 0, started = testclock;
 		accessibilityGlossaryPlay(entry);
 		for (block = 0; frames < (u64)(g_Glossary[entry].durationms + 300) * 22020 / 1000; block++) {
