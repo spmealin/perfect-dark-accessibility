@@ -681,6 +681,14 @@ turrets, cameras, scopes and moving targets.
 
 ### Fine aiming tone
 
+The default-on `MixProtection` path applies floating-point world/feedback buses,
+3 dB original-game headroom during cues, and a zero-lookahead stereo-linked
+sample-peak limiter. Existing cue timings and per-feature volumes remain
+authoritative. `WorldCueVolume`, `FeedbackCueVolume` and `GameAudioHeadroomDb`
+are independent INI controls; protection off restores legacy PCM. See
+`ACCESSIBILITY_AUDIO_MIX.md` for timings, meters, rollback and pending listening
+acceptance. No native game hook or new geometry query is involved.
+
 IR-scanner highlights now use the same 3D tracker voices as R-Tracker contacts.
 The two modes remain exclusive, with existing source-change stop/restart and
 no additional allocations. IR's current native-highlight and on-screen gates,

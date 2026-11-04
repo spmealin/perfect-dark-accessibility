@@ -813,6 +813,14 @@ changed. See [the test guide](tools/tests/README.md) for boundaries and replay.
 
 ## Upstream hook ledger
 
+Mix protection adds no established-game hooks. The accessibility coordinator
+owns four mix configuration keys and startup logging. The port tone mixer
+publishes separate game/world/feedback buses into the fixed-state DSP in
+`port/src/accessibility/accessibility_mix.c`, after spatial rendering and before
+PCM conversion. Linked gain preserves stereo balance; meters cross the existing
+atomic diagnostic boundary and are logged by Shift+F2 outside DSP. See
+`documentation/ACCESSIBILITY_AUDIO_MIX.md` for settings, bypass and limitations.
+
 The 3D experiment's Shift+F2 placement diagnostics add only an
 accessibility-core-to-port capture call in `accessibility_incident.c`; they add
 no hooks to established gameplay files. Fixed main-thread source snapshots and

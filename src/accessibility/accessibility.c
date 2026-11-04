@@ -46,6 +46,10 @@ static s32 g_AccessibilityRTrackerAudioEnabledConfig = 1;
 static s32 g_AccessibilityTargetingFeedbackEnabledConfig = 1;
 static f32 g_AccessibilityTargetingVolumeConfig = 0.15f;
 static f32 g_AccessibilityInterruptedTargetingVolumeConfig = 0.12f;
+static s32 g_AccessibilityMixProtectionConfig = 1;
+static f32 g_AccessibilityWorldCueVolumeConfig = 1.0f;
+static f32 g_AccessibilityFeedbackCueVolumeConfig = 1.0f;
+static f32 g_AccessibilityGameAudioHeadroomDbConfig = 3.0f;
 static s32 g_AccessibilityWeaponChangeAnnouncementsEnabledConfig = 1;
 static s32 g_AccessibilityWeaponFunctionCuesEnabledConfig = 1;
 static s32 g_AccessibilityStanceCuesEnabledConfig = 1;
@@ -212,6 +216,15 @@ f32 accessibilityGetInterruptedTargetingVolume(void)
 	return accessibilityValidatedFloat(
 			g_AccessibilityInterruptedTargetingVolumeConfig,
 			0.12f, 0.0f, 0.4f);
+}
+
+void accessibilityGetAudioMixTuning(s32 *enabled, f32 *worldgain,
+		f32 *feedbackgain, f32 *headroomdb)
+{
+	*enabled = accessibilityIsEnabled() && g_AccessibilityMixProtectionConfig;
+	*worldgain = accessibilityValidatedFloat(g_AccessibilityWorldCueVolumeConfig, 1, 0, 2);
+	*feedbackgain = accessibilityValidatedFloat(g_AccessibilityFeedbackCueVolumeConfig, 1, 0, 2);
+	*headroomdb = accessibilityValidatedFloat(g_AccessibilityGameAudioHeadroomDbConfig, 3, 0, 12);
 }
 
 void accessibilityGetProjectileHazardTuning(f32 *range, f32 *volume)
@@ -509,6 +522,14 @@ void accessibilityInit(void)
 				ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS ? 1000000 : 0,
 				sysArgCheck("--accessibility-speech-test"),
 				fsFullPath(ACCESSIBILITY_LOG_PATH));
+		{
+			s32 mixenabled;
+			f32 worldgain, feedbackgain, headroomdb;
+			accessibilityGetAudioMixTuning(&mixenabled, &worldgain, &feedbackgain, &headroomdb);
+			accessibilityLogEvent("lifecycle", "audio_mix_start_state",
+					"enabled=%d world_gain=%.4f feedback_gain=%.4f game_headroom_db=%.3f ceiling=0.98 hold_ms=250 game_attack_ms=10 game_release_ms=100 limiter_attack_ms=0 limiter_release_ms=100 stereo_linked=1 lookahead_ms=0",
+					mixenabled, worldgain, feedbackgain, headroomdb);
+		}
 		accessibilityLogEvent("lifecycle", "scanner_start_state",
 				"interactable_saved=%d door_saved=%d pickup_saved=%d non_hostile_saved=%d interactable_effective=%d door_effective=%d pickup_effective=%d non_hostile_effective=%d persistence=pd.ini",
 				accessibilityGetScannerActive(
@@ -787,6 +808,10 @@ void accessibilitySetScannerActive(s32 scanner, s32 active)
 
 PD_CONSTRUCTOR static void accessibilityConfigInit(void)
 {
+	configRegisterInt("Accessibility.MixProtection", &g_AccessibilityMixProtectionConfig, 0, 1);
+	configRegisterFloat("Accessibility.WorldCueVolume", &g_AccessibilityWorldCueVolumeConfig, 0, 2);
+	configRegisterFloat("Accessibility.FeedbackCueVolume", &g_AccessibilityFeedbackCueVolumeConfig, 0, 2);
+	configRegisterFloat("Accessibility.GameAudioHeadroomDb", &g_AccessibilityGameAudioHeadroomDbConfig, 0, 12);
 	configRegisterInt("Accessibility.Enabled", &g_AccessibilityEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.LoggingEnabled", &g_AccessibilityLoggingEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.SpeechEnabled", &g_AccessibilitySpeechEnabledConfig, 0, 1);

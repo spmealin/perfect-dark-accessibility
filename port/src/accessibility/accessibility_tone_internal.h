@@ -28,6 +28,9 @@
 #define ACCESSIBILITY_CHIRP_STYLE_PICKUP 2
 #define ACCESSIBILITY_CHIRP_STYLE_OBJECT 3
 extern SDL_atomic_t g_AccessibilitySpatialValid[ACCESSIBILITY_SPATIAL_VOICES];
+extern SDL_atomic_t g_AccessibilityMixFrames, g_AccessibilityMixLimitedFrames;
+extern SDL_atomic_t g_AccessibilityMixNonfinite, g_AccessibilityMixPeak;
+extern SDL_atomic_t g_AccessibilityMixOutputPeak, g_AccessibilityMixMinimumGain;
 #define ACCESSIBILITY_MOVABLE_LANDMARK_LOW_FREQUENCY_HZ 300.0f
 #define ACCESSIBILITY_MOVABLE_LANDMARK_HIGH_FREQUENCY_HZ 600.0f
 #define ACCESSIBILITY_MOVABLE_LANDMARK_TAIL_FREQUENCY_HZ 220.0f

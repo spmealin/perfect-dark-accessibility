@@ -30,6 +30,8 @@ s32 accessibilityIsRTrackerAudioEnabled(void);
 s32 accessibilityIsTargetingFeedbackEnabled(void);
 f32 accessibilityGetTargetingVolume(void);
 f32 accessibilityGetInterruptedTargetingVolume(void);
+void accessibilityGetAudioMixTuning(s32 *enabled, f32 *worldgain,
+		f32 *feedbackgain, f32 *headroomdb);
 s32 accessibilityIsWeaponChangeAnnouncementsEnabled(void);
 s32 accessibilityIsWeaponFunctionCuesEnabled(void);
 s32 accessibilityIsStanceCuesEnabled(void);

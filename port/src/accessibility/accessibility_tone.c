@@ -15,6 +15,10 @@
 
 /* Main-thread publication only. The mixer owns all non-atomic playback state. */
 SDL_atomic_t g_AccessibilityPreviewActive;
+SDL_atomic_t g_AccessibilityMixFrames, g_AccessibilityMixLimitedFrames;
+SDL_atomic_t g_AccessibilityMixNonfinite, g_AccessibilityMixPeak;
+SDL_atomic_t g_AccessibilityMixOutputPeak;
+SDL_atomic_t g_AccessibilityMixMinimumGain = {1000000};
 SDL_atomic_t g_AccessibilitySpatialValid[ACCESSIBILITY_SPATIAL_VOICES];
 SDL_atomic_t g_AccessibilitySpatialPathCount[ACCESSIBILITY_TONE_CANE_SLOT_COUNT];
 SDL_atomic_t g_AccessibilitySpatialPath[ACCESSIBILITY_TONE_CANE_SLOT_COUNT][ACCESSIBILITY_CANE_PATH_MAX_STEPS][3];
@@ -103,6 +107,16 @@ void accessibilityToneSetSpatialPath(s32 slot, s32 count, const struct coord *po
 
 void accessibilityToneDumpSpatialDiagnostics(u64 captureid)
 {
+	s32 mixenabled;
+	f32 worldgain, feedbackgain, headroomdb;
+	accessibilityGetAudioMixTuning(&mixenabled, &worldgain, &feedbackgain, &headroomdb);
+	accessibilityLogEvent("incident", "audio_mix",
+			"capture=%llu enabled=%d world_gain=%.4f feedback_gain=%.4f game_headroom_db=%.3f frames=%u limited_frames=%u nonfinite_inputs=%u input_peak=%.6f output_peak=%.6f minimum_limiter_gain=%.6f ceiling=0.98 stereo_linked=1 lookahead_ms=0",
+			(unsigned long long)captureid, mixenabled, worldgain, feedbackgain, headroomdb,
+			(u32)SDL_AtomicGet(&g_AccessibilityMixFrames), (u32)SDL_AtomicGet(&g_AccessibilityMixLimitedFrames),
+			(u32)SDL_AtomicGet(&g_AccessibilityMixNonfinite), SDL_AtomicGet(&g_AccessibilityMixPeak) / 1000000.0,
+			SDL_AtomicGet(&g_AccessibilityMixOutputPeak) / 1000000.0,
+			SDL_AtomicGet(&g_AccessibilityMixMinimumGain) / 1000000.0);
 #if ACCESSIBILITY_BINAURAL_EXPERIMENT
 	u64 now = sysGetMicroseconds();
 	s32 slot, i;

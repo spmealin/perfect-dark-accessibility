@@ -156,6 +156,20 @@ Pickup beacons (F8) require an item to intersect the current viewport as well
 as pass the existing line-of-sight and pickup checks. Items merely nearby or
 behind you do not chirp. Eligibility is checked again before each pickup cue.
 
+### Accessibility mix protection
+
+Overload protection is enabled by default. It keeps the stereo channels linked
+when many cues overlap, rather than independently clipping them, and modestly
+lowers original game audio while cues are active. Cue patterns and scheduling
+are unchanged; this is not an automatic feature-muting system.
+
+In `[Accessibility]` in `pd.ini`, `MixProtection=0` restores the previous mix.
+`WorldCueVolume=1.0` and `FeedbackCueVolume=1.0` independently scale directional
+cues and centered feedback. `GameAudioHeadroomDb=3.0` sets the original game's
+temporary attenuation; zero disables that attenuation while retaining protection.
+Restart after editing. See the [mix reference](documentation/ACCESSIBILITY_AUDIO_MIX.md)
+for behavior, limits and listening tests.
+
 ### Experimental 3D headphone audio
 
 The current experimental build uses binaural headphone audio for ordinary

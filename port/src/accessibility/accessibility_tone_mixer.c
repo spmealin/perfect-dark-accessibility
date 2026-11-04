@@ -5,11 +5,13 @@
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_tone.h"
 #include "accessibility/accessibility_spatial.h"
+#include "accessibility/accessibility_mix.h"
 #include "accessibility_tone_internal.h"
 
 /* Audio-thread-owned fixed storage. Legacy phase/envelope arithmetic remains
  * intact; optional mono spatial buses are rendered before final summation. */
 static s32 g_AccessibilityPreviewObservedSequence;
+static struct accessibilitymixstate g_AccessibilityMixState;
 static s32 g_AccessibilityPreviewSamplesRemaining;
 static s16 g_AccessibilityToneMixBuffer[ACCESSIBILITY_TONE_MIX_BUFFER_SAMPLES];
 static f32 g_AccessibilityTonePhase;
@@ -192,6 +194,7 @@ static void accessibilityToneSpatialPathDirection(s32 slot, s32 first, s32 secon
 
 const s16 *accessibilityToneMix(const s16 *input, u32 len)
 {
+	struct accessibilitymixsettings mixsettings;
 	s32 preview = SDL_AtomicGet(&g_AccessibilityPreviewActive);
 #if ACCESSIBILITY_BINAURAL_EXPERIMENT
 	s32 spatial = !preview && accessibilitySpatialEnabled();
@@ -310,12 +313,16 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			|| len > sizeof(g_AccessibilityToneMixBuffer)) {
 		return input;
 	}
+	accessibilityGetAudioMixTuning(&mixsettings.enabled, &mixsettings.worldgain,
+			&mixsettings.feedbackgain, &mixsettings.headroomdb);
+	accessibilityMixConfigure(&g_AccessibilityMixState, &mixsettings, ACCESSIBILITY_TONE_SAMPLE_RATE);
 
 	if (previewsequence != g_AccessibilityPreviewObservedSequence) {
 #if ACCESSIBILITY_BINAURAL_EXPERIMENT
 		for (slot = 0; slot < ACCESSIBILITY_SPATIAL_VOICES; slot++) accessibilitySpatialReset(slot);
 #endif
 		g_AccessibilityPreviewObservedSequence = previewsequence;
+		accessibilityMixReset(&g_AccessibilityMixState);
 		g_AccessibilityPreviewSamplesRemaining = (s32)(
 				ACCESSIBILITY_TONE_SAMPLE_RATE / 1000.0f
 				* SDL_AtomicGet(&g_AccessibilityPreviewDurationMs));
@@ -931,7 +938,8 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			&& !anyfriendlyenabled && !anydoorenabled && !anycaneactive
 			&& !anymarkerenabled
 			&& g_AccessibilityMarkerIdentitySlot < 0
-			&& g_AccessibilityMarkerPendingRemovalMask == 0) {
+			&& g_AccessibilityMarkerPendingRemovalMask == 0
+			&& !accessibilityMixNeedsProcessing(&g_AccessibilityMixState)) {
 #if ACCESSIBILITY_BINAURAL_EXPERIMENT
 		for (slot = 0; slot < ACCESSIBILITY_SPATIAL_VOICES; slot++) accessibilitySpatialReset(slot);
 #endif
@@ -969,7 +977,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 	for (i = 0; i < frames; i++) {
 #if ACCESSIBILITY_BINAURAL_EXPERIMENT
 		float spatialmono[ACCESSIBILITY_SPATIAL_VOICES] = {0};
-		s32 spatialleft = 0, spatialright = 0;
+		f32 spatialleft = 0, spatialright = 0;
 #endif
 		s32 tone;
 		f32 alignmentenvelope = 1.0f;
@@ -2592,47 +2600,74 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			if (spatialroute[slot]) {
 				float l, r;
 				accessibilitySpatialSample(slot, spatialmono[slot], &l, &r);
-				spatialleft += (s32)(l * 32767.0f); spatialright += (s32)(r * 32767.0f);
+				spatialleft += mixsettings.enabled ? l * 32767.0f : (s32)(l * 32767.0f);
+				spatialright += mixsettings.enabled ? r * 32767.0f : (s32)(r * 32767.0f);
 			}
 		}
 #endif
-		g_AccessibilityToneMixBuffer[index] = accessibilityToneClamp(
-#if ACCESSIBILITY_BINAURAL_EXPERIMENT
-				spatialleft +
-#endif
-				(s32)g_AccessibilityToneMixBuffer[index] + tone + chirpleft
-						+ targetpresenceleft + threatalertleft
+		if (mixsettings.enabled) {
+			f32 worldleft = (f32)chirpleft + targetpresenceleft + threatalertleft
 					+ hazardleft + caneedgeleft + combatleft + projectileleft
-						+ trackerleft + friendlyleft + doorleft + radarleft
-						+ hillleft + caneleft
-						+ markerleft + toggletone + compasstone
-						+ weaponfunctiontone);
-		g_AccessibilityToneMixBuffer[index + 1] = accessibilityToneClamp(
-#if ACCESSIBILITY_BINAURAL_EXPERIMENT
-				spatialright +
-#endif
-				(s32)g_AccessibilityToneMixBuffer[index + 1] + tone + chirpright
-						+ targetpresenceright + threatalertright
+					+ trackerleft + friendlyleft + doorleft + radarleft + hillleft + caneleft + markerleft;
+			f32 worldright = (f32)chirpright + targetpresenceright + threatalertright
 					+ hazardright + caneedgeright + combatright + projectileright
-						+ trackerright + friendlyright + doorright + radarright
-						+ hillright + caneright
-						+ markerright + toggletone + compasstone
-						+ weaponfunctiontone);
-
-		/* Sample-clock deadline also bounds a preview if menu ticks stop.
-		 * Fade only the accessibility contribution, never the game's audio. */
-		if (preview) {
-			f32 gain = (f32)g_AccessibilityPreviewSamplesRemaining
-					/ (ACCESSIBILITY_TONE_SAMPLE_RATE * 0.005f);
-			if (gain < 0.0f) gain = 0.0f;
-			if (gain > 1.0f) gain = 1.0f;
-			g_AccessibilityToneMixBuffer[index] = (s16)(input[index]
-					+ (g_AccessibilityToneMixBuffer[index] - input[index]) * gain);
-			g_AccessibilityToneMixBuffer[index + 1] = (s16)(input[index + 1]
-					+ (g_AccessibilityToneMixBuffer[index + 1] - input[index + 1]) * gain);
-			if (g_AccessibilityPreviewSamplesRemaining > 0) {
-				g_AccessibilityPreviewSamplesRemaining--;
+					+ trackerright + friendlyright + doorright + radarright + hillright + caneright + markerright;
+			f32 feedback = (f32)tone + toggletone + compasstone + weaponfunctiontone;
+			f32 previewgain = 1;
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+			worldleft += spatialleft;
+			worldright += spatialright;
+#endif
+			if (preview) {
+				previewgain = fminf(1, fmaxf(0, (f32)g_AccessibilityPreviewSamplesRemaining
+						/ (ACCESSIBILITY_TONE_SAMPLE_RATE * .005f)));
+				if (g_AccessibilityPreviewSamplesRemaining > 0) g_AccessibilityPreviewSamplesRemaining--;
 			}
+			accessibilityMixFrame(&g_AccessibilityMixState,
+					input[index] / 32768.0f, input[index + 1] / 32768.0f,
+					worldleft * previewgain / 32768.0f, worldright * previewgain / 32768.0f,
+					feedback * previewgain / 32768.0f, feedback * previewgain / 32768.0f,
+					&g_AccessibilityToneMixBuffer[index], &g_AccessibilityToneMixBuffer[index + 1]);
+		} else {
+			g_AccessibilityToneMixBuffer[index] = accessibilityToneClamp(
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+					spatialleft +
+#endif
+					(s32)g_AccessibilityToneMixBuffer[index] + tone + chirpleft
+							+ targetpresenceleft + threatalertleft
+						+ hazardleft + caneedgeleft + combatleft + projectileleft
+							+ trackerleft + friendlyleft + doorleft + radarleft
+							+ hillleft + caneleft
+							+ markerleft + toggletone + compasstone
+							+ weaponfunctiontone);
+			g_AccessibilityToneMixBuffer[index + 1] = accessibilityToneClamp(
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+					spatialright +
+#endif
+					(s32)g_AccessibilityToneMixBuffer[index + 1] + tone + chirpright
+							+ targetpresenceright + threatalertright
+						+ hazardright + caneedgeright + combatright + projectileright
+							+ trackerright + friendlyright + doorright + radarright
+							+ hillright + caneright
+							+ markerright + toggletone + compasstone
+							+ weaponfunctiontone);
+
+			/* Sample-clock deadline also bounds a preview if menu ticks stop.
+			 * Fade only the accessibility contribution, never the game's audio. */
+			if (preview) {
+				f32 gain = (f32)g_AccessibilityPreviewSamplesRemaining
+						/ (ACCESSIBILITY_TONE_SAMPLE_RATE * 0.005f);
+				if (gain < 0.0f) gain = 0.0f;
+				if (gain > 1.0f) gain = 1.0f;
+				g_AccessibilityToneMixBuffer[index] = (s16)(input[index]
+						+ (g_AccessibilityToneMixBuffer[index] - input[index]) * gain);
+				g_AccessibilityToneMixBuffer[index + 1] = (s16)(input[index + 1]
+						+ (g_AccessibilityToneMixBuffer[index + 1] - input[index + 1]) * gain);
+				if (g_AccessibilityPreviewSamplesRemaining > 0) {
+					g_AccessibilityPreviewSamplesRemaining--;
+				}
+			}
+
 		}
 
 		g_AccessibilityTonePhase += TWO_PI
@@ -2670,5 +2705,11 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 	}
 #endif
 
+	SDL_AtomicSet(&g_AccessibilityMixFrames, (s32)g_AccessibilityMixState.frames);
+	SDL_AtomicSet(&g_AccessibilityMixLimitedFrames, (s32)g_AccessibilityMixState.limitedframes);
+	SDL_AtomicSet(&g_AccessibilityMixNonfinite, (s32)g_AccessibilityMixState.nonfiniteinputs);
+	SDL_AtomicSet(&g_AccessibilityMixPeak, (s32)(fminf(g_AccessibilityMixState.peak, 1000) * 1000000));
+	SDL_AtomicSet(&g_AccessibilityMixOutputPeak, (s32)(g_AccessibilityMixState.outputpeak * 1000000));
+	SDL_AtomicSet(&g_AccessibilityMixMinimumGain, (s32)(g_AccessibilityMixState.minimumgain * 1000000));
 	return g_AccessibilityToneMixBuffer;
 }

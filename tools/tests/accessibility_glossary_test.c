@@ -13,6 +13,7 @@ static int spatialcapturerecordcount;
 #include "types.h"
 #include "../../port/src/accessibility/accessibility_tone_ownership.c"
 #include "../../port/src/accessibility/accessibility_tone.c"
+#include "../../port/src/accessibility/accessibility_mix.c"
 #include "../../port/src/accessibility/accessibility_tone_mixer.c"
 #include "../../src/accessibility/accessibility_glossary.c"
 #include "../../port/src/accessibility/accessibility_options.c"
@@ -20,6 +21,9 @@ static int spatialcapturerecordcount;
 static u64 testclock;
 static s32 testenabled = 1;
 static s32 testpops;
+static s32 testmixenabled;
+void accessibilityGetAudioMixTuning(s32 *enabled, f32 *worldgain, f32 *feedbackgain, f32 *headroomdb)
+{ *enabled = testmixenabled; *worldgain = *feedbackgain = 1; *headroomdb = 3; }
 
 char *langGet(s32 textid) { assert(textid == L_OPTIONS_213); return "Back"; }
 void menuPopDialog(void) { testpops++; }

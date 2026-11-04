@@ -216,6 +216,11 @@ int main(void)
 	assert(SDL_AtomicGet(&voices[ACCESSIBILITY_SPATIAL_TRACKER].direction[0]) > 0);
 	assert(SDL_AtomicGet(&voices[ACCESSIBILITY_SPATIAL_TRACKER].direction[1]) > 0);
 	assert(allocations == warmAllocations);
+	testmixenabled = 1;
+	renderEnergy(&left, &right); assert(right > left && left > 0);
+	assert(g_AccessibilityMixState.frames > 0);
+	assert(g_AccessibilityMixState.outputpeak <= .98001f);
+	assert(allocations == warmAllocations);
 	accessibilitySpatialShutdown();
 	assert(allocations == frees);
 	puts("Spatial mixer: world scanners, cane, radar, trackers/IR, markers/landmarks, hazards, live toggle, stop and preview passed.");

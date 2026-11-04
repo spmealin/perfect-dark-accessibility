@@ -1,5 +1,9 @@
 # Accessibility regression tests
 
+The mix fixture checks floating-point bus balance, stereo-linked overload
+protection, headroom/release, finite guards, partition invariance, crowded
+production mixing and exact legacy/idle bypass in both diagnostic modes.
+
 From PowerShell, run:
 
 ```powershell
