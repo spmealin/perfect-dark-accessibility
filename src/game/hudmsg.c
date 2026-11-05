@@ -1001,6 +1001,7 @@ void hudmsgCreateFromArgs(char *text, s32 type, s32 conf00, s32 conf01, s32 conf
 		accessibilityHudMessageObserved(text, type, flags,
 				g_Vars.currentplayernum,
 				flags & HUDMSGFLAG_NOCHANNEL ? -1 : arg14);
+		flags &= ~HUDMSGFLAG_PICKUP_MASK;
 
 		if ((flags & HUDMSGFLAG_ALLOWDUPES) == 0) {
 			// Check for duplicate messages

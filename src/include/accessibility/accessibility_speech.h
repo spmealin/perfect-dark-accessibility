@@ -10,5 +10,7 @@ s32 accessibilitySpeechIsAvailable(void);
 const char *accessibilitySpeechGetBackendName(void);
 s32 accessibilitySpeechOutput(const char *text, s32 interrupt);
 s32 accessibilitySpeechCancel(void);
+/* -1 unavailable/unsupported/error; 0 idle; 1 speaking. Not a delivery ack. */
+s32 accessibilitySpeechGetSpeaking(void);
 
 #endif

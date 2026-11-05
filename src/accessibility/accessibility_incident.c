@@ -21,6 +21,7 @@
 #include "lib/vars.h"
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_announcement.h"
+#include "accessibility/accessibility_speech_queue.h"
 #include "accessibility/accessibility_beacon.h"
 #include "accessibility/accessibility_incident.h"
 #include "accessibility/accessibility_log.h"
@@ -713,6 +714,7 @@ static void accessibilityIncidentCapture(void)
 	}
 
 	startedus = sysGetMicroseconds();
+	accessibilitySpeechQueueDump(captureid);
 	accessibilityLogEvent("incident", "capture_begin",
 			"capture=%llu key=Shift+F2 stage=%d tick=%d player=%d history_samples=%d sample_ticks=%d prop_range=%.1f",
 			(unsigned long long)captureid, g_Vars.stagenum,

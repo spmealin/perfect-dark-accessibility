@@ -1,5 +1,19 @@
 # Accessibility regression tests
 
+`speech_queue` exercises production announcement adapters and queue code with
+an injected clock/provider: immediate selections, the 84 ms compass regression,
+HUD FIFO/replay, duplicate-text pickups, context, stale compass/weapon ammo,
+completion fallback, startup idle, stuck busy, retries, countdowns and overflow.
+`weapon_speech` exercises the actual quick-change adapter, including intermediate
+selections, return to the equipped weapon and single/dual identity. Neither
+fixture proves screen-reader delivery or owner listening acceptance.
+
+Pickup tests also exercise semantic flags, immediate weapon-over-ammo
+preemption, removal of stale ammo backlog, preservation of subsequent ammo,
+one-second pacing despite a lingering provider busy state, unchanged selection
+priority, and key/shield pickup timing. Pickup metadata is not inferred from
+English message contents.
+
 The mix fixture checks floating-point bus balance, stereo-linked overload
 protection, headroom/release, finite guards, partition invariance, crowded
 production mixing and exact legacy/idle bypass in both diagnostic modes.

@@ -1,9 +1,11 @@
 #include <string.h>
 #include <PR/ultratypes.h>
+#include "constants.h"
 #include "system.h"
 #include "accessibility/accessibility_announcement.h"
 #include "accessibility/accessibility_log.h"
 #include "accessibility/accessibility_speech.h"
+#include "accessibility/accessibility_speech_queue.h"
 
 static char g_AccessibilityCurrentMenuText[ACCESSIBILITY_ANNOUNCEMENT_TEXT_MAX];
 static s32 g_AccessibilityHasCurrentMenuText;
@@ -52,11 +54,12 @@ s32 accessibilityAnnouncementReplaceMenu(const char *text,
 	memcpy(g_AccessibilityCurrentMenuText, text, length + 1);
 	g_AccessibilityHasCurrentMenuText = 1;
 	started = sysGetMicroseconds();
-	accepted = accessibilitySpeechOutput(g_AccessibilityCurrentMenuText, 1);
+	accepted = accessibilitySpeechQueueSubmit(ACCESSIBILITY_SPEECH_MENU,
+			g_AccessibilityCurrentMenuText, 0);
 	elapsed = sysGetMicroseconds() - started;
 
-	accessibilityLogEvent("announcement", "output_result",
-			"group=menu reason=%s interrupt=1 accepted=%d available=%d elapsed_us=%llu text=%s",
+	accessibilityLogEvent("announcement", "submission_result",
+			"group=menu reason=%s requested_interrupt=1 queued=%d available=%d elapsed_us=%llu text=%s",
 			accessibilityAnnouncementReasonName(reason), accepted,
 			accessibilitySpeechIsAvailable(), (unsigned long long)elapsed,
 			g_AccessibilityCurrentMenuText);
@@ -79,10 +82,14 @@ s32 accessibilityAnnouncementQueueHud(const char *text, s32 type, u32 flags,
 	}
 
 	started = sysGetMicroseconds();
-	accepted = accessibilitySpeechOutput(text, 0);
+	accepted = accessibilitySpeechQueueSubmit(flags & HUDMSGFLAG_PICKUP_WEAPON
+			? ACCESSIBILITY_SPEECH_PICKUP_WEAPON
+			: flags & HUDMSGFLAG_PICKUP_AMMO ? ACCESSIBILITY_SPEECH_PICKUP_AMMO
+			: flags & HUDMSGFLAG_PICKUP_ITEM ? ACCESSIBILITY_SPEECH_PICKUP_ITEM
+			: ACCESSIBILITY_SPEECH_HUD, text, playernum);
 	elapsed = sysGetMicroseconds() - started;
-	accessibilityLogEvent("announcement", "output_result",
-			"group=hud priority=normal interrupt=0 accepted=%d available=%d elapsed_us=%llu id=%u player=%d type=%d flags=0x%08x channel=%d text=%s",
+	accessibilityLogEvent("announcement", "submission_result",
+			"group=hud priority=hud queued=%d available=%d elapsed_us=%llu id=%u player=%d type=%d flags=0x%08x channel=%d text=%s",
 			accepted, accessibilitySpeechIsAvailable(),
 			(unsigned long long)elapsed, id, playernum, type, flags,
 			channelnum, text);
@@ -105,10 +112,10 @@ s32 accessibilityAnnouncementWeaponChange(const char *text,
 	}
 
 	started = sysGetMicroseconds();
-	accepted = accessibilitySpeechOutput(text, interrupt != 0);
+	accepted = accessibilitySpeechQueueSubmit(ACCESSIBILITY_SPEECH_WEAPON, text, playernum);
 	elapsed = sysGetMicroseconds() - started;
-	accessibilityLogEvent("announcement", "output_result",
-			"group=weapon_change priority=normal interrupt=%d accepted=%d available=%d elapsed_us=%llu source=%s player=%d text=%s",
+	accessibilityLogEvent("announcement", "submission_result",
+			"group=weapon_change priority=weapon requested_interrupt=%d queued=%d available=%d elapsed_us=%llu source=%s player=%d text=%s",
 			interrupt != 0, accepted, accessibilitySpeechIsAvailable(),
 			(unsigned long long)elapsed, source ? source : "unknown",
 			playernum, text);
@@ -129,10 +136,10 @@ s32 accessibilityAnnouncementWeaponFunction(const char *text, s32 playernum)
 	}
 
 	started = sysGetMicroseconds();
-	accepted = accessibilitySpeechOutput(text, 0);
+	accepted = accessibilitySpeechQueueSubmit(ACCESSIBILITY_SPEECH_FUNCTION, text, playernum);
 	elapsed = sysGetMicroseconds() - started;
-	accessibilityLogEvent("announcement", "output_result",
-			"group=weapon_function priority=normal interrupt=0 accepted=%d available=%d elapsed_us=%llu player=%d text=%s",
+	accessibilityLogEvent("announcement", "submission_result",
+			"group=weapon_function priority=weapon_followup queued=%d available=%d elapsed_us=%llu player=%d text=%s",
 			accepted, accessibilitySpeechIsAvailable(),
 			(unsigned long long)elapsed, playernum, text);
 
@@ -154,10 +161,11 @@ s32 accessibilityAnnouncementRespawnCountdown(const char *text,
 	}
 
 	started = sysGetMicroseconds();
-	accepted = accessibilitySpeechOutput(text, 0);
+	accepted = accessibilitySpeechQueueSubmit(initial ? ACCESSIBILITY_SPEECH_COUNTDOWN_INITIAL
+			: ACCESSIBILITY_SPEECH_COUNTDOWN, text, playernum);
 	elapsed = sysGetMicroseconds() - started;
-	accessibilityLogEvent("announcement", "output_result",
-			"group=respawn_countdown priority=normal interrupt=0 accepted=%d available=%d elapsed_us=%llu player=%d seconds=%d initial=%d text=%s",
+	accessibilityLogEvent("announcement", "submission_result",
+			"group=respawn_countdown priority=hud queued=%d available=%d elapsed_us=%llu player=%d seconds=%d initial=%d text=%s",
 			accepted, accessibilitySpeechIsAvailable(),
 			(unsigned long long)elapsed, playernum, seconds, initial != 0,
 			text);
@@ -180,10 +188,13 @@ s32 accessibilityAnnouncementStatus(const char *text, const char *source,
 	}
 
 	started = sysGetMicroseconds();
-	accepted = accessibilitySpeechOutput(text, interrupt != 0);
+	accepted = accessibilitySpeechQueueSubmit(source && !strcmp(source, "compass")
+			? ACCESSIBILITY_SPEECH_COMPASS
+			: interrupt || (source && !strcmp(source, "incident_capture"))
+				? ACCESSIBILITY_SPEECH_REQUEST : ACCESSIBILITY_SPEECH_HUD, text, playernum);
 	elapsed = sysGetMicroseconds() - started;
-	accessibilityLogEvent("announcement", "output_result",
-			"group=status priority=normal interrupt=%d accepted=%d available=%d elapsed_us=%llu source=%s player=%d text=%s",
+	accessibilityLogEvent("announcement", "submission_result",
+			"group=status requested_interrupt=%d queued=%d available=%d elapsed_us=%llu source=%s player=%d text=%s",
 			interrupt != 0, accepted, accessibilitySpeechIsAvailable(),
 			(unsigned long long)elapsed, source ? source : "unknown",
 			playernum, text);
@@ -194,7 +205,7 @@ s32 accessibilityAnnouncementStatus(const char *text, const char *source,
 void accessibilityAnnouncementCancel(void)
 {
 	u64 started = sysGetMicroseconds();
-	s32 cancelled = accessibilitySpeechCancel();
+	s32 cancelled = accessibilitySpeechQueueCancel();
 	u64 elapsed = sysGetMicroseconds() - started;
 
 	accessibilityLogEvent("announcement", "cancel_result",
@@ -207,6 +218,7 @@ void accessibilityAnnouncementCancel(void)
 
 void accessibilityAnnouncementReset(void)
 {
+	accessibilitySpeechQueueReset();
 	g_AccessibilityCurrentMenuText[0] = '\0';
 	g_AccessibilityHasCurrentMenuText = 0;
 }

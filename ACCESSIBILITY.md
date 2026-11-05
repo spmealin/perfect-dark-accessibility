@@ -115,6 +115,34 @@ Speech covers much more than the focused menu control. Current support includes:
 Press F5 when a menu's static information was spoken too quickly or focus alone
 does not repeat it.
 
+Automatic gameplay speech prioritizes **weapon selection, then HUD messages,
+then compass directions**. Every valid quick weapon selection starts its name
+immediately, including intermediate mouse-wheel selections; a newer selection
+can interrupt the previous name. Ammunition follows when the equipment settles.
+There is no debounce or final-weapon-only filter. Interrupted HUD messages are
+normally retained and replayed from the beginning, so you may hear part of one
+twice. Weapon pickups are more important than ammo pickups: a weapon pickup
+interrupts ammo chatter and clears older pending ammo reports instead of
+replaying them. Ammo picked up afterward follows the weapon normally.
+Compass words never interrupt higher-priority speech; stale directions are
+discarded, while compass clicks still happen immediately. Menus and deliberate
+requests such as F1 retain foreground access.
+
+The game uses provider speaking-state information where available, otherwise
+estimated timing. In `[Accessibility]`, `SpeechMillisecondsPerCharacter=60`
+(10–250) and `SpeechStartupGraceMs=200` (100–2000) tune the estimate and initial
+completion-query grace. Restart after editing. A provider accepting text is
+not confirmation that it was heard; very fast scrolling can cut names short,
+and replay after interruption can repeat text. These settings do not delay
+new weapon names. See the
+[speech scheduler design](documentation/ACCESSIBILITY_SPEECH_SCHEDULER_DESIGN.md).
+
+Pickup announcements use a one-second speech budget rather than the longer
+general text estimate, with no extra pause between queued messages. In
+`[Accessibility]`, `SpeechPickupDurationMs=1000` (250–3000) adjusts that budget
+for your speech rate. It includes startup time; grace is not added again.
+This does not change your screen reader's speaking speed. Restart after editing.
+
 Checkboxes and checkable list rows announce **selected ITEM** when checked,
 and just **ITEM** when unchecked. Changing a checkmark is announced even if
 focus stays on the same row. Menu titles still read on entry and with F5;

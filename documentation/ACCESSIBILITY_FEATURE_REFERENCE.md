@@ -56,6 +56,54 @@ including checked/unchecked rows, in-place toggles, ordinary list fallback,
 ordinary checkboxes, title context, and disabled warnings. Owner listening
 acceptance remains pending; the agent did not launch the game.
 
+### Priority-aware speech scheduling
+
+Pickup pacing refinement: existing pickup producers identify ammo, weapons,
+and other items with semantic HUD metadata, including localized/overridden
+weapon pickup text. Metadata is removed before native HUD handling. Each pickup
+has a total default 1,000 ms budget (`SpeechPickupDurationMs`, 250–3000), rather
+than character-based timing plus startup grace; no additional inter-message
+silence is inserted. An observed speaking-to-idle transition can release the
+slot sooner. At the pickup deadline, even a lingering busy indication cannot
+hold the queue for multiple extra seconds; following lower-priority speech
+still uses non-interrupting output. Weapon pickups interrupt active ammo and
+discard older pending ammo reports, but do not interrupt a weapon selection,
+its follow-up, a menu or explicit request. Later ammo pickups remain queued.
+Other HUD events retain FIFO/replay behavior. Source hooks do not change item
+collection, inventory, ammo quantities, mission logic, or visual messages.
+This explicit ammo-replacement exception supersedes blanket HUD retention below.
+
+The fixed-storage main-thread scheduler owns automatic output. Each valid
+quick selection immediately speaks the selected weapon's localized name,
+including single/dual identity, without waiting for animation or coalescing
+intermediate wheel selections. Settled ammo is a non-interrupting weapon
+follow-up; newer selections invalidate stale follow-ups. HUD events are FIFO
+and retain identical independent pickups. A preempted HUD event is replayed
+from its beginning, once per pending identity, after weapon speech. Compass
+speech never interrupts; only its newest crossing is retained for up to
+500 ms and 15 degrees of subsequent heading change, with scope/observer
+invalidation. Clicks remain immediate. Menus suspend gameplay queue service,
+retain HUD events during pause, and keep immediate focus/F5 speech; stage
+transitions clear old-context messages. Explicit queries remain foreground.
+
+The bundled Prism adapter optionally queries speaking state, at most once per
+50 ms after startup grace; unsupported/error/startup-idle cases use a timing
+estimate, with a stuck-busy watchdog. `SpeechMillisecondsPerCharacter` defaults
+to 60 (10–250), `SpeechStartupGraceMs` to 200 (100–2000), in `[Accessibility]`.
+Lower-priority dispatch never interrupts even when estimated completion is
+early. No completion method proves per-utterance audible delivery. Replay may
+repeat words, and unsupported providers may still queue text internally.
+
+There are 64 HUD records and a separate 64-record weapon retry/follow-up queue;
+compass has one pending record. Backend rejection retries at 250 ms intervals,
+at most three attempts. Capacity loss, retries and expiry are logged, never
+hidden as text deduplication. Respawn initial prompts survive pending-second
+replacement; old seconds are replaced and invalidated on respawn. Queue IDs,
+ages, active/pending text, overflow/replay counts and output/poll cost are
+included in Shift+F2 diagnostics. The existing English role vocabulary remains
+the localization boundary; no new player-facing English label is introduced.
+Owner listening acceptance is pending. No new session was launched by the agent.
+
 ### Accessibility menu and audio glossary
 
 Extended Options contains Accessibility → Audio glossary. Native menu dialogs,

@@ -9,5 +9,6 @@ s32 accessibilitySpeechBackendIsAvailable(void);
 const char *accessibilitySpeechBackendGetName(void);
 s32 accessibilitySpeechBackendOutput(const char *text, s32 interrupt);
 s32 accessibilitySpeechBackendCancel(void);
+s32 accessibilitySpeechBackendGetSpeaking(void);
 
 #endif

@@ -1419,6 +1419,11 @@
 #define HUDMSGFLAG_ALLOWDUPES  0x08
 #define HUDMSGFLAG_DELAY       0x10 // wait minimum 3 frames before showing
 #define HUDMSGFLAG_NOWRAP      0x20
+/* Semantic pickup metadata, stripped before native HUD presentation. */
+#define HUDMSGFLAG_PICKUP_AMMO   0x40
+#define HUDMSGFLAG_PICKUP_WEAPON 0x80
+#define HUDMSGFLAG_PICKUP_ITEM   0x100
+#define HUDMSGFLAG_PICKUP_MASK (HUDMSGFLAG_PICKUP_AMMO | HUDMSGFLAG_PICKUP_WEAPON | HUDMSGFLAG_PICKUP_ITEM)
 
 #define HUDMSGREASON_NOCONTROL 0x00000002
 

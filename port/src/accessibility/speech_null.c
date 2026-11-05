@@ -31,3 +31,5 @@ s32 accessibilitySpeechBackendCancel(void)
 {
 	return 0;
 }
+
+s32 accessibilitySpeechBackendGetSpeaking(void) { return -1; }

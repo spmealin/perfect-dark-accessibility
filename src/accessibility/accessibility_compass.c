@@ -7,6 +7,7 @@
 #include "game/lv.h"
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_announcement.h"
+#include "accessibility/accessibility_speech_queue.h"
 #include "accessibility/accessibility_compass.h"
 #include "accessibility/accessibility_log.h"
 #include "accessibility/accessibility_observer.h"
@@ -244,6 +245,7 @@ void accessibilityCompassTick(void)
 			accessibilityToneStopCompass();
 		}
 		g_AccessibilityCompassScopeActive = false;
+		accessibilitySpeechQueueInvalidate(ACCESSIBILITY_SPEECH_COMPASS, -1);
 		g_AccessibilityCompassHasHeading = false;
 		return;
 	}
@@ -265,10 +267,12 @@ void accessibilityCompassTick(void)
 #endif
 
 	heading = accessibilityCompassHeading(&observer);
+	accessibilitySpeechQueueCompassHeading(heading);
 
 	if (g_AccessibilityCompassObserverProp != (uintptr_t)observer.prop
 			|| g_AccessibilityCompassObserverRemote != observer.isremote) {
 		if (g_AccessibilityCompassObserverProp != 0) {
+			accessibilitySpeechQueueInvalidate(ACCESSIBILITY_SPEECH_COMPASS, -1);
 			accessibilityToneStopCompass();
 			accessibilityLogEvent("compass", "observer_change",
 					"old_observer=%p old_remote=%d new_observer=%p new_remote=%d tick=%d stage=%d player=%d",
@@ -285,6 +289,9 @@ void accessibilityCompassTick(void)
 		g_AccessibilityCompassLastCardinalArmed = true;
 	}
 
+	if (accessibilityGetCompassMode() != 1) {
+		accessibilitySpeechQueueInvalidate(ACCESSIBILITY_SPEECH_COMPASS, -1);
+	}
 	if (accessibilityGetCompassMode() == 0) {
 		g_AccessibilityCompassHasHeading = false;
 		return;
@@ -318,6 +325,7 @@ void accessibilityCompassTick(void)
 
 void accessibilityCompassReset(const char *reason)
 {
+	accessibilitySpeechQueueInvalidate(ACCESSIBILITY_SPEECH_COMPASS, -1);
 	accessibilityToneStopCompass();
 	g_AccessibilityCompassScopeActive = false;
 	g_AccessibilityCompassHasHeading = false;

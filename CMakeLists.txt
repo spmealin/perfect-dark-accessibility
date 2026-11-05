@@ -303,6 +303,7 @@ file(GLOB_RECURSE SRC_GAME "${CMAKE_SOURCE_DIR}/src/game/*.c")
 set(SRC_ACCESSIBILITY
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_announcement.c"
+  "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_speech_queue.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_beacon.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_cane.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_cane_result.c"

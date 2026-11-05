@@ -14,6 +14,8 @@ enum accessibilityscanner {
 void accessibilityInit(void);
 void accessibilityShutdown(void);
 void accessibilityPerformanceTick(void);
+void accessibilityGetSpeechQueueTuning(s32 *millisecondspercharacter, s32 *startupgracems);
+s32 accessibilityGetPickupSpeechDurationMs(void);
 void accessibilityPerformanceShutdown(void);
 #if ACCESSIBILITY_PERFORMANCE_DIAGNOSTICS
 void accessibilityPerformanceRecordGameplayTime(u64 elapsed);

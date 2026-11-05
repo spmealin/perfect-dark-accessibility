@@ -34,6 +34,7 @@ struct accessibilityweaponfunctionstate {
 	s32 activemenuselection;
 	s32 pendingweaponnum;
 	s32 pendingticks;
+	s32 requestedvalid, requestedweapon, requesteddual;
 	enum accessibilityweaponchangesource pendingsource;
 };
 
@@ -134,9 +135,7 @@ static void accessibilityWeaponAnnounceChange(s32 playernum, s32 weaponnum,
 	char weaponname[ACCESSIBILITY_WEAPON_TEXT_MAX];
 	char utterance[ACCESSIBILITY_WEAPON_TEXT_MAX];
 	const char *ammoname;
-	const char *name;
 	s32 ammocount;
-	s32 currentindex;
 	s32 hasname = false;
 	s32 hasammo = false;
 
@@ -150,13 +149,11 @@ static void accessibilityWeaponAnnounceChange(s32 playernum, s32 weaponnum,
 		hasammo = ammoname && ammoname[0];
 	}
 
-	if (source == ACCESSIBILITY_WEAPON_CHANGE_QUICK || dual) {
-		currentindex = invGetCurrentIndex();
-		name = !dual && currentindex >= 0 && currentindex < invGetCount()
-			? langGet(invGetNameIdByIndex(currentindex))
-			: bgunGetName(weaponnum);
+	/* Quick-change names were already dispatched synchronously at selection.
+	 * Only settled ammunition follows, without restarting that name. */
+	if (source != ACCESSIBILITY_WEAPON_CHANGE_QUICK && dual) {
 		accessibilityWeaponFormatName(weaponname, sizeof(weaponname),
-				weaponnum, dual, name);
+				weaponnum, dual, bgunGetName(weaponnum));
 		hasname = weaponname[0] != '\0';
 	}
 
@@ -171,9 +168,12 @@ static void accessibilityWeaponAnnounceChange(s32 playernum, s32 weaponnum,
 	}
 
 	if (utterance[0]) {
-		accessibilityAnnouncementWeaponChange(utterance,
-				accessibilityWeaponChangeSourceName(source), playernum,
-				source == ACCESSIBILITY_WEAPON_CHANGE_QUICK);
+		if (source == ACCESSIBILITY_WEAPON_CHANGE_QUICK) {
+			accessibilityAnnouncementWeaponFunction(utterance, playernum);
+		} else {
+			accessibilityAnnouncementWeaponChange(utterance,
+					accessibilityWeaponChangeSourceName(source), playernum, false);
+		}
 		accessibilityLogEvent("weapon_change", "announced",
 				"player=%d stage=%d source=%s weapon=%d secondary=%d dual=%d ammo_type=%d ammo_count=%d text=%s",
 				playernum, g_Vars.stagenum,
@@ -239,6 +239,10 @@ void accessibilityWeaponQuickChangeRequested(s32 playernum,
 		s32 selectedweaponnum)
 {
 	struct accessibilityweaponfunctionstate *state;
+	s32 dual;
+	s32 index, count;
+	const char *selectedname;
+	char name[ACCESSIBILITY_WEAPON_TEXT_MAX];
 
 	if (playernum < 0 || playernum >= MAX_PLAYERS
 			|| selectedweaponnum < WEAPON_UNARMED
@@ -247,13 +251,36 @@ void accessibilityWeaponQuickChangeRequested(s32 playernum,
 	}
 
 	state = &g_AccessibilityWeaponFunctionStates[playernum];
+	dual = g_Vars.currentplayer && g_Vars.currentplayer->gunctrl.dualwielding
+			&& selectedweaponnum != WEAPON_REMOTEMINE;
 
-	if (state->initialized && state->weaponnum == selectedweaponnum) {
+	if (state->requestedvalid && state->requestedweapon == selectedweaponnum
+			&& state->requesteddual == dual) {
 		accessibilityLogEvent("weapon_change", "request_suppressed",
-				"player=%d source=quick_change weapon=%d reason=already_equipped",
+				"player=%d source=quick_change weapon=%d reason=unchanged_selection",
 				playernum, selectedweaponnum);
 		return;
 	}
+	state->requestedvalid = true;
+	state->requestedweapon = selectedweaponnum;
+	state->requesteddual = dual;
+	selectedname = bgunGetName(selectedweaponnum);
+	/* Resolve mission-specific inventory aliases for this requested weapon,
+	 * not invGetCurrentIndex(), which still refers to the old equipment. */
+	if (!dual) {
+		count = invGetCount();
+		for (index = 0; index < count; index++) {
+			if (invGetWeaponNumByIndex(index) == selectedweaponnum) {
+				selectedname = langGet(invGetNameIdByIndex(index));
+				break;
+			}
+		}
+	}
+	accessibilityWeaponFormatName(name, sizeof(name), selectedweaponnum, dual,
+			selectedname);
+	accessibilityAnnouncementWeaponChange(name, "quick_selection", playernum, true);
+	accessibilityLogEvent("weapon_change", "selection_announced",
+			"player=%d weapon=%d dual=%d text=%s", playernum, selectedweaponnum, dual, name);
 
 	state->pendingweaponnum = selectedweaponnum;
 	state->pendingsource = ACCESSIBILITY_WEAPON_CHANGE_QUICK;
@@ -288,6 +315,10 @@ void accessibilityWeaponFunctionObserve(s32 playernum, s32 stagenum,
 	if (!state->initialized || state->stagenum != stagenum) {
 		s32 activemenuopen = state->activemenuopen;
 		s32 activemenuselection = state->activemenuselection;
+		s32 earlyquick = !state->initialized
+				&& state->pendingsource == ACCESSIBILITY_WEAPON_CHANGE_QUICK;
+		s32 earlyweapon = state->pendingweaponnum;
+		s32 earlydual = state->requesteddual;
 
 		memset(state, 0, sizeof(*state));
 		state->initialized = true;
@@ -295,13 +326,23 @@ void accessibilityWeaponFunctionObserve(s32 playernum, s32 stagenum,
 		state->weaponnum = weaponnum;
 		state->secondary = secondary;
 		state->dual = dual;
+		state->requestedvalid = true;
+		state->requestedweapon = weaponnum;
+		state->requesteddual = dual;
 		state->activemenuopen = activemenuopen;
 		state->activemenuselection = activemenuselection;
+		if (earlyquick) {
+			state->pendingsource = ACCESSIBILITY_WEAPON_CHANGE_QUICK;
+			state->pendingweaponnum = state->requestedweapon = earlyweapon;
+			state->requesteddual = earlydual;
+		}
 		return;
 	}
 
 	if (state->pendingsource != ACCESSIBILITY_WEAPON_CHANGE_NONE) {
-		if (state->pendingweaponnum == weaponnum) {
+		if (state->pendingweaponnum == weaponnum
+				&& (state->pendingsource != ACCESSIBILITY_WEAPON_CHANGE_QUICK
+						|| state->requesteddual == dual)) {
 			accessibilityWeaponAnnounceChange(playernum, weaponnum, secondary,
 					dual, state->pendingsource);
 			weaponchangeannounced = true;
@@ -320,7 +361,8 @@ void accessibilityWeaponFunctionObserve(s32 playernum, s32 stagenum,
 
 	if (state->weaponnum != weaponnum) {
 		if (accessibilityIsWeaponChangeAnnouncementsEnabled()
-				&& dual != state->dual && !weaponchangeannounced) {
+				&& dual != state->dual && !weaponchangeannounced
+				&& state->pendingsource != ACCESSIBILITY_WEAPON_CHANGE_QUICK) {
 			accessibilityWeaponAnnounceWieldState(
 					playernum, weaponnum, dual);
 		}
@@ -328,11 +370,16 @@ void accessibilityWeaponFunctionObserve(s32 playernum, s32 stagenum,
 		state->weaponnum = weaponnum;
 		state->secondary = secondary;
 		state->dual = dual;
+		if (state->pendingsource == ACCESSIBILITY_WEAPON_CHANGE_NONE) {
+			state->requestedweapon = weaponnum;
+			state->requesteddual = dual;
+		}
 		return;
 	}
 
 	if (accessibilityIsWeaponChangeAnnouncementsEnabled()
-			&& dual != state->dual) {
+			&& dual != state->dual && !weaponchangeannounced
+			&& state->pendingsource != ACCESSIBILITY_WEAPON_CHANGE_QUICK) {
 		accessibilityWeaponAnnounceWieldState(playernum, weaponnum, dual);
 	}
 
@@ -367,6 +414,10 @@ void accessibilityWeaponFunctionObserve(s32 playernum, s32 stagenum,
 
 	state->secondary = secondary;
 	state->dual = dual;
+	if (state->pendingsource == ACCESSIBILITY_WEAPON_CHANGE_NONE) {
+		state->requestedweapon = weaponnum;
+		state->requesteddual = dual;
+	}
 }
 
 void accessibilityWeaponFunctionReset(const char *reason)

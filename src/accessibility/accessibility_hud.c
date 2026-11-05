@@ -7,6 +7,7 @@
 #include "system.h"
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_announcement.h"
+#include "accessibility/accessibility_speech_queue.h"
 #include "accessibility/accessibility_hud.h"
 #include "accessibility/accessibility_log.h"
 
@@ -112,6 +113,7 @@ void accessibilityHudRespawnCountdownObserve(s32 visible, const char *prompt,
 	state = &g_AccessibilityRespawnStates[playernum];
 
 	if (!accessibilityIsHudMessagesEnabled() || !visible) {
+		accessibilitySpeechQueueInvalidate(ACCESSIBILITY_SPEECH_COUNTDOWN, playernum);
 		if (state->active) {
 			accessibilityLogEvent("respawn_countdown", "hidden",
 					"player=%d previous_seconds=%d reason=%s",

@@ -31,6 +31,9 @@
 static s32 g_AccessibilityEnabledConfig = 1;
 static s32 g_AccessibilityLoggingEnabledConfig = 1;
 static s32 g_AccessibilitySpeechEnabledConfig = 1;
+static s32 g_AccessibilitySpeechMillisecondsPerCharacter = 60;
+static s32 g_AccessibilitySpeechStartupGraceMs = 200;
+static s32 g_AccessibilitySpeechPickupDurationMs = 1000;
 static s32 g_AccessibilityMenuNarrationEnabledConfig = 1;
 static s32 g_AccessibilityHudMessagesEnabledConfig = 1;
 static s32 g_AccessibilityEnvironmentalHazardsEnabledConfig = 1;
@@ -552,13 +555,18 @@ void accessibilityInit(void)
 
 	if (g_AccessibilitySpeechEnabledConfig) {
 		accessibilitySpeechInit();
+		accessibilityLogEvent("speech_queue", "start_state",
+				"enabled=1 priority=weapon_hud_compass immediate_weapon_names=1 hud_capacity=64 weapon_retry_capacity=64 compass_expiry_ms=500 ms_per_character=%d startup_grace_ms=%d pickup_duration_ms=%d speaking_query_state=%d",
+				g_AccessibilitySpeechMillisecondsPerCharacter, g_AccessibilitySpeechStartupGraceMs,
+				g_AccessibilitySpeechPickupDurationMs,
+				accessibilitySpeechGetSpeaking());
 
 		if (sysArgCheck("--accessibility-speech-test")) {
 			if (!accessibilitySpeechIsAvailable()) {
 				accessibilityLogEvent("speech", "output_result",
 						"accepted=0 reason=test_backend_unavailable");
 			} else {
-				accessibilitySpeechOutput("Perfect Dark accessibility speech test.", 1);
+				accessibilityAnnouncementStatus("Perfect Dark accessibility speech test.", "speech_test", 0, 1);
 			}
 		}
 	} else if (sysArgCheck("--accessibility-speech-test")) {
@@ -616,6 +624,14 @@ s32 accessibilityIsEnabled(void)
 {
 	return g_AccessibilityEnabled;
 }
+
+void accessibilityGetSpeechQueueTuning(s32 *millisecondspercharacter, s32 *startupgracems)
+{
+	*millisecondspercharacter = g_AccessibilitySpeechMillisecondsPerCharacter;
+	*startupgracems = g_AccessibilitySpeechStartupGraceMs;
+}
+
+s32 accessibilityGetPickupSpeechDurationMs(void) { return g_AccessibilitySpeechPickupDurationMs; }
 
 s32 accessibilityIsMenuNarrationEnabled(void)
 {
@@ -815,6 +831,9 @@ PD_CONSTRUCTOR static void accessibilityConfigInit(void)
 	configRegisterInt("Accessibility.Enabled", &g_AccessibilityEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.LoggingEnabled", &g_AccessibilityLoggingEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.SpeechEnabled", &g_AccessibilitySpeechEnabledConfig, 0, 1);
+	configRegisterInt("Accessibility.SpeechMillisecondsPerCharacter", &g_AccessibilitySpeechMillisecondsPerCharacter, 10, 250);
+	configRegisterInt("Accessibility.SpeechStartupGraceMs", &g_AccessibilitySpeechStartupGraceMs, 100, 2000);
+	configRegisterInt("Accessibility.SpeechPickupDurationMs", &g_AccessibilitySpeechPickupDurationMs, 250, 3000);
 	configRegisterInt("Accessibility.MenuNarration", &g_AccessibilityMenuNarrationEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.HudMessages", &g_AccessibilityHudMessagesEnabledConfig, 0, 1);
 	configRegisterInt("Accessibility.EnvironmentalHazards", &g_AccessibilityEnvironmentalHazardsEnabledConfig, 0, 1);

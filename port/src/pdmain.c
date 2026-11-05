@@ -74,6 +74,9 @@
 #include "types.h"
 #include "system.h"
 #include "accessibility/accessibility.h"
+#include "accessibility/accessibility_announcement.h"
+#include "accessibility/accessibility_speech_queue.h"
+#include "accessibility/accessibility_weapon.h"
 #include "accessibility/accessibility_glossary.h"
 #include "accessibility/accessibility_beacon.h"
 #include "accessibility/accessibility_cane.h"
@@ -527,6 +530,8 @@ void mainLoop(void)
 			}
 		}
 
+		accessibilityAnnouncementReset();
+		accessibilityWeaponFunctionReset("stage_stop");
 		accessibilityGlossaryStop();
 		accessibilityBeaconReset("stage_stop", true);
 		accessibilityCaneReset("stage_stop");
@@ -618,6 +623,8 @@ void mainTick(void)
 			}
 
 			gdl = lvRender(gdl);
+			accessibilitySpeechQueueTick(g_Vars.stagenum,
+					g_Menus[0].curdialog != NULL, accessibilityIsEnabled());
 
 			if (debugGetProfileMode() >= 2) {
 				gdl = profileRender(gdl);

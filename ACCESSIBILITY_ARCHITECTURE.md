@@ -820,6 +820,28 @@ changed. See [the test guide](tools/tests/README.md) for boundaries and replay.
 
 ## Upstream hook ledger
 
+Pickup speech metadata: `src/game/propobj.c` marks existing ammo, weapon
+(including native text overrides), key/shield/general-item pickup messages
+with semantic `HUDMSGFLAG_PICKUP_*` bits. No label parsing or pickup gameplay
+rule changes are involved. The existing `src/game/hudmsg.c` observation hook
+passes those bits to accessibility, then strips them before native duplicate,
+capacity, storage and rendering policy; original HUD behavior is preserved.
+`src/include/constants.h` defines the three metadata bits and combined mask.
+The core queue applies one-second pickup pacing and weapon-over-ammo priority;
+no speech policy or platform calls are added to the pickup code.
+
+Priority speech is now owned by the fixed-storage core
+`accessibility_speech_queue.c`. Existing announcement adapters submit events;
+only that dispatcher outputs/cancels runtime speech. Automatic ordering is
+weapon selection > HUD > compass. Immediate quick-selection names use the
+existing `bondgun.c` hooks; no new input/gameplay hook is required. The
+`port/src/pdmain.c` loop services completion/queues after `lvRender` (including
+menus/pause), and stage teardown resets pending context before pools are freed.
+Prism speaking-state capability/query remains behind the speech backend, with
+a null-backend implementation and conservative fallback. Shift+F2 observes the
+queue and backend-call cost through the existing incident collector. See
+`documentation/ACCESSIBILITY_SPEECH_SCHEDULER_DESIGN.md` for limits and tests.
+
 Mix protection adds no established-game hooks. The accessibility coordinator
 owns four mix configuration keys and startup logging. The port tone mixer
 publishes separate game/world/feedback buses into the fixed-state DSP in

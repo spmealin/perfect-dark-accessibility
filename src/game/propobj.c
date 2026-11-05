@@ -17002,7 +17002,7 @@ void currentPlayerQueuePickupAmmoHudmsg(s32 ammotype, s32 pickupqty)
 	char buffer[100] = "";
 
 	ammotypeGetPickupMessage(buffer, ammotype, pickupqty);
-	hudmsgCreateWithFlags(buffer, HUDMSGTYPE_DEFAULT, HUDMSGFLAG_ONLYIFALIVE);
+	hudmsgCreateWithFlags(buffer, HUDMSGTYPE_DEFAULT, HUDMSGFLAG_ONLYIFALIVE | HUDMSGFLAG_PICKUP_AMMO);
 }
 
 void ammoHandlePickup(s32 ammotype, s32 quantity, bool withsound, bool withhudmsg)
@@ -17250,7 +17250,7 @@ void currentPlayerQueuePickupWeaponHudmsg(u32 weaponnum, bool dual)
 	}
 
 	weaponGetPickupText(buffer, weaponnum, dual);
-	hudmsgCreateWithFlags(buffer, HUDMSGTYPE_DEFAULT, HUDMSGFLAG_ONLYIFALIVE | HUDMSGFLAG_ALLOWDUPES);
+	hudmsgCreateWithFlags(buffer, HUDMSGTYPE_DEFAULT, HUDMSGFLAG_ONLYIFALIVE | HUDMSGFLAG_ALLOWDUPES | HUDMSGFLAG_PICKUP_WEAPON);
 }
 
 const char var7f1aa140[] = "autodoorcanclose:      blocking door\n\n";
@@ -17285,7 +17285,7 @@ s32 propPickupByPlayer(struct prop *prop, bool showhudmsg)
 				text = langGet(L_PROPOBJ_040); // "Picked up a key."
 			}
 
-			hudmsgCreateWithFlags(text, HUDMSGTYPE_DEFAULT, HUDMSGFLAG_ONLYIFALIVE | HUDMSGFLAG_ALLOWDUPES);
+			hudmsgCreateWithFlags(text, HUDMSGTYPE_DEFAULT, HUDMSGFLAG_ONLYIFALIVE | HUDMSGFLAG_ALLOWDUPES | HUDMSGFLAG_PICKUP_ITEM);
 		}
 
 		result = TICKOP_GIVETOPLAYER;
@@ -17365,7 +17365,7 @@ s32 propPickupByPlayer(struct prop *prop, bool showhudmsg)
 					char *text = invGetPickupTextByObj(obj);
 
 					if (text) {
-						hudmsgCreateWithFlags(text, HUDMSGTYPE_DEFAULT, HUDMSGFLAG_ONLYIFALIVE | HUDMSGFLAG_ALLOWDUPES);
+						hudmsgCreateWithFlags(text, HUDMSGTYPE_DEFAULT, HUDMSGFLAG_ONLYIFALIVE | HUDMSGFLAG_ALLOWDUPES | HUDMSGFLAG_PICKUP_WEAPON);
 					} else {
 						currentPlayerQueuePickupWeaponHudmsg(weapon->weaponnum, count == 2);
 					}
@@ -17396,7 +17396,7 @@ s32 propPickupByPlayer(struct prop *prop, bool showhudmsg)
 
 						if (text) {
 							sp70 = true;
-							hudmsgCreateWithFlags(text, HUDMSGTYPE_DEFAULT, HUDMSGFLAG_ONLYIFALIVE | HUDMSGFLAG_ALLOWDUPES);
+							hudmsgCreateWithFlags(text, HUDMSGTYPE_DEFAULT, HUDMSGFLAG_ONLYIFALIVE | HUDMSGFLAG_ALLOWDUPES | HUDMSGFLAG_PICKUP_WEAPON);
 						} else {
 							if (sp70) {
 								currentPlayerQueuePickupWeaponHudmsg(weapon->weaponnum, count == 2);
@@ -17474,7 +17474,7 @@ s32 propPickupByPlayer(struct prop *prop, bool showhudmsg)
 					}
 				}
 
-				hudmsgCreateWithFlags(text, HUDMSGTYPE_DEFAULT, HUDMSGFLAG_ONLYIFALIVE);
+				hudmsgCreateWithFlags(text, HUDMSGTYPE_DEFAULT, HUDMSGFLAG_ONLYIFALIVE | HUDMSGFLAG_PICKUP_ITEM);
 			}
 
 			result = TICKOP_FREE;
@@ -17505,7 +17505,7 @@ s32 propPickupByPlayer(struct prop *prop, bool showhudmsg)
 				text = langGet(L_PROPOBJ_043); // "Picked up something."
 			}
 
-			hudmsgCreateWithFlags(text, HUDMSGTYPE_DEFAULT, HUDMSGFLAG_ONLYIFALIVE | HUDMSGFLAG_ALLOWDUPES);
+			hudmsgCreateWithFlags(text, HUDMSGTYPE_DEFAULT, HUDMSGFLAG_ONLYIFALIVE | HUDMSGFLAG_ALLOWDUPES | HUDMSGFLAG_PICKUP_ITEM);
 		}
 
 		result = TICKOP_GIVETOPLAYER;

@@ -63,6 +63,11 @@ s32 accessibilitySpeechIsAvailable(void)
 	return g_AccessibilitySpeechAvailable;
 }
 
+s32 accessibilitySpeechGetSpeaking(void)
+{
+	return g_AccessibilitySpeechAvailable ? accessibilitySpeechBackendGetSpeaking() : -1;
+}
+
 const char *accessibilitySpeechGetBackendName(void)
 {
 	if (!g_AccessibilitySpeechAvailable) {

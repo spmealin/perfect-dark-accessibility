@@ -28,6 +28,7 @@ typedef PrismError (__cdecl *PrismBackendInitializeFn)(PrismBackend *backend);
 typedef PrismError (__cdecl *PrismBackendOutputFn)(PrismBackend *backend,
 		const char *text, bool interrupt);
 typedef PrismError (__cdecl *PrismBackendStopFn)(PrismBackend *backend);
+typedef PrismError (__cdecl *PrismBackendIsSpeakingFn)(PrismBackend *backend, bool *speaking);
 typedef const char *(__cdecl *PrismErrorStringFn)(PrismError error);
 
 struct speechPrismCandidate {
@@ -62,6 +63,7 @@ static PrismBackendGetFeaturesFn g_PrismBackendGetFeatures = NULL;
 static PrismBackendInitializeFn g_PrismBackendInitialize = NULL;
 static PrismBackendOutputFn g_PrismBackendOutput = NULL;
 static PrismBackendStopFn g_PrismBackendStop = NULL;
+static PrismBackendIsSpeakingFn g_PrismBackendIsSpeaking = NULL;
 static PrismErrorStringFn g_PrismErrorString = NULL;
 static s32 g_SpeechPrismInitialized = 0;
 static s32 g_SpeechPrismAvailable = 0;
@@ -253,6 +255,7 @@ static void speechPrismClearFunctions(void)
 	g_PrismBackendInitialize = NULL;
 	g_PrismBackendOutput = NULL;
 	g_PrismBackendStop = NULL;
+	g_PrismBackendIsSpeaking = NULL;
 	g_PrismErrorString = NULL;
 }
 
@@ -486,6 +489,9 @@ s32 accessibilitySpeechBackendInit(void)
 	g_PrismBackendInitialize = (PrismBackendInitializeFn)(uintptr_t)speechPrismResolveExport("prism_backend_initialize", &missing);
 	g_PrismBackendOutput = (PrismBackendOutputFn)(uintptr_t)speechPrismResolveExport("prism_backend_output", &missing);
 	g_PrismBackendStop = (PrismBackendStopFn)(uintptr_t)speechPrismResolveExport("prism_backend_stop", &missing);
+	/* Optional: older DLLs/backends retain the scheduler's timing fallback. */
+	g_PrismBackendIsSpeaking = (PrismBackendIsSpeakingFn)(uintptr_t)GetProcAddress(
+			g_SpeechPrismModule, "prism_backend_is_speaking");
 	g_PrismErrorString = (PrismErrorStringFn)(uintptr_t)speechPrismResolveExport("prism_error_string", &missing);
 
 	if (missing) {
@@ -602,4 +608,13 @@ s32 accessibilitySpeechBackendCancel(void)
 
 	error = g_PrismBackendStop(g_SpeechPrismBackend);
 	return error == PRISM_OK;
+}
+
+s32 accessibilitySpeechBackendGetSpeaking(void)
+{
+	bool speaking = false;
+	if (!g_SpeechPrismAvailable || !g_SpeechPrismBackend || !g_PrismBackendIsSpeaking
+			|| !(g_PrismBackendGetFeatures(g_SpeechPrismBackend) & PRISM_BACKEND_SUPPORTS_IS_SPEAKING)) return -1;
+	if (g_PrismBackendIsSpeaking(g_SpeechPrismBackend, &speaking) != PRISM_OK) return -1;
+	return speaking ? 1 : 0;
 }
