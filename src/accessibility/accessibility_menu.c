@@ -34,6 +34,7 @@ struct accessibilitymenusnapshot {
 	s32 dimmed;
 	s32 subindex;
 	s32 selectedindex;
+	s32 checkboxstate;
 	s32 optioncount;
 	s32 scrolloffset;
 	s32 maxscrolloffset;
@@ -371,6 +372,7 @@ static void accessibilityMenuDescribeItem(struct accessibilitymenusnapshot *snap
 	accessibilityMenuCopyNormalized(snapshot->label, sizeof(snapshot->label), text);
 	snapshot->subindex = -1;
 	snapshot->selectedindex = -1;
+	snapshot->checkboxstate = -1;
 	snapshot->optioncount = -1;
 	snapshot->scrolloffset = -1;
 	snapshot->maxscrolloffset = -1;
@@ -415,6 +417,7 @@ static void accessibilityMenuDescribeItem(struct accessibilitymenusnapshot *snap
 		strcpy(snapshot->role, "checkbox");
 		memset(&data, 0, sizeof(data));
 		value = item->handler ? item->handler(MENUOP_GET, item, &data) : 0;
+		snapshot->checkboxstate = value != 0;
 		strcpy(snapshot->value, value ? "checked" : "not checked");
 		break;
 	case MENUITEMTYPE_SLIDER:
@@ -464,6 +467,18 @@ static void accessibilityMenuDescribeItem(struct accessibilitymenusnapshot *snap
 		snapshot->subindex = itemdata ? itemdata->list.index : -1;
 		snapshot->selectedindex = accessibilityMenuGetHandlerValue(item, MENUOP_GETSELECTEDINDEX);
 		accessibilityMenuGetOptionText(item, snapshot->subindex, snapshot->value, sizeof(snapshot->value));
+		if (item->handler && !(item->flags & MENUITEMFLAG_LIST_CUSTOMRENDER)
+				&& snapshot->subindex >= 0 && snapshot->subindex < snapshot->optioncount) {
+			/* Mirror menuitemListRender: 255 means this row has no checkbox.
+			 * GETSELECTEDINDEX is not the check state of a multi-select list. */
+			memset(&data, 0, sizeof(data));
+			data.list.value = snapshot->subindex;
+			data.list.unk04 = 255;
+			item->handler(MENUOP_GETLISTITEMCHECKBOX, item, &data);
+			if (data.list.unk04 != 255) {
+				snapshot->checkboxstate = data.list.unk04 != 0;
+			}
+		}
 		break;
 	case MENUITEMTYPE_KEYBOARD:
 		accessibilityMenuDescribeKeyboard(snapshot, itemdata);
@@ -557,21 +572,39 @@ static void accessibilityMenuCompose(struct accessibilitymenusnapshot *snapshot,
 		accessibilityMenuAppendPart(snapshot->utterance, sizeof(snapshot->utterance),
 				snapshot->summary, snapshot->utterance[0] ? ". " : NULL);
 	}
-	accessibilityMenuAppendPart(snapshot->utterance, sizeof(snapshot->utterance),
-			snapshot->label, snapshot->utterance[0] ? ". " : NULL);
-	accessibilityMenuAppendPart(snapshot->utterance, sizeof(snapshot->utterance),
-			snapshot->role, snapshot->utterance[0]
-				? snapshot->itemtype == MENUITEMTYPE_RANKING ? " " : ", " : NULL);
-	accessibilityMenuAppendPart(snapshot->utterance, sizeof(snapshot->utterance),
-			snapshot->value, snapshot->utterance[0]
-				? snapshot->itemtype == MENUITEMTYPE_RANKING ? ". " : ", " : NULL);
-
-	if (snapshot->subindex >= 0 && snapshot->optioncount > 0
-			&& snapshot->subindex < snapshot->optioncount) {
-		snprintf(position, sizeof(position), "item %d of %d",
-				snapshot->subindex + 1, snapshot->optioncount);
+	if (snapshot->checkboxstate >= 0
+			&& (snapshot->itemtype == MENUITEMTYPE_CHECKBOX
+					|| snapshot->itemtype == MENUITEMTYPE_LIST)) {
+		/* Keep selected/unchecked rows concise. "selected" belongs to the
+		 * same future accessibility translation catalog as other role words. */
+		if (snapshot->utterance[0]) {
+			accessibilityMenuAppend(snapshot->utterance, sizeof(snapshot->utterance), ". ");
+		}
+		if (snapshot->checkboxstate) {
+			accessibilityMenuAppend(snapshot->utterance, sizeof(snapshot->utterance), "selected ");
+		}
+		accessibilityMenuAppend(snapshot->utterance, sizeof(snapshot->utterance), snapshot->label);
+		if (snapshot->itemtype == MENUITEMTYPE_LIST) {
+			accessibilityMenuAppendPart(snapshot->utterance, sizeof(snapshot->utterance),
+					snapshot->value, snapshot->label[0] ? ", " : NULL);
+		}
+	} else {
 		accessibilityMenuAppendPart(snapshot->utterance, sizeof(snapshot->utterance),
-				position, snapshot->utterance[0] ? ", " : NULL);
+				snapshot->label, snapshot->utterance[0] ? ". " : NULL);
+		accessibilityMenuAppendPart(snapshot->utterance, sizeof(snapshot->utterance),
+				snapshot->role, snapshot->utterance[0]
+					? snapshot->itemtype == MENUITEMTYPE_RANKING ? " " : ", " : NULL);
+		accessibilityMenuAppendPart(snapshot->utterance, sizeof(snapshot->utterance),
+				snapshot->value, snapshot->utterance[0]
+					? snapshot->itemtype == MENUITEMTYPE_RANKING ? ". " : ", " : NULL);
+
+		if (snapshot->subindex >= 0 && snapshot->optioncount > 0
+				&& snapshot->subindex < snapshot->optioncount) {
+			snprintf(position, sizeof(position), "item %d of %d",
+					snapshot->subindex + 1, snapshot->optioncount);
+			accessibilityMenuAppendPart(snapshot->utterance, sizeof(snapshot->utterance),
+					position, snapshot->utterance[0] ? ", " : NULL);
+		}
 	}
 
 	if (snapshot->dimmed
@@ -603,6 +636,7 @@ static s32 accessibilityMenuRelevantEqual(const struct accessibilitymenusnapshot
 		&& a->dimmed == b->dimmed
 		&& a->subindex == b->subindex
 		&& a->selectedindex == b->selectedindex
+		&& a->checkboxstate == b->checkboxstate
 		&& a->optioncount == b->optioncount
 		&& a->scrolloffset == b->scrolloffset
 		&& a->keyboardrow == b->keyboardrow

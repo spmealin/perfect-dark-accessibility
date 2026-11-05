@@ -115,6 +115,11 @@ Speech covers much more than the focused menu control. Current support includes:
 Press F5 when a menu's static information was spoken too quickly or focus alone
 does not repeat it.
 
+Checkboxes and checkable list rows announce **selected ITEM** when checked,
+and just **ITEM** when unchecked. Changing a checkmark is announced even if
+focus stays on the same row. Menu titles still read on entry and with F5;
+unavailable controls retain their availability warning.
+
 ## Audio glossary
 
 Open **Extended Options → Accessibility → Audio glossary** from the game's

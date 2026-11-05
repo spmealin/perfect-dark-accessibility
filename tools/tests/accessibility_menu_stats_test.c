@@ -5,6 +5,7 @@
 
 static s32 selected;
 static s32 summaries;
+static s32 checkstate;
 u8 g_KeyboardKeys[5][10];
 static char *names[] = { "Player 1", "EasySim:1", "EasySim:2", "EasySim:3", "EasySim:4" };
 
@@ -35,6 +36,70 @@ char *menuitemScrollableGetText(u32 type) { return ""; }
 char *langGet(s32 textid) { return ""; }
 bool menuitemKeyboardIsStringEmptyOrSpaces(char *text) { return false; }
 void accessibilityLogEvent(const char *category, const char *event, const char *format, ...) { }
+
+static MenuItemHandlerResult checkboxHandler(s32 operation, struct menuitem *item,
+		union handlerdata *data)
+{
+	switch (operation) {
+	case MENUOP_GET: return checkstate;
+	case MENUOP_GETOPTIONCOUNT: data->list.value = 2; break;
+	case MENUOP_GETSELECTEDINDEX: data->list.value = 0xfffff; break;
+	case MENUOP_GETOPTIONTEXT: return (uintptr_t)"Alien Conflict";
+	case MENUOP_GETLISTITEMCHECKBOX:
+		assert(data->list.value == 0);
+		assert(data->list.unk04 == 255);
+		if (checkstate != 255) data->list.unk04 = checkstate;
+		break;
+	}
+	return 0;
+}
+
+static void testCheckboxNarration(void)
+{
+	struct menuitem item = {0};
+	struct accessibilitymenusnapshot snapshot = {0}, previous;
+	union menuitemdata data = {0};
+	item.type = MENUITEMTYPE_LIST;
+	item.handler = checkboxHandler;
+	snapshot.item = &item;
+	snapshot.itemtype = item.type;
+	checkstate = 1;
+	accessibilityMenuDescribeItem(&snapshot, &data);
+	assert(snapshot.selectedindex == 0xfffff && snapshot.checkboxstate == 1);
+	accessibilityMenuCompose(&snapshot, 0, 0);
+	assert(!strcmp(snapshot.utterance, "selected Alien Conflict."));
+	previous = snapshot;
+	checkstate = 0;
+	accessibilityMenuDescribeItem(&snapshot, &data);
+	assert(!accessibilityMenuRelevantEqual(&previous, &snapshot));
+	accessibilityMenuCompose(&snapshot, 0, 0);
+	assert(!strcmp(snapshot.utterance, "Alien Conflict."));
+	strcpy(snapshot.title, "Select Tune");
+	accessibilityMenuCompose(&snapshot, 1, 0);
+	assert(!strcmp(snapshot.utterance, "Select Tune. Alien Conflict."));
+	checkstate = 255; /* Native row has no checkbox: normal list verbosity. */
+	accessibilityMenuDescribeItem(&snapshot, &data);
+	assert(snapshot.checkboxstate == -1);
+	accessibilityMenuCompose(&snapshot, 0, 0);
+	assert(!strcmp(snapshot.utterance, "list, Alien Conflict, item 1 of 2."));
+	item.flags = MENUITEMFLAG_LIST_CUSTOMRENDER;
+	checkstate = 1;
+	accessibilityMenuDescribeItem(&snapshot, &data);
+	assert(snapshot.checkboxstate == -1);
+	item.flags = 0;
+	item.type = snapshot.itemtype = MENUITEMTYPE_CHECKBOX;
+	memset(snapshot.value, 0, sizeof(snapshot.value));
+	accessibilityMenuDescribeItem(&snapshot, &data);
+	strcpy(snapshot.label, "Music");
+	accessibilityMenuCompose(&snapshot, 0, 0);
+	assert(!strcmp(snapshot.utterance, "selected Music."));
+	checkstate = 0;
+	accessibilityMenuDescribeItem(&snapshot, &data);
+	strcpy(snapshot.label, "Music");
+	snapshot.disabled = 1;
+	accessibilityMenuCompose(&snapshot, 0, 0);
+	assert(!strcmp(snapshot.utterance, "Music, unavailable."));
+}
 
 int main(void)
 {
@@ -112,6 +177,7 @@ int main(void)
 		assert(shortbuffer[sizeof(shortbuffer) - 1] == '\0');
 		accessibilityMenuFormatRankingRow(NULL, 0, "", NULL, 0, "", 0);
 	}
-	puts("Stats selector: highlighted rows, stale-summary suppression and selected stats passed.");
+	testCheckboxNarration();
+	puts("Stats selector, ranking formatting and native checkbox narration passed.");
 	return 0;
 }

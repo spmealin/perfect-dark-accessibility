@@ -40,6 +40,22 @@ The Combat Simulator results sequence announces the semantic contents of every c
 
 Mission Select list options announce the complete localized mission name rendered across the location and subtitle lines, such as `dataDyne Central - Extraction`, followed by each bright completion star by its localized difficulty name: Agent, Special Agent, or Perfect Agent. Solo narration follows the renderer's highest-completed-difficulty rule, co-op narration reports the independently stored completion markers, and anti mode announces no completion state because it renders no stars. Combat Simulator challenge lists announce every bright player-count completion star, from one through four players or one through two in the 4 MB configuration. The Completed Challenges page uses the current player's markers, while the general Combat Challenges list uses the same shared-profile markers as its renderer.
 
+Checkable list rows use the native `MENUOP_GETLISTITEMCHECKBOX` response for
+the focused row (255 means no visible checkbox), rather than comparing it
+with `MENUOP_GETSELECTEDINDEX`, which cannot represent multiple selections.
+Ordinary checkboxes use their native `MENUOP_GET` result. Both speak
+`selected ITEM` when checked and only `ITEM` when unchecked, omitting role,
+checked/not-checked suffixes, and list position for those rows. Title/summary
+entry rules and disabled-state warnings remain unchanged. State participates
+in snapshot comparison so toggling without moving focus is announced.
+The English `selected` prefix joins the existing accessibility-authored
+vocabulary pending the accessibility translation catalog; item names remain
+native localized text. No established game hook or setting is added.
+The MinGW64 Windows x64 `ntsc-final` build and all 38 regression tests pass,
+including checked/unchecked rows, in-place toggles, ordinary list fallback,
+ordinary checkboxes, title context, and disabled warnings. Owner listening
+acceptance remains pending; the agent did not launch the game.
+
 ### Accessibility menu and audio glossary
 
 Extended Options contains Accessibility → Audio glossary. Native menu dialogs,
