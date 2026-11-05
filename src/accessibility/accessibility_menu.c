@@ -359,6 +359,21 @@ static void accessibilityMenuDescribeKeyboard(struct accessibilitymenusnapshot *
 	}
 }
 
+static s32 accessibilityMenuGetListCheckboxState(struct menuitem *item,
+		s32 index, s32 count)
+{
+	union handlerdata data;
+	if (!item->handler || (item->flags & MENUITEMFLAG_LIST_CUSTOMRENDER)
+			|| index < 0 || index >= count) return -1;
+	/* Mirror the shared native list renderer, including dropdown popups:
+	 * 255 means absent; every other nonzero value fills the checkbox. */
+	memset(&data, 0, sizeof(data));
+	data.list.value = index;
+	data.list.unk04 = 255;
+	item->handler(MENUOP_GETLISTITEMCHECKBOX, item, &data);
+	return data.list.unk04 == 255 ? -1 : data.list.unk04 != 0;
+}
+
 static void accessibilityMenuDescribeItem(struct accessibilitymenusnapshot *snapshot,
 		union menuitemdata *itemdata)
 {
@@ -417,8 +432,9 @@ static void accessibilityMenuDescribeItem(struct accessibilitymenusnapshot *snap
 		strcpy(snapshot->role, "checkbox");
 		memset(&data, 0, sizeof(data));
 		value = item->handler ? item->handler(MENUOP_GET, item, &data) : 0;
-		snapshot->checkboxstate = value != 0;
-		strcpy(snapshot->value, value ? "checked" : "not checked");
+		/* Ordinary native checkboxes require exactly true, unlike list flags. */
+		snapshot->checkboxstate = value == true;
+		strcpy(snapshot->value, snapshot->checkboxstate ? "checked" : "not checked");
 		break;
 	case MENUITEMTYPE_SLIDER:
 		strcpy(snapshot->role, "slider");
@@ -460,6 +476,10 @@ static void accessibilityMenuDescribeItem(struct accessibilitymenusnapshot *snap
 		snapshot->subindex = snapshot->dimmed && itemdata
 				? itemdata->dropdown.list.index : snapshot->selectedindex;
 		accessibilityMenuGetOptionText(item, snapshot->subindex, snapshot->value, sizeof(snapshot->value));
+		if (snapshot->dimmed) {
+			snapshot->checkboxstate = accessibilityMenuGetListCheckboxState(item,
+					snapshot->subindex, snapshot->optioncount);
+		}
 		break;
 	case MENUITEMTYPE_LIST:
 		strcpy(snapshot->role, "list");
@@ -467,18 +487,8 @@ static void accessibilityMenuDescribeItem(struct accessibilitymenusnapshot *snap
 		snapshot->subindex = itemdata ? itemdata->list.index : -1;
 		snapshot->selectedindex = accessibilityMenuGetHandlerValue(item, MENUOP_GETSELECTEDINDEX);
 		accessibilityMenuGetOptionText(item, snapshot->subindex, snapshot->value, sizeof(snapshot->value));
-		if (item->handler && !(item->flags & MENUITEMFLAG_LIST_CUSTOMRENDER)
-				&& snapshot->subindex >= 0 && snapshot->subindex < snapshot->optioncount) {
-			/* Mirror menuitemListRender: 255 means this row has no checkbox.
-			 * GETSELECTEDINDEX is not the check state of a multi-select list. */
-			memset(&data, 0, sizeof(data));
-			data.list.value = snapshot->subindex;
-			data.list.unk04 = 255;
-			item->handler(MENUOP_GETLISTITEMCHECKBOX, item, &data);
-			if (data.list.unk04 != 255) {
-				snapshot->checkboxstate = data.list.unk04 != 0;
-			}
-		}
+		snapshot->checkboxstate = accessibilityMenuGetListCheckboxState(item,
+				snapshot->subindex, snapshot->optioncount);
 		break;
 	case MENUITEMTYPE_KEYBOARD:
 		accessibilityMenuDescribeKeyboard(snapshot, itemdata);
@@ -574,7 +584,8 @@ static void accessibilityMenuCompose(struct accessibilitymenusnapshot *snapshot,
 	}
 	if (snapshot->checkboxstate >= 0
 			&& (snapshot->itemtype == MENUITEMTYPE_CHECKBOX
-					|| snapshot->itemtype == MENUITEMTYPE_LIST)) {
+					|| snapshot->itemtype == MENUITEMTYPE_LIST
+					|| snapshot->itemtype == MENUITEMTYPE_DROPDOWN)) {
 		/* Keep selected/unchecked rows concise. "selected" belongs to the
 		 * same future accessibility translation catalog as other role words. */
 		if (snapshot->utterance[0]) {
@@ -584,7 +595,8 @@ static void accessibilityMenuCompose(struct accessibilitymenusnapshot *snapshot,
 			accessibilityMenuAppend(snapshot->utterance, sizeof(snapshot->utterance), "selected ");
 		}
 		accessibilityMenuAppend(snapshot->utterance, sizeof(snapshot->utterance), snapshot->label);
-		if (snapshot->itemtype == MENUITEMTYPE_LIST) {
+		if (snapshot->itemtype == MENUITEMTYPE_LIST
+				|| snapshot->itemtype == MENUITEMTYPE_DROPDOWN) {
 			accessibilityMenuAppendPart(snapshot->utterance, sizeof(snapshot->utterance),
 					snapshot->value, snapshot->label[0] ? ", " : NULL);
 		}
@@ -607,7 +619,7 @@ static void accessibilityMenuCompose(struct accessibilitymenusnapshot *snapshot,
 		}
 	}
 
-	if (snapshot->dimmed
+	if (snapshot->dimmed && snapshot->checkboxstate < 0
 			&& (snapshot->itemtype == MENUITEMTYPE_DROPDOWN
 					|| snapshot->itemtype == MENUITEMTYPE_PLAYERSTATS
 					|| snapshot->itemtype == MENUITEMTYPE_SLIDER)) {

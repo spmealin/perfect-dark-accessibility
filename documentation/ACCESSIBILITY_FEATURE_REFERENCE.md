@@ -51,6 +51,22 @@ in snapshot comparison so toggling without moving focus is announced.
 The English `selected` prefix joins the existing accessibility-authored
 vocabulary pending the accessibility translation catalog; item names remain
 native localized text. No established game hook or setting is added.
+
+Follow-up audit (2026-11-05): session `1793894474`, capture 1, is on Team
+Control; its Teams Enabled control already logs `selected Teams Enabled`
+when checked and `Teams Enabled` when unchecked. The audit found an independent
+legacy inventory-device provider suffix (`checked`/`not checked`) and removed
+it, leaving selection state to the common composer without losing inventory
+descriptions. All four native list-checkbox providers were inspected: pause
+inventory devices, random-weapon filters, soundtrack selection, and port setup
+import/export. The latter exposes nonzero bitmask values, which remain checked.
+Open dropdown option lists now share that query; closed dropdowns and custom
+list renderers do not invent checkboxes. Standalone checkbox truth matches
+the native renderer's exact `== true` comparison. Title/disabled context is
+preserved, without role/position/open suffixes on checkable rows. Regression
+source covers these cases. No tests or builds were run for this follow-up
+because the owner has an active session; owner acceptance remains pending.
+
 The MinGW64 Windows x64 `ntsc-final` build and all 38 regression tests pass,
 including checked/unchecked rows, in-place toggles, ordinary list fallback,
 ordinary checkboxes, title context, and disabled warnings. Owner listening

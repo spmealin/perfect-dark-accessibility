@@ -4521,27 +4521,11 @@ MenuItemHandlerResult menuhandlerInventoryList(s32 operation, struct menuitem *i
 				&& data->accessibility.index >= 0
 				&& data->accessibility.index < invGetCount()) {
 			s32 weaponnum = invGetWeaponNumByIndex(data->accessibility.index);
-			s32 state = weaponnum == WEAPON_NONE
-					? DEVICESTATE_UNEQUIPPED
-					: currentPlayerGetDeviceState(weaponnum);
-			MenuItemHandlerResult result;
-
-			result = inventoryFormatAccessibilityText(data, weaponnum,
+			/* Checkbox state comes from GETLISTITEMCHECKBOX in the common
+			 * narrator, just as it does in the visual list renderer. */
+			return inventoryFormatAccessibilityText(data, weaponnum,
 					invGetNameByIndex(data->accessibility.index),
 					invMenuGetWeaponDescription(weaponnum));
-
-			if (result && state != DEVICESTATE_UNEQUIPPED) {
-				size_t used = strlen(data->accessibility.buffer);
-
-				if (used < data->accessibility.bufferlen - 1) {
-					snprintf(data->accessibility.buffer + used,
-							data->accessibility.bufferlen - used,
-							", %s", state == DEVICESTATE_ACTIVE
-								? "checked" : "not checked");
-				}
-			}
-
-			return result;
 		}
 		break;
 	case MENUOP_GETOPTIONCOUNT:

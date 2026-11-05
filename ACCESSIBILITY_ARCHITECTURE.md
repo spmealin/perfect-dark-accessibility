@@ -820,6 +820,15 @@ changed. See [the test guide](tools/tests/README.md) for boundaries and replay.
 
 ## Upstream hook ledger
 
+Checkbox audit: the existing `mainmenu.c` inventory accessibility-text provider
+no longer appends its own checked/not-checked state. It still supplies the
+native item description; the core reads the existing native list-checkbox
+query and composes selection wording once. No new hook or native menu action
+is introduced. The core shares that query with open dropdowns (which use the
+same renderer), while ordinary checkbox truth matches the renderer's exact
+`== true` rule. Existing soundtrack/random-weapon and setup import/export
+checkboxes remain on the common list path, including nonzero bitmask values.
+
 Pickup speech metadata: `src/game/propobj.c` marks existing ammo, weapon
 (including native text overrides), key/shield/general-item pickup messages
 with semantic `HUDMSGFLAG_PICKUP_*` bits. No label parsing or pickup gameplay

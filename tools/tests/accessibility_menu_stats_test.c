@@ -77,6 +77,10 @@ static void testCheckboxNarration(void)
 	strcpy(snapshot.title, "Select Tune");
 	accessibilityMenuCompose(&snapshot, 1, 0);
 	assert(!strcmp(snapshot.utterance, "Select Tune. Alien Conflict."));
+	checkstate = 0x20; /* Import/export selections expose bitmasks, not bools. */
+	accessibilityMenuDescribeItem(&snapshot, &data);
+	accessibilityMenuCompose(&snapshot, 0, 0);
+	assert(!strcmp(snapshot.utterance, "selected Alien Conflict."));
 	checkstate = 255; /* Native row has no checkbox: normal list verbosity. */
 	accessibilityMenuDescribeItem(&snapshot, &data);
 	assert(snapshot.checkboxstate == -1);
@@ -99,6 +103,32 @@ static void testCheckboxNarration(void)
 	snapshot.disabled = 1;
 	accessibilityMenuCompose(&snapshot, 0, 0);
 	assert(!strcmp(snapshot.utterance, "Music, unavailable."));
+	snapshot.disabled = 0;
+	checkstate = 2; /* Ordinary renderer checks == true, not nonzero. */
+	accessibilityMenuDescribeItem(&snapshot, &data);
+	strcpy(snapshot.label, "Music");
+	accessibilityMenuCompose(&snapshot, 0, 0);
+	assert(!strcmp(snapshot.utterance, "Music."));
+	/* Open dropdowns render their options through the same list renderer. */
+	memset(&snapshot, 0, sizeof(snapshot));
+	item.type = snapshot.itemtype = MENUITEMTYPE_DROPDOWN;
+	snapshot.item = &item;
+	snapshot.dimmed = 1;
+	checkstate = 1;
+	accessibilityMenuDescribeItem(&snapshot, &data);
+	accessibilityMenuCompose(&snapshot, 0, 0);
+	assert(!strcmp(snapshot.utterance, "selected Alien Conflict."));
+	previous = snapshot;
+	checkstate = 0;
+	accessibilityMenuDescribeItem(&snapshot, &data);
+	assert(!accessibilityMenuRelevantEqual(&previous, &snapshot));
+	accessibilityMenuCompose(&snapshot, 0, 0);
+	assert(!strcmp(snapshot.utterance, "Alien Conflict."));
+	snapshot.dimmed = 0;
+	accessibilityMenuDescribeItem(&snapshot, &data);
+	assert(snapshot.checkboxstate == -1); /* No checkbox in the closed control. */
+	accessibilityMenuCompose(&snapshot, 0, 0);
+	assert(strstr(snapshot.utterance, "dropdown"));
 }
 
 int main(void)

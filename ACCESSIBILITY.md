@@ -148,6 +148,11 @@ and just **ITEM** when unchecked. Changing a checkmark is announced even if
 focus stays on the same row. Menu titles still read on entry and with F5;
 unavailable controls retain their availability warning.
 
+This also applies to device checkmarks in the pause inventory, soundtrack and
+random-weapon filters, and Combat Simulator setup import/export selections.
+Checkable rows in an open dropdown use the same wording. Inventory descriptions
+remain available, without an extra “checked” or “not checked” suffix.
+
 ## Audio glossary
 
 Open **Extended Options → Accessibility → Audio glossary** from the game's
