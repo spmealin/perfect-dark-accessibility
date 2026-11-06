@@ -953,6 +953,12 @@ dialogs (`port/src/mpsetups.c`). These flags do not change controls or dialog
 actions. The observer joins marked visible lines in order and uses the same
 summary for entry speech and F5.
 
+The four Game Files Copy/Delete controls in `src/game/filemgr.c` opt into a
+read-only control-label override. Their handlers combine the same localized
+section heading and file-type label that the native menu displays separately.
+The accessibility observer queries the override only on explicitly marked
+buttons; activation and visual labels are unchanged.
+
 ## Current evidence and remaining validation
 
 The PC radial-menu mouse adapter is separate from accessibility policy:

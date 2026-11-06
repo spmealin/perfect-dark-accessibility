@@ -411,6 +411,11 @@ static void accessibilityMenuDescribeItem(struct accessibilitymenusnapshot *snap
 		break;
 	case MENUITEMTYPE_SELECTABLE:
 		strcpy(snapshot->role, "button");
+		if ((item->flags & MENUITEMFLAG_ACCESSIBILITYOPTION)
+				&& accessibilityMenuGetProviderText(item, MENUACCESSIBILITYPART_CONTROL,
+					-1, option, sizeof(option))) {
+			accessibilityMenuCopyNormalized(snapshot->label, sizeof(snapshot->label), option);
+		}
 
 		/*
 		 * Selectables can render dynamic secondary text on their right side.

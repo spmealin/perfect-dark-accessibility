@@ -169,6 +169,29 @@ static void testStaticDialogSummary(void)
 	assert(!strcmp(snapshot.utterance, "Cancel, button."));
 }
 
+static MenuItemHandlerResult fileActionLabel(s32 operation, struct menuitem *item,
+		union handlerdata *data)
+{
+	if (operation == MENUOP_GETACCESSIBILITYTEXT) {
+		assert(data->accessibility.part == MENUACCESSIBILITYPART_CONTROL);
+		snprintf(data->accessibility.buffer, data->accessibility.bufferlen,
+				"Delete: Single Player Agent File");
+		return 1;
+	}
+	return 0;
+}
+
+static void testFileActionLabel(void)
+{
+	struct menuitem item = { .type = MENUITEMTYPE_SELECTABLE,
+		.flags = MENUITEMFLAG_ACCESSIBILITYOPTION, .handler = fileActionLabel };
+	struct accessibilitymenusnapshot snapshot = { .item = &item, .itemtype = MENUITEMTYPE_SELECTABLE };
+
+	accessibilityMenuDescribeItem(&snapshot, NULL);
+	accessibilityMenuCompose(&snapshot, false, false);
+	assert(!strcmp(snapshot.utterance, "Delete: Single Player Agent File, button."));
+}
+
 int main(void)
 {
 	struct menuitem item = {0};
@@ -176,6 +199,7 @@ int main(void)
 	union menuitemdata data = {0};
 	s32 i;
 	testStaticDialogSummary();
+	testFileActionLabel();
 	item.type = snapshot.itemtype = MENUITEMTYPE_LABEL;
 	item.flags = MENUITEMFLAG_ACCESSIBILITYREADONLY;
 	item.param2 = 1;

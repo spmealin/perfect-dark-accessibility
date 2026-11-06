@@ -2506,8 +2506,28 @@ MenuDialogHandlerResult pakChoosePakMenuDialog(s32 operation, struct menudialogd
 	return 0;
 }
 
+static MenuItemHandlerResult filemgrDescribeOperation(struct menuitem *item,
+		union handlerdata *data, s32 heading)
+{
+	if (data->accessibility.part == MENUACCESSIBILITYPART_CONTROL
+			&& data->accessibility.buffer && data->accessibility.bufferlen > 0) {
+		const char *action = langGet(heading);
+		const char *filetype = menuResolveParam2Text(item);
+
+		if (action && filetype) {
+			snprintf(data->accessibility.buffer, data->accessibility.bufferlen,
+					"%s %s", action, filetype);
+			return 1;
+		}
+	}
+	return 0;
+}
+
 MenuItemHandlerResult filemgrOpenCopyFileMenuHandler(s32 operation, struct menuitem *item, union handlerdata *data)
 {
+	if (operation == MENUOP_GETACCESSIBILITYTEXT) {
+		return filemgrDescribeOperation(item, data, L_OPTIONS_100); // "Copy:"
+	}
 	if (operation == MENUOP_SET) {
 		g_Menus[g_MpPlayerNum].fm.filetypeplusone = item->param + 1;
 		filelistCreate(0, item->param);
@@ -2525,6 +2545,9 @@ MenuItemHandlerResult filemgrOpenCopyFileMenuHandler(s32 operation, struct menui
 
 MenuItemHandlerResult filemgrOpenDeleteFileMenuHandler(s32 operation, struct menuitem *item, union handlerdata *data)
 {
+	if (operation == MENUOP_GETACCESSIBILITYTEXT) {
+		return filemgrDescribeOperation(item, data, L_OPTIONS_101); // "Delete:"
+	}
 	if (operation == MENUOP_SET) {
 		g_Menus[g_MpPlayerNum].fm.filetypeplusone = item->param + 1;
 		filelistCreate(0, item->param);
@@ -3263,7 +3286,7 @@ struct menuitem g_PakChoosePakMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		MENUITEMFLAG_LESSLEFTPADDING,
+		MENUITEMFLAG_LESSLEFTPADDING | MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		L_OPTIONS_108, // "Use this menu to delete game notes from your Controller Paks."
 		0,
 		NULL,
@@ -3356,7 +3379,7 @@ struct menuitem g_FilemgrOperationsMenuItems[] = {
 	{
 		MENUITEMTYPE_SELECTABLE,
 		FILETYPE_GAME,
-		0,
+		MENUITEMFLAG_ACCESSIBILITYOPTION,
 		L_OPTIONS_103, // "Single Player Agent File"
 		0,
 		filemgrOpenCopyFileMenuHandler,
@@ -3364,7 +3387,7 @@ struct menuitem g_FilemgrOperationsMenuItems[] = {
 	{
 		MENUITEMTYPE_SELECTABLE,
 		FILETYPE_MPPLAYER,
-		0,
+		MENUITEMFLAG_ACCESSIBILITYOPTION,
 		L_OPTIONS_105, // "Combat Simulator Player File"
 		0,
 		filemgrOpenCopyFileMenuHandler,
@@ -3388,7 +3411,7 @@ struct menuitem g_FilemgrOperationsMenuItems[] = {
 	{
 		MENUITEMTYPE_SELECTABLE,
 		FILETYPE_GAME,
-		0,
+		MENUITEMFLAG_ACCESSIBILITYOPTION,
 		L_OPTIONS_103, // "Single Player Agent File"
 		0,
 		filemgrOpenDeleteFileMenuHandler,
@@ -3396,7 +3419,7 @@ struct menuitem g_FilemgrOperationsMenuItems[] = {
 	{
 		MENUITEMTYPE_SELECTABLE,
 		FILETYPE_MPPLAYER,
-		0,
+		MENUITEMFLAG_ACCESSIBILITYOPTION,
 		L_OPTIONS_105, // "Combat Simulator Player File"
 		0,
 		filemgrOpenDeleteFileMenuHandler,
