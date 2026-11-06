@@ -396,6 +396,13 @@ static void accessibilityMenuDescribeItem(struct accessibilitymenusnapshot *snap
 
 	switch (item->type) {
 	case MENUITEMTYPE_LABEL:
+		if (item->flags & MENUITEMFLAG_ACCESSIBILITYREADONLY) {
+			if (item->param3) {
+				accessibilityMenuCopyNormalized(snapshot->value,
+						sizeof(snapshot->value), menuResolveText(item->param3, item));
+			}
+			break;
+		}
 		strcpy(snapshot->role, "information");
 		accessibilityMenuGetProviderText(item, MENUACCESSIBILITYPART_CONTROL,
 				-1, snapshot->value, sizeof(snapshot->value));
@@ -608,7 +615,9 @@ static void accessibilityMenuCompose(struct accessibilitymenusnapshot *snapshot,
 					? snapshot->itemtype == MENUITEMTYPE_RANKING ? " " : ", " : NULL);
 		accessibilityMenuAppendPart(snapshot->utterance, sizeof(snapshot->utterance),
 				snapshot->value, snapshot->utterance[0]
-					? snapshot->itemtype == MENUITEMTYPE_RANKING ? ". " : ", " : NULL);
+					? snapshot->itemtype == MENUITEMTYPE_RANKING ? ". "
+						: snapshot->itemtype == MENUITEMTYPE_LABEL && !snapshot->role[0]
+						? " " : ", " : NULL);
 
 		if (snapshot->subindex >= 0 && snapshot->optioncount > 0
 				&& snapshot->subindex < snapshot->optioncount) {

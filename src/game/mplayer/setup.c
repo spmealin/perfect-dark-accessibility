@@ -1923,7 +1923,7 @@ struct menuitem g_MpPlayerStatsMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		0,
+		MENUITEMFLAG_ACCESSIBILITYREADONLY,
 		L_MPMENU_146, // "Kills:"
 		(uintptr_t)&mpMenuTextKills,
 		NULL,
@@ -1931,7 +1931,7 @@ struct menuitem g_MpPlayerStatsMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		0,
+		MENUITEMFLAG_ACCESSIBILITYREADONLY,
 		L_MPMENU_147, // "Deaths:"
 		(uintptr_t)&mpMenuTextDeaths,
 		NULL,
@@ -1939,7 +1939,7 @@ struct menuitem g_MpPlayerStatsMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		0,
+		MENUITEMFLAG_ACCESSIBILITYREADONLY,
 		L_MPMENU_148, // "Accuracy:"
 		(uintptr_t)&mpMenuTextAccuracy,
 		NULL,
@@ -1947,7 +1947,7 @@ struct menuitem g_MpPlayerStatsMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		0,
+		MENUITEMFLAG_ACCESSIBILITYREADONLY,
 		L_MPMENU_149, // "Head Shots:"
 		(uintptr_t)&mpMenuTextHeadShots,
 		NULL,
@@ -1963,7 +1963,7 @@ struct menuitem g_MpPlayerStatsMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		0,
+		MENUITEMFLAG_ACCESSIBILITYREADONLY,
 		L_MPMENU_150, // "Ammo Used:"
 		(uintptr_t)&mpMenuTextAmmoUsed,
 		NULL,
@@ -1971,7 +1971,7 @@ struct menuitem g_MpPlayerStatsMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		0,
+		MENUITEMFLAG_ACCESSIBILITYREADONLY,
 		L_MPMENU_151, // "Damage Dealt:"
 		(uintptr_t)&mpMenuTextDamageDealt,
 		NULL,
@@ -1979,7 +1979,7 @@ struct menuitem g_MpPlayerStatsMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		0,
+		MENUITEMFLAG_ACCESSIBILITYREADONLY,
 		L_MPMENU_152, // "Pain Received:"
 		(uintptr_t)&mpMenuTextPainReceived,
 		NULL,
@@ -1995,7 +1995,7 @@ struct menuitem g_MpPlayerStatsMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		0,
+		MENUITEMFLAG_ACCESSIBILITYREADONLY,
 		L_MPMENU_153, // "Games Played:"
 		(uintptr_t)&mpMenuTextGamesPlayed,
 		NULL,
@@ -2003,7 +2003,7 @@ struct menuitem g_MpPlayerStatsMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		0,
+		MENUITEMFLAG_ACCESSIBILITYREADONLY,
 		L_MPMENU_154, // "Games Won:"
 		(uintptr_t)&mpMenuTextGamesWon,
 		NULL,
@@ -2011,7 +2011,7 @@ struct menuitem g_MpPlayerStatsMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		0,
+		MENUITEMFLAG_ACCESSIBILITYREADONLY,
 		L_MPMENU_155, // "Games Lost:"
 		(uintptr_t)&mpMenuTextGamesLost,
 		NULL,
@@ -2019,7 +2019,7 @@ struct menuitem g_MpPlayerStatsMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		0,
+		MENUITEMFLAG_ACCESSIBILITYREADONLY,
 		L_MPMENU_156, // "Time:"
 		(uintptr_t)&mpMenuTextTime,
 		NULL,
@@ -2027,7 +2027,7 @@ struct menuitem g_MpPlayerStatsMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		0,
+		MENUITEMFLAG_ACCESSIBILITYREADONLY,
 		L_MPMENU_157, // "Distance:"
 		(uintptr_t)&mpMenuTextDistance,
 		NULL,
@@ -2051,7 +2051,7 @@ struct menuitem g_MpPlayerStatsMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		2,
-		MENUITEMFLAG_LIST_CUSTOMRENDER,
+		MENUITEMFLAG_ACCESSIBILITYREADONLY | MENUITEMFLAG_LIST_CUSTOMRENDER,
 		L_MPMENU_159, // "Accuracy:"
 		(uintptr_t)&mpMenuTextMedalAccuracy,
 		mpMedalMenuHandler,
@@ -2059,7 +2059,7 @@ struct menuitem g_MpPlayerStatsMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		1,
-		MENUITEMFLAG_LIST_CUSTOMRENDER,
+		MENUITEMFLAG_ACCESSIBILITYREADONLY | MENUITEMFLAG_LIST_CUSTOMRENDER,
 		L_MPMENU_160, // "Head Shot:"
 		(uintptr_t)&mpMenuTextMedalHeadShot,
 		mpMedalMenuHandler,
@@ -2067,7 +2067,7 @@ struct menuitem g_MpPlayerStatsMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		MENUITEMFLAG_LIST_CUSTOMRENDER,
+		MENUITEMFLAG_ACCESSIBILITYREADONLY | MENUITEMFLAG_LIST_CUSTOMRENDER,
 		L_MPMENU_161, // "KillMaster:"
 		(uintptr_t)&mpMenuTextMedalKillMaster,
 		mpMedalMenuHandler,
@@ -2075,7 +2075,7 @@ struct menuitem g_MpPlayerStatsMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		3,
-		MENUITEMFLAG_LIST_CUSTOMRENDER,
+		MENUITEMFLAG_ACCESSIBILITYREADONLY | MENUITEMFLAG_LIST_CUSTOMRENDER,
 		L_MPMENU_162, // "Survivor:"
 		(uintptr_t)&mpMenuTextMedalSurvivor,
 		mpMedalMenuHandler,
@@ -2091,9 +2091,9 @@ struct menuitem g_MpPlayerStatsMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		0,
+		MENUITEMFLAG_ACCESSIBILITYREADONLY | MENUITEMFLAG_LABEL_HASRIGHTTEXT,
 		L_MPMENU_163, // "Your Title:"
-		0,
+		(uintptr_t)&mpMenuTextPlayerTitle,
 		NULL,
 	},
 	{

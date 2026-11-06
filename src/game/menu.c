@@ -49,6 +49,7 @@
 #include "data.h"
 #include "types.h"
 #ifndef PLATFORM_N64
+#include "accessibility/accessibility.h"
 #include "video.h"
 #include "input.h"
 #include "platform.h"
@@ -1237,6 +1238,13 @@ bool menuIsItemFocusable(struct menuitem *item, struct menudialog *dialog, s32 a
 
 	switch (item->type) {
 	case MENUITEMTYPE_LABEL:
+#ifndef PLATFORM_N64
+		if ((item->flags & MENUITEMFLAG_ACCESSIBILITYREADONLY)
+				&& accessibilityIsMenuNarrationEnabled()) {
+			break;
+		}
+#endif
+		return false;
 	case MENUITEMTYPE_OBJECTIVES:
 	case MENUITEMTYPE_07:
 	case MENUITEMTYPE_SEPARATOR:

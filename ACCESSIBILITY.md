@@ -115,6 +115,10 @@ Speech covers much more than the focused menu control. Current support includes:
 Press F5 when a menu's static information was spoken too quickly or focus alone
 does not repeat it.
 
+In Combat Simulator → Player Setup → Statistics, use Up and Down (or the
+D-pad) to read one stat at a time. F5 repeats the focused stat; Back and the
+usual cancel control still leave the screen.
+
 Automatic gameplay speech prioritizes **weapon selection, then HUD messages,
 then compass directions**. Every valid quick weapon selection starts its name
 immediately, including intermediate mouse-wheel selections; a newer selection

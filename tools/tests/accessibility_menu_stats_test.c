@@ -30,8 +30,8 @@ static MenuItemHandlerResult statsHandler(s32 operation, struct menuitem *item,
 	return 0;
 }
 
-char *menuResolveParam2Text(struct menuitem *item) { return ""; }
-char *menuResolveText(uintptr_t thing, void *context) { return ""; }
+char *menuResolveParam2Text(struct menuitem *item) { return item->param2 == 1 ? "Kills:" : ""; }
+char *menuResolveText(uintptr_t thing, void *context) { return thing == 2 ? "42\n" : ""; }
 char *menuitemScrollableGetText(u32 type) { return ""; }
 char *langGet(s32 textid) { return ""; }
 bool menuitemKeyboardIsStringEmptyOrSpaces(char *text) { return false; }
@@ -137,6 +137,16 @@ int main(void)
 	struct accessibilitymenusnapshot snapshot = {0}, previous;
 	union menuitemdata data = {0};
 	s32 i;
+	item.type = snapshot.itemtype = MENUITEMTYPE_LABEL;
+	item.flags = MENUITEMFLAG_ACCESSIBILITYREADONLY;
+	item.param2 = 1;
+	item.param3 = 2;
+	snapshot.item = &item;
+	accessibilityMenuDescribeItem(&snapshot, &data);
+	accessibilityMenuCompose(&snapshot, 0, 0);
+	assert(!strcmp(snapshot.utterance, "Kills: 42."));
+	memset(&item, 0, sizeof(item));
+	memset(&snapshot, 0, sizeof(snapshot));
 	item.type = MENUITEMTYPE_PLAYERSTATS;
 	item.handler = statsHandler;
 	snapshot.valid = 1;
