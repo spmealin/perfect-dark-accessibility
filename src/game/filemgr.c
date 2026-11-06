@@ -2073,6 +2073,29 @@ MenuItemHandlerResult filemgrFileToCopyOrDeleteListMenuHandler(s32 operation, st
 
 MenuItemHandlerResult filemgrFileToDeleteListMenuHandler(s32 operation, struct menuitem *item, union handlerdata *data)
 {
+	if (operation == MENUOP_GETACCESSIBILITYTEXT) {
+		const struct filelist *list = g_FileLists[g_Menus[g_MpPlayerNum].fm.listnum];
+
+		if (data->accessibility.part == MENUACCESSIBILITYPART_PENDING) {
+			return list && list->initialupdatepending;
+		}
+		if (data->accessibility.part == MENUACCESSIBILITYPART_CONTROL
+				&& data->accessibility.buffer && data->accessibility.bufferlen > 0
+				&& (!list || (!list->initialupdatepending && !list->numfiles))) {
+			const char *message = "No files to delete";
+
+			/* Accessibility-only text: move to the accessibility translation
+			 * catalog when available, rather than adding ROM strings. */
+			if (list && list->filetype == FILETYPE_MPPLAYER) {
+				message = "No Combat Simulator player files to delete";
+			} else if (list && list->filetype == FILETYPE_GAME) {
+				message = "No single-player agent files to delete";
+			}
+			snprintf(data->accessibility.buffer, data->accessibility.bufferlen, "%s", message);
+			return 1;
+		}
+	}
+
 	if (g_FileLists[g_Menus[g_MpPlayerNum].fm.listnum] == NULL) {
 		return 0;
 	}
@@ -3112,7 +3135,7 @@ struct menuitem g_FilemgrDeleteMenuItems[] = {
 	{
 		MENUITEMTYPE_LIST,
 		1,
-		MENUITEMFLAG_LIST_CUSTOMRENDER,
+		MENUITEMFLAG_LIST_CUSTOMRENDER | MENUITEMFLAG_ACCESSIBILITYOPTION,
 		0,
 		0,
 		filemgrFileToDeleteListMenuHandler,

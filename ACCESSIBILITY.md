@@ -120,7 +120,9 @@ their on-screen messages when opened and again with F5. Moving between buttons
 does not repeat the message.
 
 In Game Files, the spoken label starts with Copy or Delete so the repeated file
-types are distinguishable. Delete Game Notes is separate: it manages entries
+types are distinguishable. Delete File waits for the list to refresh before
+reading a file name or reporting that there are no files to delete.
+Delete Game Notes is separate: it manages entries
 on Controller Paks, not individual agent or Combat Simulator player files.
 
 In Combat Simulator → Player Setup → Statistics, use Up and Down (or the

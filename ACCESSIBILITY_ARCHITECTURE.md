@@ -959,6 +959,13 @@ section heading and file-type label that the native menu displays separately.
 The accessibility observer queries the override only on explicitly marked
 buttons; activation and visual labels are unchanged.
 
+Delete File speech waits for the requested file list's first refresh.
+`src/game/filelist.c` records readiness in a previously unused byte, and the
+opted-in list handler in `src/game/filemgr.c` exposes readiness and an empty
+message through the read-only menu accessibility query. The English empty
+messages belong in the future accessibility translation catalog. The native
+refresh schedule, list rendering, and delete actions are unchanged.
+
 ## Current evidence and remaining validation
 
 The PC radial-menu mouse adapter is separate from accessibility policy:

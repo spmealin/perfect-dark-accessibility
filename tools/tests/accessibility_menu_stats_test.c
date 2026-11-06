@@ -192,6 +192,39 @@ static void testFileActionLabel(void)
 	assert(!strcmp(snapshot.utterance, "Delete: Single Player Agent File, button."));
 }
 
+static s32 deleteListPending;
+static MenuItemHandlerResult emptyDeleteList(s32 operation, struct menuitem *item,
+		union handlerdata *data)
+{
+	if (operation == MENUOP_GETACCESSIBILITYTEXT) {
+		if (data->accessibility.part == MENUACCESSIBILITYPART_PENDING) {
+			return deleteListPending;
+		}
+		if (data->accessibility.part == MENUACCESSIBILITYPART_CONTROL) {
+			snprintf(data->accessibility.buffer, data->accessibility.bufferlen,
+					"No Combat Simulator player files to delete");
+			return 1;
+		}
+	}
+	return 0;
+}
+
+static void testEmptyDeleteList(void)
+{
+	struct menuitem item = { .type = MENUITEMTYPE_LIST,
+		.flags = MENUITEMFLAG_LIST_CUSTOMRENDER | MENUITEMFLAG_ACCESSIBILITYOPTION,
+		.handler = emptyDeleteList };
+	struct accessibilitymenusnapshot snapshot = { .item = &item, .itemtype = MENUITEMTYPE_LIST };
+	deleteListPending = true;
+	assert(accessibilityMenuIsListPending(&item));
+	deleteListPending = false;
+	assert(!accessibilityMenuIsListPending(&item));
+	strcpy(snapshot.title, "Delete File");
+	accessibilityMenuDescribeItem(&snapshot, NULL);
+	accessibilityMenuCompose(&snapshot, true, true);
+	assert(!strcmp(snapshot.utterance, "Delete File. No Combat Simulator player files to delete."));
+}
+
 int main(void)
 {
 	struct menuitem item = {0};
@@ -200,6 +233,7 @@ int main(void)
 	s32 i;
 	testStaticDialogSummary();
 	testFileActionLabel();
+	testEmptyDeleteList();
 	item.type = snapshot.itemtype = MENUITEMTYPE_LABEL;
 	item.flags = MENUITEMFLAG_ACCESSIBILITYREADONLY;
 	item.param2 = 1;

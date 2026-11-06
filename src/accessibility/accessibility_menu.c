@@ -376,6 +376,18 @@ static s32 accessibilityMenuGetListCheckboxState(struct menuitem *item,
 	return data.list.unk04 == 255 ? -1 : data.list.unk04 != 0;
 }
 
+static s32 accessibilityMenuIsListPending(struct menuitem *item)
+{
+	union handlerdata data = {0};
+
+	if (item->type != MENUITEMTYPE_LIST || !item->handler
+			|| !(item->flags & MENUITEMFLAG_ACCESSIBILITYOPTION)) {
+		return false;
+	}
+	data.accessibility.part = MENUACCESSIBILITYPART_PENDING;
+	return item->handler(MENUOP_GETACCESSIBILITYTEXT, item, &data) != 0;
+}
+
 static void accessibilityMenuDescribeItem(struct accessibilitymenusnapshot *snapshot,
 		union menuitemdata *itemdata)
 {
@@ -498,6 +510,12 @@ static void accessibilityMenuDescribeItem(struct accessibilitymenusnapshot *snap
 	case MENUITEMTYPE_LIST:
 		strcpy(snapshot->role, "list");
 		snapshot->optioncount = accessibilityMenuGetHandlerValue(item, MENUOP_GETOPTIONCOUNT);
+		if (snapshot->optioncount == 0 && (item->flags & MENUITEMFLAG_ACCESSIBILITYOPTION)
+				&& accessibilityMenuGetProviderText(item, MENUACCESSIBILITYPART_CONTROL,
+					-1, snapshot->label, sizeof(snapshot->label))) {
+			snapshot->role[0] = '\0';
+			break;
+		}
 		snapshot->subindex = itemdata ? itemdata->list.index : -1;
 		snapshot->selectedindex = accessibilityMenuGetHandlerValue(item, MENUOP_GETSELECTEDINDEX);
 		accessibilityMenuGetOptionText(item, snapshot->subindex, snapshot->value, sizeof(snapshot->value));
@@ -719,6 +737,10 @@ void accessibilityMenuObserve(s32 menuslot, s32 playernum, s32 menuroot,
 				accessibilityAnnouncementCancel();
 			}
 		}
+		return;
+	}
+
+	if (accessibilityMenuIsListPending(dialog->focuseditem)) {
 		return;
 	}
 

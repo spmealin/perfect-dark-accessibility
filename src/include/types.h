@@ -3383,6 +3383,7 @@ enum menuaccessibilitypart {
 	MENUACCESSIBILITYPART_CONTROL = 0,
 	MENUACCESSIBILITYPART_OPTION = 1,
 	MENUACCESSIBILITYPART_SUMMARY = 2,
+	MENUACCESSIBILITYPART_PENDING = 3, // Nonzero means the control is not ready to describe.
 };
 
 struct handlerdata_accessibility {
@@ -4168,7 +4169,7 @@ struct filelist {
 	/*0x30a*/ u8 numdevices;
 	/*0x30b*/ u8 filetype;
 	/*0x30c*/ u8 timeuntilupdate;
-	/*0x30d*/ u8 unk30d;
+	/*0x30d*/ u8 initialupdatepending;
 	/*0x30e*/ u8 updatedthisframe;
 };
 

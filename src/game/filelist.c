@@ -58,6 +58,7 @@ void filelistCreate(s32 listnum, u8 filetype)
 
 	g_FileLists[listnum]->timeuntilupdate = 1;
 	g_FileLists[listnum]->filetype = filetype;
+	g_FileLists[listnum]->initialupdatepending = true;
 
 	if (var80062944 == 0) {
 		joySetPfsPollInterval(3);
@@ -158,6 +159,7 @@ void filelistsTick(void)
 			if (update) {
 				osSyncPrintf("Rebuilding pakWad %d:\n", i);
 				filelistUpdate(g_FileLists[i]);
+				g_FileLists[i]->initialupdatepending = false;
 				g_FileLists[i]->updatedthisframe = true;
 			}
 		}
