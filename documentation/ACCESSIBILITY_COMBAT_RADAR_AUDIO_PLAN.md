@@ -59,6 +59,10 @@ may expose it.
 
 ### F3: manual radar pulse
 
+Manual contact pings use the same soft gain as automatic contact pings
+(65% of the configured radar volume before category and range adjustments).
+The pulse-start, no-contacts, and radar-unavailable cues remain distinct.
+
 F3 is not currently named or consumed by the PC input or accessibility code.
 SDL scancodes place it at value 60. Add `VK_F3 = 60` to the consecutive
 function-key region of `port/include/input.h`.
@@ -180,16 +184,12 @@ matching, threshold state, and event construction remain on the main thread.
 
 ## Manual pulse presentation
 
-### Sweep timing and ordering
+### Pulse timing and ordering
 
 F3 first plays a subtle centered launch tick that establishes the start of the
-snapshot. Schedule retained markers clockwise from straight ahead over an
-initial 800 ms revolution.
-
-The target's relative bearing determines its ideal offset in that window.
-Markers whose ideal starts would overlap are separated by a minimum start gap
-of 45 ms, extending the scan slightly when necessary. This preserves one
-marker at a time while retaining approximate angular order.
+snapshot. Schedule retained markers nearest first by horizontal distance,
+keeping snapshot order for ties. Starts are spaced by at least three logical
+ticks and the shared voice waits for longer cues to finish.
 
 The scan uses the captured snapshot. Moving after pressing F3 does not reorder
 or reposition an already scheduled pulse. Pressing F3 again cancels any
@@ -202,8 +202,8 @@ Stereo pan uses the same established property-sound pan calculation used by
 other spatial accessibility cues. A light amplitude modulation distinguishes
 markers behind the player, matching the learned R-Tracker convention.
 
-The clockwise timing is supplemental. Pan and rear modulation remain the
-primary bearing cues, particularly when only one marker exists.
+Ordering communicates proximity, not bearing. Pan and rear modulation still
+communicate the direction of each contact.
 
 ### Distance
 
@@ -283,19 +283,19 @@ Each retained enemy identity has one of these distance bands:
 Far -> Medium -> Close
 ```
 
-Events are generated only on inward transitions:
-
-- absent to present: new-contact alert;
-- Far to Medium: medium alert;
-- Medium or Far to Close: close alert.
+Far contacts play three quick pings when acquired. Medium contacts play two
+when acquired or when crossing inward from Far. Close contacts play a single
+soft ping and repeat while they remain in the close band and are not already
+represented by an audible enemy combat beacon.
 
 If a newly appearing contact is already inside Medium or Close, emit only the
 highest applicable alert. Do not play new, medium, and close events in
 sequence.
 
 Enabling alerts, beginning a match, returning from death, or restoring a
-temporarily hidden radar establishes a silent baseline from the first complete
-frame. This prevents every existing opponent from being announced as new.
+temporarily hidden radar establishes a baseline from the first complete
+frame. This prevents existing far and medium opponents from being announced
+as new; eligible close contacts can start pinging immediately.
 Manual F3 is available whenever the player wants that baseline described.
 
 A contact that genuinely disappears for at least 30 logical ticks becomes
@@ -306,7 +306,7 @@ grace.
 
 ### Hysteresis and cooldown
 
-Range alerts rearm only after outward movement beyond a separate threshold:
+Distance bands use separate inward and outward thresholds:
 
 ```text
 medium enter: 2000
@@ -318,31 +318,22 @@ close rearm: 900
 Derive rearm values as validated defaults or expose them later only if
 acceptance testing shows a need. Do not add unnecessary initial settings.
 
-Each identity and threshold also has a three-second minimum repeat cooldown.
-Hysteresis is the primary anti-chatter mechanism; cooldown protects against
-teleports, noisy coordinates, and repeated scenario replacement.
-
-Crossing outward is silent. Once both the rearm distance and cooldown have
-been satisfied, a later inward crossing may alert again. This communicates a
-combatant retreating and approaching again without claiming to infer intent or
-whether they are actually stalking the player.
+Far and medium one-shots retain a three-second per-identity cooldown.
+Crossing outward is silent and ends the close pattern at the outer threshold.
 
 ### Alert sound
 
-An automatic alert plays one positioned radar ping using the same bearing,
-rear, height, distance-pitch, and enemy timbre as a manual snapshot. The
-current pitch therefore communicates whether a new contact is far, medium, or
-close without adding three unrelated patterns.
+Automatic pings use the manual pulse's enemy timbre, rear modulation and
+position, with a fixed base pitch and a small rising/falling contour for
+elevation. Each burst stays together. Close pings get louder and speed up from
+about one second to half a second as distance closes. Newly close contacts
+get the first free slot; repeats rotate by earliest due time and yield to
+queued events. Pending far and medium alerts are dropped if stale or no
+longer valid, and use the contact's latest position when played.
 
-Close alerts receive scheduler priority and a slightly stronger envelope, not
-a different carrier mapping. Medium alerts use normal gain. New-contact gain
-depends only on its current band.
-
-Automatic alerts are one-shot events. They do not create a looping voice, do
-not change the existing line-of-sight enemy scanner, and are not suppressed
-merely because that enemy is also visible or targetable. The event communicates
-a radar range transition; the continuous scanner communicates immediate
-combat presence.
+Close pings use the same serialized radar voice. An audible combat beacon
+for that prop suppresses the radar repeats; a contact that returns to cover
+can ping immediately if still in close radar range.
 
 ## King of the Hill objective extension
 
@@ -410,7 +401,7 @@ Logs should be comprehensive but transition-driven:
   decision;
 - `combat_radar/command`: F3 pulse, Shift+F3 toggle, modifier state, accepted or
   suppressed reason, snapshot count, and prior/new alert state;
-- `combat_radar/contact`: identity admission/removal, silent baseline, previous
+- `combat_radar/contact`: identity admission/removal, baseline, previous
   and new bands, thresholds, hysteresis/rearm state, cooldown, and reason;
 - `combat_radar/event`: manual/new/medium/close/empty/unavailable event,
   priority, scheduled offset, frequency, gain, pan, rear flag, height pattern,
@@ -482,7 +473,7 @@ fixed frame window.
 - Press and hold F3; only one scan occurs.
 - Press F3 rapidly; the newest snapshot replaces unplayed manual events.
 - Test zero, one, and the maximum supported number of markers.
-- Verify clockwise order, minimum separation, pan, rear modulation,
+- Verify nearest-first order, minimum separation, pan, rear modulation,
   distance-pitch direction, height patterns, and category timbres.
 - Confirm current-player markers are never sounded.
 - Confirm empty and unavailable responses are distinct.
@@ -492,14 +483,17 @@ fixed frame window.
 
 - Enable and disable with both left and right Shift; no manual pulse leaks
   through the chord.
-- On enable and match entry, existing enemies form a silent baseline.
+- On enable and match entry, existing far and medium enemies are silent;
+  eligible close enemies begin pinging.
 - Spawn, respawn, cloak/uncloak, and remove enemies at Far, Medium, and Close
   distances.
 - Move an enemy and the player across both thresholds in both directions.
-- Confirm only inward crossings sound.
+- Confirm outward crossings do not trigger a new cue.
 - Hover around 2,000 and 750 units to verify hysteresis and cooldown.
 - Cross directly from Far to Close and admit a new already-close enemy; each
-  produces one close event, not stacked events.
+  starts with a single close ping, not stacked events.
+- Verify two close contacts alternate and each hands off independently
+  to and from its normal enemy beacon.
 - Pause, open menus, die, respawn, end the match, restart, change arenas, and
   disable accessibility; no stale event or mass new-contact alert may occur.
 
@@ -524,7 +518,7 @@ The slice is ready for project-owner testing when:
 - F3 reliably describes exactly the markers on the active native radar;
 - Shift+F3 changes only automatic enemy-contact alerts and has clear earcon
   confirmation;
-- new, medium, and close events are timely and non-repetitive;
+- far and medium bursts are timely, and close repeats remain easy to localize;
 - distance, bearing, rear position, and native above/below state are learnable;
 - no output occurs when the visual radar would reveal nothing;
 - the system remains bounded and stable in dense long-running matches; and

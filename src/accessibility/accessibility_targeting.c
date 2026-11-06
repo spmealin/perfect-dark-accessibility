@@ -2150,6 +2150,24 @@ static void accessibilityTargetingResetCurrent(const char *reason)
 			sizeof(g_AccessibilityTargetingCurrentState->threatalerts));
 }
 
+s32 accessibilityTargetingHasAudibleCombatBeacon(s32 playernum, s32 propnum)
+{
+	s32 i;
+
+	if (playernum < 0 || playernum >= MAX_PLAYERS || propnum < 0) {
+		return false;
+	}
+	for (i = 0; i < ACCESSIBILITY_TONE_COMBAT_SLOT_COUNT; i++) {
+		const struct accessibilitytargetingcombatslot *voice
+				= &g_AccessibilityTargetingStates[playernum].combatslots[i];
+
+		if (voice->assigned && voice->audible && voice->identity.propnum == propnum) {
+			return true;
+		}
+	}
+	return false;
+}
+
 s32 accessibilityTargetingGetPrecisionGuidancePropnum(void)
 {
 	struct accessibilitytargetingstate *state;

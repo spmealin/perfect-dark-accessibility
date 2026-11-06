@@ -149,5 +149,24 @@ int main(int argc, char **argv)
 	accessibilityToneMix(gameaudio, sizeof(gameaudio));
 	assert(g_AccessibilityBullseyeGain == 0);
 	accessibilityTonePreviewStop();
+	/* Each range burst has exactly the requested number of audible runs,
+	 * with silence between them, even when the elevation contour is active. */
+	for (s32 pulses = 1; pulses <= 3; pulses++) {
+		s32 run = 0, lastaudible = -1000;
+		accessibilityTonePlayRadarBurst(1000, .13f, 0, 1, 0,
+				ACCESSIBILITY_TONE_RADAR_ENEMY, pulses);
+		memset(gameaudio, 0, sizeof(gameaudio));
+		for (block = 0; block < 10; block++) {
+			const s16 *pcm = accessibilityToneMix(gameaudio, sizeof(gameaudio));
+			for (i = 0; i < 512; i++) {
+				if (pcm[i * 2]) {
+					s32 frame = block * 512 + i;
+					if (frame - lastaudible > 200) run++;
+					lastaudible = frame;
+				}
+			}
+		}
+		assert(run == pulses);
+	}
 	return 0;
 }

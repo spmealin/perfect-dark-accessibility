@@ -105,6 +105,7 @@ static s32 g_AccessibilityRadarSamplesRemaining;
 static s32 g_AccessibilityRadarSample;
 static s32 g_AccessibilityRadarTotalSamples;
 static s32 g_AccessibilityRadarKindState;
+static s32 g_AccessibilityRadarPulsesState;
 static s32 g_AccessibilityRadarHeightState;
 static s32 g_AccessibilityRadarRearState;
 static f32 g_AccessibilityRadarFrequencyHz;
@@ -619,8 +620,15 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 					&g_AccessibilityRadarRear);
 			g_AccessibilityRadarKindState = SDL_AtomicGet(
 					&g_AccessibilityRadarKind);
+			g_AccessibilityRadarPulsesState = SDL_AtomicGet(
+					&g_AccessibilityRadarPulses);
 
-			if (g_AccessibilityRadarKindState
+			if (g_AccessibilityRadarPulsesState) {
+				g_AccessibilityRadarTotalSamples = g_AccessibilityRadarPulsesState
+						* ACCESSIBILITY_RADAR_LEVEL_BEEP_SAMPLES
+						+ (g_AccessibilityRadarPulsesState - 1)
+							* ACCESSIBILITY_RADAR_DOUBLE_GAP_SAMPLES;
+			} else if (g_AccessibilityRadarKindState
 					== ACCESSIBILITY_TONE_RADAR_LAUNCH) {
 				g_AccessibilityRadarTotalSamples
 						= ACCESSIBILITY_RADAR_LAUNCH_SAMPLES;
@@ -1996,7 +2004,19 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			f32 wave;
 			f32 radar;
 
-			if (g_AccessibilityRadarKindState
+			if (g_AccessibilityRadarPulsesState) {
+				beeplength = ACCESSIBILITY_RADAR_LEVEL_BEEP_SAMPLES;
+				beepsample = sample % (beeplength + ACCESSIBILITY_RADAR_DOUBLE_GAP_SAMPLES);
+				if (beepsample >= beeplength) {
+					beepsample = -1;
+				}
+				/* Preserve elevation without adding pulses to the range count. */
+				if (g_AccessibilityRadarHeightState != 0) {
+					f32 progress = (f32)sample / (f32)g_AccessibilityRadarTotalSamples;
+					frequencymultiplier += (g_AccessibilityRadarHeightState == 1
+							? 0.2f : -0.2f) * (progress - 0.5f);
+				}
+			} else if (g_AccessibilityRadarKindState
 					== ACCESSIBILITY_TONE_RADAR_EMPTY) {
 				beeplength = ACCESSIBILITY_RADAR_EMPTY_BEEP_SAMPLES;
 				if (sample < ACCESSIBILITY_RADAR_EMPTY_BEEP_SAMPLES) {

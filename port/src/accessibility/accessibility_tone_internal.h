@@ -233,6 +233,7 @@ extern SDL_atomic_t g_AccessibilityRadarPanMillionths;
 extern SDL_atomic_t g_AccessibilityRadarHeight;
 extern SDL_atomic_t g_AccessibilityRadarRear;
 extern SDL_atomic_t g_AccessibilityRadarKind;
+extern SDL_atomic_t g_AccessibilityRadarPulses;
 extern SDL_atomic_t g_AccessibilityHillSequence;
 extern SDL_atomic_t g_AccessibilityHillEnabled;
 extern SDL_atomic_t g_AccessibilityHillVolumeMillionths;

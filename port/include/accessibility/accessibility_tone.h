@@ -156,6 +156,8 @@ void accessibilityToneSetDoorSlot(s32 slot, s32 enabled,
 void accessibilityToneStopDoors(void);
 void accessibilityTonePlayRadarPing(f32 frequencyhz, f32 volume, f32 pan,
 		s32 height, s32 rear, s32 kind);
+void accessibilityTonePlayRadarBurst(f32 frequencyhz, f32 volume, f32 pan,
+		s32 height, s32 rear, s32 kind, s32 pulses);
 void accessibilityToneStopRadar(void);
 void accessibilityToneSetHillBeacon(s32 enabled, f32 volume, f32 pan,
 		s32 rear, s32 identitychirp, s32 scoring, s32 restart);

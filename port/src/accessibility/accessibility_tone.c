@@ -325,6 +325,7 @@ SDL_atomic_t g_AccessibilityRadarPanMillionths;
 SDL_atomic_t g_AccessibilityRadarHeight;
 SDL_atomic_t g_AccessibilityRadarRear;
 SDL_atomic_t g_AccessibilityRadarKind;
+SDL_atomic_t g_AccessibilityRadarPulses;
 SDL_atomic_t g_AccessibilityHillSequence;
 SDL_atomic_t g_AccessibilityHillEnabled;
 SDL_atomic_t g_AccessibilityHillVolumeMillionths;
@@ -1010,6 +1011,15 @@ void accessibilityTonePlayRadarPing(f32 frequencyhz, f32 volume, f32 pan,
 	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
+	accessibilityTonePlayRadarBurst(frequencyhz, volume, pan, height, rear, kind, 0);
+}
+
+void accessibilityTonePlayRadarBurst(f32 frequencyhz, f32 volume, f32 pan,
+		s32 height, s32 rear, s32 kind, s32 pulses)
+{
+	if (!accessibilityToneOwnershipCanPublish()) {
+		return;
+	}
 	if (frequencyhz < 1.0f) {
 		frequencyhz = 1.0f;
 	}
@@ -1040,6 +1050,7 @@ void accessibilityTonePlayRadarPing(f32 frequencyhz, f32 volume, f32 pan,
 	SDL_AtomicSet(&g_AccessibilityRadarHeight, height);
 	SDL_AtomicSet(&g_AccessibilityRadarRear, rear != 0);
 	SDL_AtomicSet(&g_AccessibilityRadarKind, kind);
+	SDL_AtomicSet(&g_AccessibilityRadarPulses, pulses >= 1 && pulses <= 3 ? pulses : 0);
 	SDL_AtomicSet(&g_AccessibilityRadarEnabled, volume > 0.0f);
 	SDL_AtomicAdd(&g_AccessibilityRadarSequence, 1);
 }

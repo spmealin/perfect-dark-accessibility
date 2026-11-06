@@ -63,8 +63,8 @@ work.
 | F1 | Gameplay | Speak a compact player report: health, nonzero shields, and relevant Combat Simulator status. |
 | Shift+F1 | Team Combat Simulator gameplay | Speak team name, score, rank, kills, deaths, leader gap, limits, and match time. It does nothing outside a team scenario. |
 | Shift+F2 | Gameplay | Save a numbered diagnostic capture, including roughly the preceding 15 seconds, to `accessibility.log`. |
-| F3 | One-player Combat Simulator gameplay | Send one clockwise audio radar pulse for the contacts shown by the native radar. |
-| Shift+F3 | One-player Combat Simulator gameplay | Toggle automatic radar contact and distance-band alerts. |
+| F3 | One-player Combat Simulator gameplay | Ping the contacts shown by the native radar once each, nearest to farthest, with soft directional sounds. |
+| Shift+F3 | One-player Combat Simulator gameplay | Toggle automatic radar alerts: three pings for far, two for medium, and repeating single pings for close enemies not already sounding a combat beacon. |
 | F4 | Gameplay | Select the next virtual-cane mode: Slow sweep, Fast sweep, Off, then Slow again. |
 | Shift+F4 | Gameplay | Select the next compass mode: Speech and sound, Sound only, Off, then Speech and sound again. |
 | F5 | Gameplay | Toggle interactable-object beacons. The choice persists between levels and game sessions. |

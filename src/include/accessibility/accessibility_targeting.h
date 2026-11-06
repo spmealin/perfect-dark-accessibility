@@ -73,6 +73,8 @@ struct accessibilitytargetingidentity {
 	uintptr_t objectidentity;
 };
 
+s32 accessibilityTargetingHasAudibleCombatBeacon(s32 playernum, s32 propnum);
+
 struct accessibilitytargetingcandidate {
 	struct accessibilitytargetingidentity identity;
 	struct prop *prop;
