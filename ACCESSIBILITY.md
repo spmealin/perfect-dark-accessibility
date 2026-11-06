@@ -115,6 +115,10 @@ Speech covers much more than the focused menu control. Current support includes:
 Press F5 when a menu's static information was spoken too quickly or focus alone
 does not repeat it.
 
+Change Agent, file-management, cheat, and Combat Simulator confirmations read
+their on-screen messages when opened and again with F5. Moving between buttons
+does not repeat the message.
+
 In Combat Simulator → Player Setup → Statistics, use Up and Down (or the
 D-pad) to read one stat at a time. F5 repeats the focused stat; Back and the
 usual cancel control still leave the screen.

@@ -30,7 +30,16 @@ static MenuItemHandlerResult statsHandler(s32 operation, struct menuitem *item,
 	return 0;
 }
 
-char *menuResolveParam2Text(struct menuitem *item) { return item->param2 == 1 ? "Kills:" : ""; }
+char *menuResolveParam2Text(struct menuitem *item)
+{
+	switch (item->param2) {
+	case 1: return "Kills:";
+	case 3: return "Agent file";
+	case 4: return "Cannot delete file as it is being used.\n";
+	case 5: return "Hidden detail";
+	default: return "";
+	}
+}
 char *menuResolveText(uintptr_t thing, void *context) { return thing == 2 ? "42\n" : ""; }
 char *menuitemScrollableGetText(u32 type) { return ""; }
 char *langGet(s32 textid) { return ""; }
@@ -131,12 +140,42 @@ static void testCheckboxNarration(void)
 	assert(strstr(snapshot.utterance, "dropdown"));
 }
 
+static MenuItemHandlerResult hiddenLabel(s32 operation, struct menuitem *item,
+		union handlerdata *data)
+{
+	return operation == MENUOP_CHECKHIDDEN;
+}
+
+static void testStaticDialogSummary(void)
+{
+	struct menuitem items[] = {
+		{ .type = MENUITEMTYPE_LABEL, .flags = MENUITEMFLAG_ACCESSIBILITYSUMMARY, .param2 = 3 },
+		{ .type = MENUITEMTYPE_LABEL, .flags = MENUITEMFLAG_ACCESSIBILITYSUMMARY, .param2 = 5,
+			.handler = hiddenLabel },
+		{ .type = MENUITEMTYPE_LABEL, .flags = MENUITEMFLAG_ACCESSIBILITYSUMMARY, .param2 = 4 },
+		{ .type = MENUITEMTYPE_END },
+	};
+	struct menudialogdef dialog = { .items = items };
+	struct accessibilitymenusnapshot snapshot = {0};
+
+	assert(accessibilityMenuGetDialogSummary(&dialog, snapshot.summary, sizeof(snapshot.summary)));
+	assert(!strcmp(snapshot.summary, "Agent file Cannot delete file as it is being used."));
+	strcpy(snapshot.title, "Error");
+	strcpy(snapshot.label, "Cancel");
+	strcpy(snapshot.role, "button");
+	accessibilityMenuCompose(&snapshot, true, true);
+	assert(strstr(snapshot.utterance, "Cannot delete file as it is being used."));
+	accessibilityMenuCompose(&snapshot, false, false);
+	assert(!strcmp(snapshot.utterance, "Cancel, button."));
+}
+
 int main(void)
 {
 	struct menuitem item = {0};
 	struct accessibilitymenusnapshot snapshot = {0}, previous;
 	union menuitemdata data = {0};
 	s32 i;
+	testStaticDialogSummary();
 	item.type = snapshot.itemtype = MENUITEMTYPE_LABEL;
 	item.flags = MENUITEMFLAG_ACCESSIBILITYREADONLY;
 	item.param2 = 1;

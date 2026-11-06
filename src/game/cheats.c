@@ -471,7 +471,7 @@ struct menuitem g_CheatsWarningMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		0,
+		MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		L_MPMENU_479, // "If you activate any cheats, then you will be unable to progress further in the game while those cheats are active."
 		0,
 		NULL,
@@ -900,7 +900,7 @@ struct menuitem g_CheatsConfirmUnlockMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		MENUITEMFLAG_LITERAL_TEXT,
+		MENUITEMFLAG_LITERAL_TEXT | MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		(uintptr_t)"Are you sure?\n\nThis will overwrite any progress\nsaved to the current profile.\n",
 		0,
 		NULL,

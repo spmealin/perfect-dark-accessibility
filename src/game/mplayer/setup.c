@@ -74,7 +74,7 @@ struct menuitem g_MpDropOutMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		MENUITEMFLAG_LESSLEFTPADDING,
+		MENUITEMFLAG_LESSLEFTPADDING | MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		L_MPMENU_196, // "Are you sure you want to drop out?"
 		0,
 		NULL,
@@ -5815,7 +5815,7 @@ struct menuitem g_MpAbortMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		MENUITEMFLAG_LESSLEFTPADDING,
+		MENUITEMFLAG_LESSLEFTPADDING | MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		L_MPMENU_053, // "Are you sure you want to abort the game?"
 		0,
 		NULL,

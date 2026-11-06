@@ -595,7 +595,7 @@ struct menuitem g_MpDropOut4MbMenuItems[] = {
 	{
 		MENUITEMTYPE_LABEL,
 		0,
-		MENUITEMFLAG_LESSLEFTPADDING,
+		MENUITEMFLAG_LESSLEFTPADDING | MENUITEMFLAG_ACCESSIBILITYSUMMARY,
 		L_MPMENU_196, // "Are you sure you want to drop out?"
 		0,
 		NULL,

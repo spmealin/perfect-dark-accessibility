@@ -243,23 +243,25 @@ static s32 accessibilityMenuGetDialogSummary(struct menudialogdef *dialogdef,
 
 	for (item = dialogdef->items; item->type != MENUITEMTYPE_END; item++) {
 		if (item->flags & MENUITEMFLAG_ACCESSIBILITYSUMMARY) {
-			if (accessibilityMenuGetProviderText(item,
-					MENUACCESSIBILITYPART_SUMMARY, -1, dst, dstlen)) {
-				return true;
+			char part[ACCESSIBILITY_MENU_LONG_TEXT_MAX];
+			union handlerdata data = {0};
+
+			if (item->handler && !(item->flags & MENUITEMFLAG_SELECTABLE_OPENSDIALOG)
+					&& item->handler(MENUOP_CHECKHIDDEN, item, &data)) {
+				continue;
 			}
-
-			if (item->type == MENUITEMTYPE_LABEL) {
-				accessibilityMenuCopyNormalized(dst, dstlen,
+			if (accessibilityMenuGetProviderText(item,
+					MENUACCESSIBILITYPART_SUMMARY, -1, part, sizeof(part))) {
+				accessibilityMenuAppendPart(dst, dstlen, part, " ");
+			} else if (item->type == MENUITEMTYPE_LABEL) {
+				accessibilityMenuCopyNormalized(part, sizeof(part),
 						menuResolveParam2Text(item));
-
-				if (dst[0]) {
-					return true;
-				}
+				accessibilityMenuAppendPart(dst, dstlen, part, " ");
 			}
 		}
 	}
 
-	return false;
+	return dst[0] != '\0';
 }
 
 static s32 accessibilityMenuGetHandlerValue(struct menuitem *item, s32 operation)
