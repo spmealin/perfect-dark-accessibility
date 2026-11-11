@@ -4,20 +4,24 @@
 #include "constants.h"
 #include "bss.h"
 #include "data.h"
+#include "game/camera.h"
 #include "game/lv.h"
 #include "game/propsnd.h"
 #include "game/radar.h"
 #include "lib/collision.h"
+#include "lib/mtx.h"
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_combat_radar.h"
 #include "accessibility/accessibility_hill.h"
 #include "accessibility/accessibility_log.h"
 #include "accessibility/accessibility_observer.h"
 #include "accessibility/accessibility_tone.h"
+#include "accessibility/accessibility_visibility.h"
 
 #define ACCESSIBILITY_HILL_INNER_DISTANCE 100.0f
 #define ACCESSIBILITY_HILL_RANGE_HYSTERESIS 75.0f
-#define ACCESSIBILITY_HILL_RADAR_GAIN 0.50f
+#define ACCESSIBILITY_OBJECTIVE_VISIBLE_RADAR_MIN_GAIN 0.50f
+#define ACCESSIBILITY_OBJECTIVE_GUIDE_GAIN 0.65f
 #define ACCESSIBILITY_HILL_LOG_TICKS TICKS(60)
 #define ACCESSIBILITY_HILL_SCORING_GRACE_TICKS TICKS(2)
 
@@ -33,20 +37,28 @@ static s32 g_AccessibilityHillElapsed240 = -1;
 static s32 g_AccessibilityHillLastProgressTick = -1000;
 static s32 g_AccessibilityHillNextLogTick;
 static s32 g_AccessibilityHillSuppressed;
+static s32 g_AccessibilityObjectiveGuide;
+static s32 g_AccessibilityObjectiveScenario = -1;
+static const struct prop *g_AccessibilityObjectiveToken;
 
 static const char *accessibilityHillScopeReason(void)
 {
-	if (!accessibilityIsKingOfTheHillBeaconEnabled()) {
-		return "feature_disabled";
-	}
 	if (!g_Vars.normmplayerisrunning) {
 		return "not_normal_combat_sim";
 	}
 	if (PLAYERCOUNT() != 1) {
 		return "unsupported_player_count";
 	}
-	if (g_MpSetup.scenario != MPSCENARIO_KINGOFTHEHILL) {
-		return "not_king_of_the_hill";
+	if (g_MpSetup.scenario == MPSCENARIO_KINGOFTHEHILL) {
+		if (!accessibilityIsKingOfTheHillBeaconEnabled()) {
+			return "feature_disabled";
+		}
+	} else if (g_MpSetup.scenario == MPSCENARIO_HOLDTHEBRIEFCASE) {
+		if (!accessibilityIsCombatRadarAudioEnabled()) {
+			return "feature_disabled";
+		}
+	} else {
+		return "no_supported_objective";
 	}
 	if (!g_Vars.currentplayer || !g_Vars.currentplayer->prop) {
 		return "player_unavailable";
@@ -66,11 +78,13 @@ static const char *accessibilityHillScopeReason(void)
 	if (g_Vars.currentplayer->mpmenuon) {
 		return "player_menu";
 	}
-	if (g_ScenarioData.koh.hillindex < 0) {
-		return "hill_unavailable";
-	}
-	if (g_ScenarioData.koh.movehill) {
-		return "hill_moving";
+	if (g_MpSetup.scenario == MPSCENARIO_KINGOFTHEHILL) {
+		if (g_ScenarioData.koh.hillindex < 0 || g_ScenarioData.koh.movehill) {
+			return "hill_unavailable_or_moving";
+		}
+	} else if (!g_ScenarioData.htb.token
+			|| g_ScenarioData.htb.token == g_Vars.currentplayer->prop) {
+		return "case_unavailable_or_owned";
 	}
 	return NULL;
 }
@@ -124,13 +138,124 @@ static s32 accessibilityHillHasLineOfSight(
 			GEOFLAG_WALL | GEOFLAG_BLOCK_SIGHT | GEOFLAG_BLOCK_SHOOT);
 }
 
-static s32 accessibilityHillIsRear(
-		const struct accessibilityobserver *observer)
+static s32 accessibilityObjectiveIsRear(const struct accessibilityobserver *observer,
+		const struct coord *position)
 {
-	f32 x = g_ScenarioData.koh.hillpos.x - observer->camera.x;
-	f32 z = g_ScenarioData.koh.hillpos.z - observer->camera.z;
+	f32 x = position->x - observer->camera.x;
+	f32 z = position->z - observer->camera.z;
 
 	return x * observer->look.x + z * observer->look.z < 0.0f;
+}
+
+static s32 accessibilityObjectiveInViewport(struct coord *position)
+{
+	Mtxf *worldtoscreen = camGetWorldToScreenMtxf();
+	struct coord view;
+	f32 screen[2];
+	f32 left = camGetScreenLeft();
+	f32 top = camGetScreenTop();
+
+	if (!worldtoscreen) {
+		return false;
+	}
+	mtx4TransformVec(worldtoscreen, position, &view);
+	if (!(view.z < 0.0f)) {
+		return false;
+	}
+	cam0f0b4d68(&view, screen);
+	return screen[0] >= left && screen[0] < left + camGetScreenWidth()
+			&& screen[1] >= top && screen[1] < top + camGetScreenHeight();
+}
+
+static s32 accessibilityCaseHasLineOfSight(const struct accessibilityobserver *observer,
+		struct prop *token, struct coord *position)
+{
+	struct coord from = observer->camera;
+	RoomNum rooms[] = { observer->room, -1 };
+
+	return observer->room > 0 && token->rooms[0] > 0
+			&& (token->flags & PROPFLAG_ONTHISSCREENTHISTICK)
+			&& accessibilityVisibilityHasVisualLineOfSight(
+					&from, rooms, position, token->rooms, token);
+}
+
+static void accessibilityObjectivePublishGuide(const struct accessibilityobserver *observer,
+		struct coord *position, s32 restart)
+{
+	f32 x = position->x - observer->camera.x;
+	f32 z = position->z - observer->camera.z;
+	s32 duration = accessibilityCombatRadarObjectiveDurationMs(sqrtf(x * x + z * z));
+	f32 volume;
+	f32 pan = (psCalculatePan2(position, 0, -1.0f, NULL) - (f32)AL_PAN_CENTER)
+			/ AL_PAN_CENTER;
+
+	accessibilityGetCombatRadarTuning(NULL, NULL, &volume);
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+	accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_HILL, position);
+#endif
+	accessibilityToneSetObjectiveGuide(volume * ACCESSIBILITY_OBJECTIVE_GUIDE_GAIN
+			* ACCESSIBILITY_COMBAT_RADAR_OBJECTIVE_GAIN_SCALE,
+			pan, accessibilityObjectiveIsRear(observer, position), duration, restart);
+	if (restart) {
+		accessibilityLogEvent("objective_guide", "pulse",
+				"scenario=%d duration_ms=%d position=%.3f,%.3f,%.3f",
+				g_MpSetup.scenario, duration, position->x, position->y, position->z);
+	}
+}
+
+static void accessibilityCaseTick(const struct accessibilityobserver *observer, s32 restart)
+{
+	struct prop *token = g_ScenarioData.htb.token;
+	struct coord point = token->pos;
+	struct coord radarpos;
+	f32 range, volume, gain, pan, distance;
+	s32 carrier = token->type == PROPTYPE_PLAYER || token->type == PROPTYPE_CHR;
+	s32 visible, radarshown, guide;
+
+	/* A carrier's prop origin is at their feet; test toward the torso. */
+	if (carrier) {
+		point.y += 70.0f;
+	}
+	radarshown = accessibilityCombatRadarGetScenarioObjective(
+			MPSCENARIO_HOLDTHEBRIEFCASE, token, &radarpos);
+	visible = (carrier
+			? token->chr && !(token->chr->hidden & CHRHFLAG_CLOAKED)
+				&& (radarshown || (g_MpSetup.options & MPOPTION_HTB_HIGHLIGHTBRIEFCASE))
+			: token->type == PROPTYPE_WEAPON && token->obj
+				&& !(token->obj->flags2 & OBJFLAG2_INVISIBLE)
+				&& !(token->obj->hidden & (OBJHFLAG_GONE | OBJHFLAG_DELETING)))
+			&& accessibilityObjectiveInViewport(&point)
+			&& accessibilityCaseHasLineOfSight(observer, token, &point);
+	guide = radarshown && !visible && !accessibilityCombatRadarIsManualObjectivePlaying();
+	accessibilityGetMarkerTuning(&range, &volume);
+	distance = accessibilityHillDistance(&observer->camera, &token->pos);
+	gain = visible ? accessibilityHillDistanceGain(distance, range) : 0.0f;
+	if (visible && radarshown && gain < ACCESSIBILITY_OBJECTIVE_VISIBLE_RADAR_MIN_GAIN) {
+		gain = ACCESSIBILITY_OBJECTIVE_VISIBLE_RADAR_MIN_GAIN;
+	}
+	gain *= volume;
+	restart |= token != g_AccessibilityObjectiveToken
+			|| g_AccessibilityObjectiveGuide != guide || g_AccessibilityHillLocal != visible;
+	if (guide) {
+		accessibilityObjectivePublishGuide(observer, &radarpos, restart);
+	} else {
+		pan = (psCalculatePan2(&token->pos, 0, -1.0f, NULL) - (f32)AL_PAN_CENTER)
+				/ AL_PAN_CENTER;
+#if ACCESSIBILITY_BINAURAL_EXPERIMENT
+		accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_HILL, &token->pos);
+#endif
+		accessibilityToneSetHillBeacon(gain > 0.0f, gain, pan, false, false, false, restart);
+	}
+	if (restart || g_AccessibilityHillRadarShown != radarshown) {
+		accessibilityLogEvent("objective_guide", "state",
+				"scenario=briefcase token=%p carrier=%d radar_shown=%d visible=%d guide=%d distance=%.3f marker_gain=%.4f",
+				(void *)token, carrier, radarshown, visible, guide, distance, gain);
+	}
+	g_AccessibilityObjectiveToken = token;
+	g_AccessibilityObjectiveGuide = guide;
+	g_AccessibilityHillLocal = visible;
+	g_AccessibilityHillRadarShown = radarshown;
+	g_AccessibilityHillAudible = guide || gain > 0.0f;
 }
 
 void accessibilityHillTick(void)
@@ -144,12 +269,15 @@ void accessibilityHillTick(void)
 	f32 radargain;
 	f32 gain;
 	f32 limit;
+	struct coord point;
+	struct coord radarpos;
 	f32 normalizedpan;
 	s32 pan;
 	s32 inrange;
 	s32 lineofsight;
 	s32 radarshown;
 	s32 local;
+	s32 guide;
 	s32 inside;
 	s32 playerteam;
 	s32 teamcontrols;
@@ -178,6 +306,9 @@ void accessibilityHillTick(void)
 		g_AccessibilityHillScoring = false;
 		g_AccessibilityHillElapsed240 = -1;
 		g_AccessibilityHillLastProgressTick = -1000;
+		g_AccessibilityObjectiveGuide = false;
+		g_AccessibilityObjectiveScenario = -1;
+		g_AccessibilityObjectiveToken = NULL;
 		return;
 	}
 
@@ -188,6 +319,12 @@ void accessibilityHillTick(void)
 				g_Vars.lvframe60, g_ScenarioData.koh.hillindex);
 		g_AccessibilityHillSuppressed = false;
 	}
+	wasSuppressed |= g_AccessibilityObjectiveScenario != g_MpSetup.scenario;
+	g_AccessibilityObjectiveScenario = g_MpSetup.scenario;
+	if (g_MpSetup.scenario == MPSCENARIO_HOLDTHEBRIEFCASE) {
+		accessibilityCaseTick(&observer, wasSuppressed);
+		return;
+	}
 
 	accessibilityGetMarkerTuning(&range, &mastervolume);
 	distance = accessibilityHillDistance(&observer.camera,
@@ -195,14 +332,19 @@ void accessibilityHillTick(void)
 	limit = g_AccessibilityHillInRange
 			? range + ACCESSIBILITY_HILL_RANGE_HYSTERESIS : range;
 	inrange = distance <= limit;
-	lineofsight = inrange && accessibilityHillHasLineOfSight(&observer);
+	radarshown = accessibilityCombatRadarGetScenarioObjective(MPSCENARIO_KINGOFTHEHILL,
+			NULL, &radarpos);
+	point = g_ScenarioData.koh.hillpos;
+	point.y += 30.0f;
+	lineofsight = (inrange || radarshown) && accessibilityObjectiveInViewport(&point)
+			&& accessibilityHillHasLineOfSight(&observer);
 	localgain = lineofsight
 			? accessibilityHillDistanceGain(distance, range) : 0.0f;
-	radarshown = accessibilityCombatRadarIsHillShown();
-	radargain = radarshown ? ACCESSIBILITY_HILL_RADAR_GAIN : 0.0f;
+	radargain = radarshown && lineofsight ? ACCESSIBILITY_OBJECTIVE_VISIBLE_RADAR_MIN_GAIN : 0.0f;
 	gain = localgain > radargain ? localgain : radargain;
 	gain *= mastervolume;
-	local = localgain > 0.0f;
+	local = gain > 0.0f;
+	guide = radarshown && !lineofsight && !accessibilityCombatRadarIsManualObjectivePlaying();
 	inside = g_Vars.currentplayer->prop->rooms[0]
 			== g_ScenarioData.koh.hillrooms[0];
 	playerteam = radarGetTeamIndex(g_Vars.currentplayer->prop->chr->team);
@@ -221,18 +363,22 @@ void accessibilityHillTick(void)
 	pan = psCalculatePan2(&g_ScenarioData.koh.hillpos, 0, -1.0f, NULL);
 	normalizedpan = ((f32)pan - (f32)AL_PAN_CENTER)
 			/ (f32)AL_PAN_CENTER;
-	rear = accessibilityHillIsRear(&observer);
+	rear = accessibilityObjectiveIsRear(&observer, &g_ScenarioData.koh.hillpos);
 	restart = wasSuppressed
 			|| (!g_AccessibilityHillAudible && gain > 0.0f)
 			|| g_AccessibilityHillIndex != g_ScenarioData.koh.hillindex
-			|| g_AccessibilityHillLocal != local
+			|| g_AccessibilityHillLocal != local || g_AccessibilityObjectiveGuide != guide
 			|| g_AccessibilityHillScoring != scoring;
 
+	if (guide) {
+		accessibilityObjectivePublishGuide(&observer, &radarpos, restart);
+	} else {
 #if ACCESSIBILITY_BINAURAL_EXPERIMENT
-	accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_HILL, &g_ScenarioData.koh.hillpos);
+		accessibilityToneSetSpatialPosition(ACCESSIBILITY_SPATIAL_HILL, &g_ScenarioData.koh.hillpos);
 #endif
-	accessibilityToneSetHillBeacon(gain > 0.0f, gain, normalizedpan,
-			rear, gain > 0.0f, scoring, restart);
+		accessibilityToneSetHillBeacon(gain > 0.0f, gain, normalizedpan,
+				rear, gain > 0.0f, scoring, restart);
+	}
 
 	if (restart || g_AccessibilityHillInRange != inrange
 			|| g_AccessibilityHillLineOfSight != lineofsight
@@ -249,7 +395,7 @@ void accessibilityHillTick(void)
 				(void *)observer.prop, observer.isremote,
 				observer.camera.x, observer.camera.y, observer.camera.z,
 				observer.room, distance, range, inrange, lineofsight,
-				radarshown, local ? "local" : radarshown ? "radar" : "silent",
+				radarshown, local ? "local" : guide ? "radar_pulse" : "silent",
 				gain, normalizedpan, rear, inside, playerteam,
 				g_ScenarioData.koh.occupiedteam,
 				g_ScenarioData.koh.elapsed240, scoring, restart);
@@ -276,6 +422,22 @@ void accessibilityHillTick(void)
 	g_AccessibilityHillScoring = scoring;
 	g_AccessibilityHillIndex = g_ScenarioData.koh.hillindex;
 	g_AccessibilityHillElapsed240 = g_ScenarioData.koh.elapsed240;
+	g_AccessibilityObjectiveGuide = guide;
+}
+
+s32 accessibilityObjectiveHasVisibleMarker(s32 scenario, const struct prop *token)
+{
+	if (scenario != g_AccessibilityObjectiveScenario || !g_AccessibilityHillLocal
+			|| !g_AccessibilityHillAudible || g_AccessibilityObjectiveGuide) {
+		return false;
+	}
+	if (scenario == MPSCENARIO_HOLDTHEBRIEFCASE) {
+		return token && token == g_AccessibilityObjectiveToken
+				&& token == g_ScenarioData.htb.token;
+	}
+	return scenario == MPSCENARIO_KINGOFTHEHILL && !token
+			&& !g_ScenarioData.koh.movehill
+			&& g_AccessibilityHillIndex == g_ScenarioData.koh.hillindex;
 }
 
 void accessibilityHillReset(const char *reason)
@@ -297,4 +459,7 @@ void accessibilityHillReset(const char *reason)
 	g_AccessibilityHillLastProgressTick = -1000;
 	g_AccessibilityHillNextLogTick = 0;
 	g_AccessibilityHillSuppressed = false;
+	g_AccessibilityObjectiveGuide = false;
+	g_AccessibilityObjectiveScenario = -1;
+	g_AccessibilityObjectiveToken = NULL;
 }

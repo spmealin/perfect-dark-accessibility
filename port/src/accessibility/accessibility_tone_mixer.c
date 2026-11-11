@@ -106,6 +106,10 @@ static s32 g_AccessibilityRadarSample;
 static s32 g_AccessibilityRadarTotalSamples;
 static s32 g_AccessibilityRadarKindState;
 static s32 g_AccessibilityRadarPulsesState;
+static s32 g_AccessibilityRadarObjectiveSamples;
+static s32 g_AccessibilityGuideSamples;
+static s32 g_AccessibilityGuideSample;
+static f32 g_AccessibilityGuidePhase;
 static s32 g_AccessibilityRadarHeightState;
 static s32 g_AccessibilityRadarRearState;
 static f32 g_AccessibilityRadarFrequencyHz;
@@ -168,6 +172,23 @@ static s16 accessibilityToneClamp(s32 value)
 	return value;
 }
 
+static f32 accessibilityToneObjectiveWave(s32 sample, s32 length, f32 *phase)
+{
+	f32 progress = (f32)sample / (f32)(length - 1);
+	f32 triangle = 1.0f - fabsf(2.0f * progress - 1.0f);
+	f32 frequency = 650.0f + 350.0f * triangle;
+	f32 envelope = fminf(1.0f, fminf(
+			(f32)sample / ACCESSIBILITY_RADAR_ATTACK_SAMPLES,
+			(f32)(length - sample - 1) / ACCESSIBILITY_RADAR_RELEASE_SAMPLES));
+	f32 result = sinf(*phase) * envelope;
+
+	*phase += TWO_PI * frequency / ACCESSIBILITY_TONE_SAMPLE_RATE;
+	if (*phase >= TWO_PI) {
+		*phase -= TWO_PI;
+	}
+	return result;
+}
+
 static f32 accessibilityToneCombatWave(f32 phase)
 {
 	return sinf(phase) * ACCESSIBILITY_COMBAT_FUNDAMENTAL_GAIN
@@ -225,6 +246,8 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 	s32 radarsequence = SDL_AtomicGet(&g_AccessibilityRadarSequence);
 	s32 hillsequence = SDL_AtomicGet(&g_AccessibilityHillSequence);
 	s32 hillenabled = SDL_AtomicGet(&g_AccessibilityHillEnabled);
+	s32 guidesamples = SDL_AtomicGet(&g_AccessibilityHillObjectiveMs)
+			* ACCESSIBILITY_TONE_SAMPLE_RATE / 1000;
 	s32 hillidentitychirp = SDL_AtomicGet(
 			&g_AccessibilityHillIdentityChirp);
 	s32 hillscoring = SDL_AtomicGet(&g_AccessibilityHillScoring);
@@ -296,7 +319,7 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			&g_AccessibilityCaneEdgePanMillionths) / 1000000.0f;
 	f32 hilltargetgain = hillenabled
 			? (f32)SDL_AtomicGet(&g_AccessibilityHillVolumeMillionths)
-					/ 1000000.0f * ACCESSIBILITY_MARKER_BASE_VOLUME
+					/ 1000000.0f * (guidesamples ? 1.0f : ACCESSIBILITY_MARKER_BASE_VOLUME)
 			: 0.0f;
 	f32 hilltargetpan = (f32)SDL_AtomicGet(
 			&g_AccessibilityHillPanMillionths) / 1000000.0f;
@@ -334,6 +357,9 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 		g_AccessibilityHazardGain = 0;
 		g_AccessibilityCaneEdgeGain = 0;
 		g_AccessibilityHillGain = 0;
+		g_AccessibilityGuideSamples = 0;
+		g_AccessibilityGuideSample = 0;
+		g_AccessibilityGuidePhase = 0.0f;
 		g_AccessibilityToneFrequencyHz = targetfrequency;
 		g_AccessibilityChirpSamplesRemaining = 0;
 		g_AccessibilityTargetPresenceSamplesRemaining = 0;
@@ -622,8 +648,12 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 					&g_AccessibilityRadarKind);
 			g_AccessibilityRadarPulsesState = SDL_AtomicGet(
 					&g_AccessibilityRadarPulses);
+			g_AccessibilityRadarObjectiveSamples = SDL_AtomicGet(
+					&g_AccessibilityRadarObjectiveMs) * ACCESSIBILITY_TONE_SAMPLE_RATE / 1000;
 
-			if (g_AccessibilityRadarPulsesState) {
+			if (g_AccessibilityRadarObjectiveSamples) {
+				g_AccessibilityRadarTotalSamples = g_AccessibilityRadarObjectiveSamples;
+			} else if (g_AccessibilityRadarPulsesState) {
 				g_AccessibilityRadarTotalSamples = g_AccessibilityRadarPulsesState
 						* ACCESSIBILITY_RADAR_LEVEL_BEEP_SAMPLES
 						+ (g_AccessibilityRadarPulsesState - 1)
@@ -662,12 +692,17 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 #if ACCESSIBILITY_BINAURAL_EXPERIMENT
 		accessibilitySpatialReset(ACCESSIBILITY_SPATIAL_HILL);
 #endif
-		g_AccessibilityHillSweepSample = 0;
-		g_AccessibilityHillChirpSample = 0;
-		g_AccessibilityHillPhaseA = 0.0f;
-		g_AccessibilityHillPhaseB = 0.0f;
-		g_AccessibilityHillChirpPhase = 0.0f;
-		g_AccessibilityHillModulationPhase = 0.0f;
+		if ((guidesamples > 0) == (g_AccessibilityGuideSamples > 0)) {
+			g_AccessibilityHillSweepSample = 0;
+			g_AccessibilityHillChirpSample = 0;
+			g_AccessibilityHillPhaseA = 0.0f;
+			g_AccessibilityHillPhaseB = 0.0f;
+			g_AccessibilityHillChirpPhase = 0.0f;
+			g_AccessibilityHillModulationPhase = 0.0f;
+			g_AccessibilityGuideSample = 0;
+			g_AccessibilityGuidePhase = 0.0f;
+			g_AccessibilityGuideSamples = guidesamples;
+		}
 	}
 
 	for (slot = 0; slot < ACCESSIBILITY_TONE_CANE_SLOT_COUNT; slot++) {
@@ -2004,7 +2039,9 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 			f32 wave;
 			f32 radar;
 
-			if (g_AccessibilityRadarPulsesState) {
+			if (g_AccessibilityRadarObjectiveSamples) {
+				beepsample = sample;
+			} else if (g_AccessibilityRadarPulsesState) {
 				beeplength = ACCESSIBILITY_RADAR_LEVEL_BEEP_SAMPLES;
 				beepsample = sample % (beeplength + ACCESSIBILITY_RADAR_DOUBLE_GAP_SAMPLES);
 				if (beepsample >= beeplength) {
@@ -2085,6 +2122,12 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 							+ sinf(g_AccessibilityRadarPhase * 2.0f) * 0.22f;
 				}
 
+				if (g_AccessibilityRadarObjectiveSamples) {
+					wave = accessibilityToneObjectiveWave(sample,
+							g_AccessibilityRadarObjectiveSamples, &g_AccessibilityRadarPhase);
+					envelope = 1.0f;
+					frequencymultiplier = 0.0f; // The sweep owns its oscillator phase.
+				}
 				radar = wave * envelope * modulation
 						* g_AccessibilityRadarVolume * 32767.0f;
 #if ACCESSIBILITY_BINAURAL_EXPERIMENT
@@ -2117,17 +2160,33 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 
 		g_AccessibilityHillPan += (hilltargetpan
 				- g_AccessibilityHillPan) / (f32)(frames - i);
-		if (g_AccessibilityHillGain < hilltargetgain) {
+		f32 hillgain = hilltargetgain;
+		if ((guidesamples > 0) != (g_AccessibilityGuideSamples > 0)) {
+			if (g_AccessibilityHillGain > 0.0f) {
+				hillgain = 0.0f;
+			} else {
+				g_AccessibilityGuideSamples = guidesamples;
+				g_AccessibilityGuideSample = 0;
+				g_AccessibilityGuidePhase = 0.0f;
+				g_AccessibilityHillSweepSample = 0;
+				g_AccessibilityHillPhaseA = 0.0f;
+				g_AccessibilityHillPhaseB = 0.0f;
+				g_AccessibilityHillChirpSample = 0;
+				g_AccessibilityHillChirpPhase = 0.0f;
+				g_AccessibilityHillModulationPhase = 0.0f;
+			}
+		}
+		if (g_AccessibilityHillGain < hillgain) {
 			g_AccessibilityHillGain += ACCESSIBILITY_MARKER_BASE_VOLUME
 					/ (ACCESSIBILITY_TONE_SAMPLE_RATE * 0.01f);
-			if (g_AccessibilityHillGain > hilltargetgain) {
-				g_AccessibilityHillGain = hilltargetgain;
+			if (g_AccessibilityHillGain > hillgain) {
+				g_AccessibilityHillGain = hillgain;
 			}
-		} else if (g_AccessibilityHillGain > hilltargetgain) {
+		} else if (g_AccessibilityHillGain > hillgain) {
 			g_AccessibilityHillGain -= ACCESSIBILITY_MARKER_BASE_VOLUME
 					/ (ACCESSIBILITY_TONE_SAMPLE_RATE * 0.01f);
-			if (g_AccessibilityHillGain < hilltargetgain) {
-				g_AccessibilityHillGain = hilltargetgain;
+			if (g_AccessibilityHillGain < hillgain) {
+				g_AccessibilityHillGain = hillgain;
 			}
 		}
 
@@ -2156,7 +2215,21 @@ const s16 *accessibilityToneMix(const s16 *input, u32 len)
 					+ sinf(g_AccessibilityHillPhaseB)) * 0.5f
 					* g_AccessibilityHillGain * modulation * 32767.0f;
 
-			if (hillidentitychirp
+			if (g_AccessibilityGuideSamples) {
+				hill = g_AccessibilityGuideSample < g_AccessibilityGuideSamples
+						? accessibilityToneObjectiveWave(g_AccessibilityGuideSample,
+							g_AccessibilityGuideSamples, &g_AccessibilityGuidePhase)
+							* g_AccessibilityHillGain * modulation * 32767.0f
+						: 0.0f;
+				if (++g_AccessibilityGuideSample >= g_AccessibilityGuideSamples
+						+ ACCESSIBILITY_TONE_SAMPLE_RATE * 60 / 1000) {
+					g_AccessibilityGuideSample = 0;
+					g_AccessibilityGuidePhase = 0.0f;
+					if (guidesamples) {
+						g_AccessibilityGuideSamples = guidesamples;
+					}
+				}
+			} else if (hillidentitychirp
 					&& g_AccessibilityHillChirpSample
 						< ACCESSIBILITY_MARKER_BEEP_SAMPLES) {
 				s32 chirpsample = g_AccessibilityHillChirpSample;

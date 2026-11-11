@@ -344,21 +344,18 @@ radar dot. It has one
 dedicated fixed mixer voice and is controlled by
 `Accessibility.KingOfTheHillBeacon`, which defaults to `1`.
 
-Inside `Accessibility.MarkerRange`, a direct collision line from the active
-observer to the hill center enables the full player-marker dual sweep and a
-single 800 Hz chirp every second. Distance shaping and master gain reuse
-`Accessibility.MarkerVolume`; 75 units of range hysteresis protects the
-boundary. The line-of-sight endpoint is raised 30 units only for the collision
-test so the floor itself does not reject its exact horizontal center.
+The hill center and Hold the Briefcase token (loose or held) share the same
+off-screen radar pulse. Only the scenario's actual outlined radar marker
+enables it. The 650–1,000–650 Hz sweep lasts 200–750 ms based on horizontal
+distance, with a 60 ms gap. F3 uses the same sound once per objective unless
+its visible mission-marker cue is already playing.
+The automatic voice is separate from the F3 and enemy-alert scheduler.
 
-The final Combat Simulator capture records when King of the Hill's null-prop
-marker actually reaches `radarDrawDot`. That observation, rather than a second
-copy of the renderer's option rules, enables a no-chirp radar guide at
-one-quarter gain. The guide does not require range or line of sight because
-the native radar marker does not. Stereo pan and rear modulation convey
-direction. Entering local range with line of sight adds the identity chirp;
-the local component and radar component feed one voice and the stronger base
-gain wins, so they never double.
+Viewport and visual line of sight are both required for the automatic
+handoff to the mission-marker sweep. The hill test is raised 30 units so the
+floor does not block the center itself. The visible hill retains its identity
+and scoring chirps. A case carrier retains their ordinary enemy/ally status
+in the combat alert scheduler.
 
 During a mobile-hill transition the old voice stops until the scenario
 installs a new stationary center. Menus, pause, cutscenes, death, unsupported

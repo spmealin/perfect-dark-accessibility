@@ -6,6 +6,13 @@ static s32 beaconprop = -1;
 static s32 played;
 static s32 lastpulses;
 static f32 lastgain;
+static s32 objectiveDuration;
+static s32 visibleObjective;
+
+s32 accessibilityObjectiveHasVisibleMarker(s32 scenario, const struct prop *token)
+{
+	return visibleObjective;
+}
 
 s32 accessibilityGetCombatRadarContactAlerts(void) { return true; }
 s32 accessibilityTargetingHasAudibleCombatBeacon(s32 playernum, s32 propnum)
@@ -24,6 +31,11 @@ void accessibilityTonePlayRadarBurst(f32 frequency, f32 gain, f32 pan,
 {
 	played++;
 	lastpulses = pulses;
+	lastgain = gain;
+}
+void accessibilityTonePlayRadarObjective(f32 gain, f32 pan, s32 rear, s32 duration)
+{
+	objectiveDuration = duration;
 	lastgain = gain;
 }
 #if ACCESSIBILITY_BINAURAL_EXPERIMENT
@@ -81,5 +93,32 @@ int main(void)
 	beaconprop = -1;
 	accessibilityCombatRadarEmitNext();
 	assert(played == 5 && lastpulses == 1);
+	assert(accessibilityCombatRadarObjectiveDurationMs(0.0f) == 200);
+	assert(accessibilityCombatRadarObjectiveDurationMs(2000.0f) == 475);
+	assert(accessibilityCombatRadarObjectiveDurationMs(5000.0f) == 750);
+	g_AccessibilityCombatRadarFrame.markers[0].scenarioobjective = true;
+	g_AccessibilityCombatRadarFrame.markers[0].horizontaldistance = 2000.0f;
+	g_Vars.lvframe60 += TICKS(60);
+	accessibilityCombatRadarScheduleManual();
+	accessibilityCombatRadarEmitNext();
+	g_Vars.lvframe60 += ACCESSIBILITY_COMBAT_RADAR_MANUAL_START_TICKS;
+	accessibilityCombatRadarEmitNext();
+	assert(objectiveDuration == 475 && accessibilityCombatRadarIsManualObjectivePlaying());
+	assert(fabsf(lastgain - 0.104f) < 0.00001f);
+
+	/* A visible mission marker is left alone, even if it became visible
+	 * after the manual request but before the objective event played. */
+	g_Vars.lvframe60 = g_AccessibilityCombatRadarNextVoiceFrame;
+	visibleObjective = true;
+	accessibilityCombatRadarScheduleManual();
+	assert(g_AccessibilityCombatRadarEventCount == 1);
+	assert(events[0].type == ACCESSIBILITY_COMBAT_RADAR_EVENT_LAUNCH);
+	visibleObjective = false;
+	accessibilityCombatRadarScheduleManual();
+	assert(g_AccessibilityCombatRadarEventCount == 2);
+	visibleObjective = true;
+	objectiveDuration = 0;
+	accessibilityCombatRadarEmitNext();
+	assert(g_AccessibilityCombatRadarEventCount == 0 && objectiveDuration == 0);
 	return 0;
 }

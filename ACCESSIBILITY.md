@@ -470,8 +470,13 @@ the accessibility tools.
 - The R-Tracker announces its state and renders tracked contacts as spatial
   audio. IR and X-Ray modes expose the objects highlighted by their native
   visual systems.
-- King of the Hill uses a distinct beacon at the hill center and changes its
-  behavior when the player is occupying and scoring on the hill.
+- In King of the Hill and Hold the Briefcase, an off-screen objective shown on
+  the native radar makes a repeating up-then-down pitch sweep. It shortens as
+  you approach. Once the hill, case, or marked carrier is visible, the sweep
+  gives way to the mission-marker sound. F3 uses one sweep for an off-screen
+  objective in its nearest-first list and leaves a playing mission marker
+  alone. The visible hill marker still chirps faster
+  while your team is scoring and you occupy the hill.
 - Mission-authored navigation targets and Combat Simulator radar contacts are
   scheduled to avoid simultaneous cues when possible.
 

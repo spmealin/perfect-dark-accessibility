@@ -168,5 +168,16 @@ int main(int argc, char **argv)
 		}
 		assert(run == pulses);
 	}
+	/* Both voices use the same pitch arc, with the repeat gap only on the guide. */
+	accessibilityTonePlayRadarObjective(.13f, 0, 0, 200);
+	accessibilityToneMix(gameaudio, sizeof(gameaudio));
+	assert(g_AccessibilityRadarTotalSamples == ACCESSIBILITY_TONE_SAMPLE_RATE / 5);
+	accessibilityToneStopRadar();
+	accessibilityToneSetObjectiveGuide(.13f, 0, 0, 750, 1);
+	accessibilityToneMix(gameaudio, sizeof(gameaudio));
+	assert(g_AccessibilityGuideSamples == ACCESSIBILITY_TONE_SAMPLE_RATE * 750 / 1000);
+	accessibilityToneSetHillBeacon(1, .5f, 0, 0, 1, 0, 1);
+	accessibilityToneMix(gameaudio, sizeof(gameaudio));
+	assert(g_AccessibilityGuideSamples == 0 && g_AccessibilityHillGain > 0);
 	return 0;
 }

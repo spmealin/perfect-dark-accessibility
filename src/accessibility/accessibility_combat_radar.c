@@ -11,6 +11,7 @@
 #include "game/propsnd.h"
 #include "accessibility/accessibility.h"
 #include "accessibility/accessibility_combat_radar.h"
+#include "accessibility/accessibility_hill.h"
 #include "accessibility/accessibility_log.h"
 #include "accessibility/accessibility_relationship.h"
 #include "accessibility/accessibility_targeting.h"
@@ -78,6 +79,7 @@ struct accessibilitycombatradarmarker {
 	s32 proptype;
 	s32 category;
 	s32 relationship;
+	s32 scenarioobjective;
 	struct coord position;
 	struct coord relative;
 	f32 horizontaldistance;
@@ -101,6 +103,8 @@ struct accessibilitycombatradarframe {
 	s32 totaldots;
 	s32 ownmarkerexcluded;
 	s32 hillmarkerdrawn;
+	s32 scenarioobjectiveshown;
+	struct accessibilitycombatradarmarker scenarioobjective;
 	s32 retainedcount;
 	s32 overflow[ACCESSIBILITY_COMBAT_RADAR_CATEGORY_COUNT];
 	struct accessibilitycombatradarmarker
@@ -123,6 +127,7 @@ struct accessibilitycombatradarcontact {
 struct accessibilitycombatradarevent {
 	struct coord position;
 	s32 hasposition;
+	s32 objectivems;
 	s32 type;
 	s32 priority;
 	s32 dueframe;
@@ -162,6 +167,7 @@ static s32 g_AccessibilityCombatRadarLastAvailability = -1;
 static s32 g_AccessibilityCombatRadarLastHillMarker = -1;
 static s32 g_AccessibilityCombatRadarProcessedAvailability = -1;
 static s32 g_AccessibilityCombatRadarSuppressed;
+static s32 g_AccessibilityCombatRadarManualObjective;
 static s32 g_AccessibilityCombatRadarNeedsBaseline = true;
 
 static const char *accessibilityCombatRadarCategoryName(s32 category)
@@ -421,6 +427,13 @@ void accessibilityCombatRadarCaptureDot(struct prop *prop,
 	marker.propnum = accessibilityCombatRadarPropNum(prop);
 	marker.proptype = prop ? prop->type : -1;
 	marker.category = category;
+	/* The swapped (outlined) native scenario dot, not an ordinary character
+	 * dot that happens to belong to the holder. Keep its enemy/ally category
+	 * for automatic combat alerts; F3 uses the separate objective identity. */
+	marker.scenarioobjective = swapcolours
+			&& ((!prop && g_MpSetup.scenario == MPSCENARIO_KINGOFTHEHILL)
+				|| (prop && g_MpSetup.scenario == MPSCENARIO_HOLDTHEBRIEFCASE
+					&& prop == g_ScenarioData.htb.token));
 	marker.relative = *relative;
 	marker.horizontaldistance = sqrtf(
 			relative->x * relative->x + relative->z * relative->z);
@@ -465,6 +478,10 @@ void accessibilityCombatRadarCaptureDot(struct prop *prop,
 		marker.bearing += ACCESSIBILITY_COMBAT_RADAR_TWO_PI;
 	}
 	marker.rear = forwarddot < 0.0f;
+	if (marker.scenarioobjective) {
+		g_AccessibilityCombatRadarBuilding.scenarioobjectiveshown = true;
+		g_AccessibilityCombatRadarBuilding.scenarioobjective = marker;
+	}
 
 	if (g_AccessibilityCombatRadarBuilding.retainedcount
 			< ACCESSIBILITY_COMBAT_RADAR_MARKER_CAPACITY) {
@@ -509,10 +526,32 @@ void accessibilityCombatRadarCaptureEnd(void)
 	accessibilityCombatRadarPublish();
 }
 
-s32 accessibilityCombatRadarIsHillShown(void)
+s32 accessibilityCombatRadarGetScenarioObjective(s32 scenario, const struct prop *token,
+		struct coord *position)
 {
-	return g_AccessibilityCombatRadarFrame.available
-			&& g_AccessibilityCombatRadarFrame.hillmarkerdrawn;
+	if (!accessibilityIsCombatRadarAudioEnabled()
+			|| !g_AccessibilityCombatRadarFrame.available
+			|| !g_AccessibilityCombatRadarFrame.scenarioobjectiveshown
+			|| g_AccessibilityCombatRadarFrame.scenario != scenario
+			|| g_AccessibilityCombatRadarFrame.scenarioobjective.identity != (uintptr_t)token) {
+		return false;
+	}
+	if (position) {
+		*position = g_AccessibilityCombatRadarFrame.scenarioobjective.position;
+	}
+	return true;
+}
+
+s32 accessibilityCombatRadarObjectiveDurationMs(f32 distance)
+{
+	return 200 + (s32)(550.0f * fminf(1.0f, fmaxf(0.0f,
+			distance / ACCESSIBILITY_COMBAT_RADAR_DISTANCE)) + 0.5f);
+}
+
+s32 accessibilityCombatRadarIsManualObjectivePlaying(void)
+{
+	return g_AccessibilityCombatRadarManualObjective
+			&& g_Vars.lvframe60 < g_AccessibilityCombatRadarNextVoiceFrame;
 }
 
 static void accessibilityCombatRadarClearEvents(s32 manualonly,
@@ -651,6 +690,9 @@ static void accessibilityCombatRadarFillMarkerEvent(
 			: ACCESSIBILITY_COMBAT_RADAR_HEIGHT_LEVEL;
 	event->rear = marker ? marker->rear : false;
 	event->distance = marker ? marker->horizontaldistance : 0.0f;
+	if (marker && marker->scenarioobjective && event->manual) {
+		event->objectivems = accessibilityCombatRadarObjectiveDurationMs(event->distance);
+	}
 	event->frequencyhz = marker
 			? accessibilityCombatRadarFrequency(marker->horizontaldistance)
 			: type == ACCESSIBILITY_COMBAT_RADAR_EVENT_LAUNCH ? 1500.0f
@@ -661,6 +703,9 @@ static void accessibilityCombatRadarFillMarkerEvent(
 	 * Keep the centered sweep/status acknowledgements distinct. */
 	event->gain = marker ? volume * ACCESSIBILITY_COMBAT_RADAR_CONTACT_GAIN
 			: volume;
+	if (event->objectivems) {
+		event->gain *= ACCESSIBILITY_COMBAT_RADAR_OBJECTIVE_GAIN_SCALE;
+	}
 
 	if (marker && marker->category == ACCESSIBILITY_COMBAT_RADAR_CATEGORY_ALLY) {
 		event->gain *= ACCESSIBILITY_COMBAT_RADAR_ALLY_GAIN;
@@ -1011,12 +1056,19 @@ static void accessibilityCombatRadarScheduleManual(void)
 	for (i = 0; i < count; i++) {
 		struct accessibilitycombatradarmarker *marker
 				= &g_AccessibilityCombatRadarFrame.markers[order[i]];
-		s32 due = start + i * ACCESSIBILITY_COMBAT_RADAR_MIN_START_TICKS;
+		if (marker->scenarioobjective && accessibilityObjectiveHasVisibleMarker(
+				g_AccessibilityCombatRadarFrame.scenario, (const struct prop *)marker->identity)) {
+			accessibilityLogEvent("combat_radar", "event",
+					"type=manual action=skipped reason=visible_objective_marker propnum=%d",
+					marker->propnum);
+			continue;
+		}
 
 		accessibilityCombatRadarFillMarkerEvent(&event, marker,
-				ACCESSIBILITY_COMBAT_RADAR_EVENT_MANUAL, due);
+				ACCESSIBILITY_COMBAT_RADAR_EVENT_MANUAL, start);
 		accessibilityCombatRadarQueueEvent(&event);
 		accessibilityCombatRadarLogMarker(marker, true);
+		start += ACCESSIBILITY_COMBAT_RADAR_MIN_START_TICKS;
 	}
 }
 
@@ -1047,6 +1099,9 @@ static s32 accessibilityCombatRadarToneKind(
 static s32 accessibilityCombatRadarToneTicks(
 		const struct accessibilitycombatradarevent *event)
 {
+	if (event->objectivems) {
+		return (event->objectivems * TICKS(60) + 999) / 1000 + 1;
+	}
 	if (!event->manual) {
 		return event->type == ACCESSIBILITY_COMBAT_RADAR_EVENT_NEW ? TICKS(12)
 				: event->type == ACCESSIBILITY_COMBAT_RADAR_EVENT_MEDIUM
@@ -1149,6 +1204,18 @@ static void accessibilityCombatRadarEmitNext(void)
 		struct accessibilitycombatradarevent *candidate
 				= &g_AccessibilityCombatRadarEvents[i];
 
+		/* A queued F3 objective may become visible while earlier pings play. */
+		if (candidate->objectivems && accessibilityObjectiveHasVisibleMarker(
+				g_AccessibilityCombatRadarFrame.scenario, (const struct prop *)candidate->identity)) {
+			accessibilityLogEvent("combat_radar", "event",
+					"type=manual action=skipped reason=visible_objective_marker propnum=%d",
+					candidate->propnum);
+			*candidate = g_AccessibilityCombatRadarEvents[
+					--g_AccessibilityCombatRadarEventCount];
+			i--;
+			continue;
+		}
+
 		if (!candidate->manual) {
 			s32 slot = accessibilityCombatRadarFindContact(candidate->identity);
 			const struct accessibilitycombatradarmarker *marker
@@ -1236,14 +1303,19 @@ static void accessibilityCombatRadarEmitNext(void)
 	pulses = event.manual ? 0
 			: event.type == ACCESSIBILITY_COMBAT_RADAR_EVENT_NEW ? 3
 			: event.type == ACCESSIBILITY_COMBAT_RADAR_EVENT_MEDIUM ? 2 : 1;
-	accessibilityTonePlayRadarBurst(event.frequencyhz, event.gain, event.pan,
-			event.height, event.rear,
-			accessibilityCombatRadarToneKind(&event), pulses);
+	if (event.objectivems) {
+		accessibilityTonePlayRadarObjective(event.gain, event.pan, event.rear, event.objectivems);
+	} else {
+		accessibilityTonePlayRadarBurst(event.frequencyhz, event.gain, event.pan,
+				event.height, event.rear,
+				accessibilityCombatRadarToneKind(&event), pulses);
+	}
+	g_AccessibilityCombatRadarManualObjective = event.objectivems != 0;
 	g_AccessibilityCombatRadarNextVoiceFrame
 			= g_Vars.lvframe60 + accessibilityCombatRadarToneTicks(&event);
 	g_AccessibilityCombatRadarEventsEmitted++;
 	accessibilityLogEvent("combat_radar", "event",
-			"type=%s action=emitted frame=%d scheduled_frame=%d latency_ticks=%d priority=%d identity=%p propnum=%d category=%s distance=%.3f frequency_hz=%.1f gain=%.3f pan=%.4f rear=%d height=%s queue_remaining=%d next_voice_frame=%d pulses=%d",
+			"type=%s action=emitted frame=%d scheduled_frame=%d latency_ticks=%d priority=%d identity=%p propnum=%d category=%s distance=%.3f frequency_hz=%.1f gain=%.3f pan=%.4f rear=%d height=%s queue_remaining=%d next_voice_frame=%d pulses=%d objective_ms=%d",
 			accessibilityCombatRadarEventName(event.type),
 			g_Vars.lvframe60, event.dueframe,
 			g_Vars.lvframe60 - event.dueframe, event.priority,
@@ -1252,7 +1324,7 @@ static void accessibilityCombatRadarEmitNext(void)
 			event.distance, event.frequencyhz, event.gain, event.pan,
 			event.rear, accessibilityCombatRadarHeightName(event.height),
 			g_AccessibilityCombatRadarEventCount,
-			g_AccessibilityCombatRadarNextVoiceFrame, pulses);
+			g_AccessibilityCombatRadarNextVoiceFrame, pulses, event.objectivems);
 }
 
 static const char *accessibilityCombatRadarScopeReason(void)
@@ -1300,6 +1372,7 @@ static void accessibilityCombatRadarSuppress(const char *reason)
 		accessibilityCombatRadarClearEvents(false, reason);
 		accessibilityToneStopRadar();
 		g_AccessibilityCombatRadarNextVoiceFrame = 0;
+		g_AccessibilityCombatRadarManualObjective = false;
 	}
 	g_AccessibilityCombatRadarSuppressed = true;
 	g_AccessibilityCombatRadarNeedsBaseline = true;
@@ -1321,6 +1394,7 @@ static void accessibilityCombatRadarHandleNativeAvailability(void)
 				"native_radar_unavailable");
 		accessibilityToneStopRadar();
 		g_AccessibilityCombatRadarNextVoiceFrame = 0;
+		g_AccessibilityCombatRadarManualObjective = false;
 	}
 
 	accessibilityLogEvent("combat_radar", "scope",
@@ -1477,6 +1551,7 @@ void accessibilityCombatRadarReset(const char *reason)
 	g_AccessibilityCombatRadarEventCount = 0;
 	g_AccessibilityCombatRadarMaximumQueue = 0;
 	g_AccessibilityCombatRadarNextVoiceFrame = 0;
+	g_AccessibilityCombatRadarManualObjective = false;
 	g_AccessibilityCombatRadarNextTelemetryFrame = 0;
 	g_AccessibilityCombatRadarLastAvailability = -1;
 	g_AccessibilityCombatRadarLastHillMarker = -1;
