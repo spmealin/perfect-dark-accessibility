@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include "../../src/accessibility/accessibility_menu.c"
+#include "../../src/accessibility/accessibility_menu_head.c"
 
 static s32 selected;
 static s32 summaries;
@@ -42,7 +43,7 @@ char *menuResolveParam2Text(struct menuitem *item)
 }
 char *menuResolveText(uintptr_t thing, void *context) { return thing == 2 ? "42\n" : ""; }
 char *menuitemScrollableGetText(u32 type) { return ""; }
-char *langGet(s32 textid) { return ""; }
+char *langGet(s32 textid) { return textid == L_OPTIONS_027 ? "Localized Carrington\n" : ""; }
 bool menuitemKeyboardIsStringEmptyOrSpaces(char *text) { return false; }
 void accessibilityLogEvent(const char *category, const char *event, const char *format, ...) { }
 
@@ -225,6 +226,45 @@ static void testEmptyDeleteList(void)
 	assert(!strcmp(snapshot.utterance, "Delete File. No Combat Simulator player files to delete."));
 }
 
+static MenuItemHandlerResult headCarousel(s32 operation, struct menuitem *item,
+		union handlerdata *data)
+{
+	if (operation == MENUOP_GETOPTIONCOUNT) {
+		data->carousel.value = 2;
+	} else if (operation == MENUOP_GETSELECTEDINDEX) {
+		data->carousel.value = selected;
+	} else if (operation == MENUOP_GETACCESSIBILITYTEXT
+			&& data->accessibility.part == MENUACCESSIBILITYPART_OPTION) {
+		return accessibilityMenuFormatHeadOption(data->accessibility.buffer,
+				data->accessibility.bufferlen,
+				data->accessibility.index == 0 ? HEAD_CARRINGTON : HEAD_ELVIS_GOGS,
+				data->accessibility.index);
+	}
+	return 0;
+}
+
+static void testHeadCarousel(void)
+{
+	struct menuitem item = { .type = MENUITEMTYPE_CAROUSEL, .handler = headCarousel };
+	struct accessibilitymenusnapshot snapshot = { .item = &item, .itemtype = MENUITEMTYPE_CAROUSEL };
+	char buffer[64];
+
+	selected = 0;
+	accessibilityMenuDescribeItem(&snapshot, NULL);
+	assert(!strcmp(snapshot.value, "Localized Carrington"));
+	selected = 1;
+	accessibilityMenuDescribeItem(&snapshot, NULL);
+	accessibilityMenuCompose(&snapshot, false, false);
+	assert(!strcmp(snapshot.utterance, "carousel, Elvis with goggles, item 2 of 2."));
+	assert(accessibilityMenuFormatHeadOption(buffer, sizeof(buffer), HEAD_ROSS, 1));
+	assert(!strcmp(buffer, "Ross"));
+	assert(accessibilityMenuFormatHeadOption(buffer, sizeof(buffer), HEAD_DARK_COMBAT, 40));
+	assert(!strcmp(buffer, "Joanna Dark, combat"));
+	assert(accessibilityMenuFormatHeadOption(buffer, sizeof(buffer), -1, 3));
+	assert(!strcmp(buffer, "Head 4"));
+	selected = 0;
+}
+
 int main(void)
 {
 	struct menuitem item = {0};
@@ -234,6 +274,7 @@ int main(void)
 	testStaticDialogSummary();
 	testFileActionLabel();
 	testEmptyDeleteList();
+	testHeadCarousel();
 	item.type = snapshot.itemtype = MENUITEMTYPE_LABEL;
 	item.flags = MENUITEMFLAG_ACCESSIBILITYREADONLY;
 	item.param2 = 1;

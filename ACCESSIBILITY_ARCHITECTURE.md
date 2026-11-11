@@ -966,6 +966,14 @@ message through the read-only menu accessibility query. The English empty
 messages belong in the future accessibility translation catalog. The native
 refresh schedule, list rendering, and delete actions are unchanged.
 
+The existing head carousel provider in `src/game/mplayer/setup.c` resolves
+the same native head ID as the renderer and passes it to
+`src/accessibility/accessibility_menu_head.c`. That catalog uses existing
+localized labels where they fit, with English variants and model aliases
+pending an accessibility translation catalog and visual review. The player
+and Simulant pickers share the provider; no model, unlock, order, save format,
+or selection behavior changes.
+
 ## Current evidence and remaining validation
 
 The PC radial-menu mouse adapter is separate from accessibility policy:

@@ -129,6 +129,10 @@ In Combat Simulator → Player Setup → Statistics, use Up and Down (or the
 D-pad) to read one stat at a time. F5 repeats the focused stat; Back and the
 usual cancel control still leave the screen.
 
+The Combat Simulator Head selector speaks a name or identifying label for
+each built-in head, for both players and Simulants. Generic faces currently
+use their model aliases where a visual description has not been verified.
+
 Automatic gameplay speech prioritizes **weapon selection, then HUD messages,
 then compass directions**. Every valid quick weapon selection starts its name
 immediately, including intermediate mouse-wheel selections; a newer selection

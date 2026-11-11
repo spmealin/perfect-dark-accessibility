@@ -28,6 +28,7 @@
 #include "system.h"
 #include "input.h"
 #include "mpsetups.h"
+#include "accessibility/accessibility_menu.h"
 
 struct menuitem g_MpCharacterMenuItems[];
 struct menudialogdef g_MpAddSimulantMenuDialog;
@@ -2190,9 +2191,9 @@ MenuItemHandlerResult mpCharacterHeadMenuHandler(s32 operation, struct menuitem 
 				&& data->accessibility.buffer && data->accessibility.bufferlen > 0
 				&& data->accessibility.index >= 0
 				&& data->accessibility.index < mpGetNumHeads2()) {
-			snprintf(data->accessibility.buffer, data->accessibility.bufferlen,
-					"Head %d", data->accessibility.index + 1);
-			return 1;
+			return accessibilityMenuFormatHeadOption(data->accessibility.buffer,
+					data->accessibility.bufferlen,
+					mpGetHeadId(data->accessibility.index), data->accessibility.index);
 		}
 		break;
 	case MENUOP_GETOPTIONCOUNT:

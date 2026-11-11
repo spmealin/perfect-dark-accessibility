@@ -5,6 +5,9 @@
 
 struct menu;
 
+s32 accessibilityMenuFormatHeadOption(char *buffer, u32 bufferlen,
+		s32 headid, s32 optionindex);
+
 void accessibilityMenuObserve(s32 menuslot, s32 playernum, s32 menuroot,
 		s32 menudepth, struct menu *menu);
 void accessibilityMenuObserveActive(s32 playernum);

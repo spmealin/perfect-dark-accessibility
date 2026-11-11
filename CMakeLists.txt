@@ -322,6 +322,7 @@ set(SRC_ACCESSIBILITY
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_landmark.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_marker.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_menu.c"
+  "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_menu_head.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_observer.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_path_blocker.c"
   "${CMAKE_SOURCE_DIR}/src/accessibility/accessibility_performance.c"
