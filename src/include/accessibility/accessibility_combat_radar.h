@@ -3,7 +3,7 @@
 
 #include <PR/ultratypes.h>
 
-#define ACCESSIBILITY_COMBAT_RADAR_OBJECTIVE_GAIN_SCALE 0.80f
+#define ACCESSIBILITY_COMBAT_RADAR_OBJECTIVE_GAIN_SCALE 0.64f
 
 struct coord;
 struct prop;

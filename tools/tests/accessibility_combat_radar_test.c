@@ -104,7 +104,7 @@ int main(void)
 	g_Vars.lvframe60 += ACCESSIBILITY_COMBAT_RADAR_MANUAL_START_TICKS;
 	accessibilityCombatRadarEmitNext();
 	assert(objectiveDuration == 475 && accessibilityCombatRadarIsManualObjectivePlaying());
-	assert(fabsf(lastgain - 0.104f) < 0.00001f);
+	assert(fabsf(lastgain - 0.0832f) < 0.00001f);
 
 	/* A visible mission marker is left alone, even if it became visible
 	 * after the manual request but before the objective event played. */
