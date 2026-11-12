@@ -7,6 +7,7 @@ static s32 played;
 static s32 lastpulses;
 static f32 lastgain;
 static s32 objectiveDuration;
+static s32 objectiveProfile;
 static s32 visibleObjective;
 
 s32 accessibilityObjectiveHasVisibleMarker(s32 scenario, const struct prop *token)
@@ -15,6 +16,7 @@ s32 accessibilityObjectiveHasVisibleMarker(s32 scenario, const struct prop *toke
 }
 
 s32 accessibilityGetCombatRadarContactAlerts(void) { return true; }
+s32 accessibilityIsCombatRadarAudioEnabled(void) { return true; }
 s32 accessibilityTargetingHasAudibleCombatBeacon(s32 playernum, s32 propnum)
 {
 	return propnum == beaconprop;
@@ -33,9 +35,10 @@ void accessibilityTonePlayRadarBurst(f32 frequency, f32 gain, f32 pan,
 	lastpulses = pulses;
 	lastgain = gain;
 }
-void accessibilityTonePlayRadarObjective(f32 gain, f32 pan, s32 rear, s32 duration)
+void accessibilityTonePlayRadarObjective(f32 gain, f32 pan, s32 rear, s32 duration, s32 profile)
 {
 	objectiveDuration = duration;
+	objectiveProfile = profile;
 	lastgain = gain;
 }
 #if ACCESSIBILITY_BINAURAL_EXPERIMENT
@@ -97,6 +100,7 @@ int main(void)
 	assert(accessibilityCombatRadarObjectiveDurationMs(2000.0f) == 475);
 	assert(accessibilityCombatRadarObjectiveDurationMs(5000.0f) == 750);
 	g_AccessibilityCombatRadarFrame.markers[0].scenarioobjective = true;
+	g_AccessibilityCombatRadarFrame.markers[0].objectiveprofile = ACCESSIBILITY_OBJECTIVE_RECOVER;
 	g_AccessibilityCombatRadarFrame.markers[0].horizontaldistance = 2000.0f;
 	g_Vars.lvframe60 += TICKS(60);
 	accessibilityCombatRadarScheduleManual();
@@ -104,6 +108,7 @@ int main(void)
 	g_Vars.lvframe60 += ACCESSIBILITY_COMBAT_RADAR_MANUAL_START_TICKS;
 	accessibilityCombatRadarEmitNext();
 	assert(objectiveDuration == 475 && accessibilityCombatRadarIsManualObjectivePlaying());
+	assert(objectiveProfile == ACCESSIBILITY_OBJECTIVE_RECOVER);
 	assert(fabsf(lastgain - 0.0832f) < 0.00001f);
 
 	/* A visible mission marker is left alone, even if it became visible
@@ -120,5 +125,26 @@ int main(void)
 	objectiveDuration = 0;
 	accessibilityCombatRadarEmitNext();
 	assert(g_AccessibilityCombatRadarEventCount == 0 && objectiveDuration == 0);
+
+	/* Only native objective dots qualify; CTC can expose several at once. */
+	g_AccessibilityCombatRadarFrame.scenario = MPSCENARIO_CAPTURETHECASE;
+	g_AccessibilityCombatRadarFrame.retainedcount = 3;
+	setMarker(0, 200);
+	setMarker(1, 400);
+	setMarker(2, 600);
+	g_AccessibilityCombatRadarFrame.markers[0].scenarioobjective = true;
+	g_AccessibilityCombatRadarFrame.markers[1].scenarioobjective = true;
+	g_AccessibilityCombatRadarFrame.markers[1].objectiveprofile = ACCESSIBILITY_OBJECTIVE_HOME;
+	assert(accessibilityCombatRadarGetScenarioObjective(MPSCENARIO_CAPTURETHECASE,
+			(const struct prop *)g_AccessibilityCombatRadarFrame.markers[0].identity, NULL));
+	assert(accessibilityCombatRadarGetScenarioObjective(MPSCENARIO_CAPTURETHECASE,
+			(const struct prop *)g_AccessibilityCombatRadarFrame.markers[1].identity, NULL));
+	assert(!accessibilityCombatRadarGetScenarioObjective(MPSCENARIO_CAPTURETHECASE,
+			(const struct prop *)g_AccessibilityCombatRadarFrame.markers[2].identity, NULL));
+	visibleObjective = false;
+	accessibilityCombatRadarScheduleManual();
+	assert(events[1].objectiveprofile == ACCESSIBILITY_OBJECTIVE_RECOVER);
+	assert(events[2].objectiveprofile == ACCESSIBILITY_OBJECTIVE_HOME);
+	assert(events[3].objectivems == 0);
 	return 0;
 }

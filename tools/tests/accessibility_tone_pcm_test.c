@@ -169,15 +169,24 @@ int main(int argc, char **argv)
 		assert(run == pulses);
 	}
 	/* Both voices use the same pitch arc, with the repeat gap only on the guide. */
-	accessibilityTonePlayRadarObjective(.13f, 0, 0, 200);
+	accessibilityTonePlayRadarObjective(.13f, 0, 0, 200, ACCESSIBILITY_OBJECTIVE_RECOVER);
 	accessibilityToneMix(gameaudio, sizeof(gameaudio));
 	assert(g_AccessibilityRadarTotalSamples == ACCESSIBILITY_TONE_SAMPLE_RATE / 5);
+	assert(g_AccessibilityRadarObjectiveProfileState == ACCESSIBILITY_OBJECTIVE_RECOVER);
 	accessibilityToneStopRadar();
-	accessibilityToneSetObjectiveGuide(.13f, 0, 0, 750, 1);
+	accessibilityToneSetObjectiveGuide(.13f, 0, 0, 750, ACCESSIBILITY_OBJECTIVE_HOME, 1);
 	accessibilityToneMix(gameaudio, sizeof(gameaudio));
 	assert(g_AccessibilityGuideSamples == ACCESSIBILITY_TONE_SAMPLE_RATE * 750 / 1000);
+	assert(g_AccessibilityGuideProfile == ACCESSIBILITY_OBJECTIVE_HOME);
 	accessibilityToneSetHillBeacon(1, .5f, 0, 0, 1, 0, 1);
 	accessibilityToneMix(gameaudio, sizeof(gameaudio));
 	assert(g_AccessibilityGuideSamples == 0 && g_AccessibilityHillGain > 0);
+	{
+		f32 start = 0, middle = 0, home = 0;
+		accessibilityToneObjectiveWave(0, 201, ACCESSIBILITY_OBJECTIVE_RECOVER, &start);
+		accessibilityToneObjectiveWave(100, 201, ACCESSIBILITY_OBJECTIVE_RECOVER, &middle);
+		accessibilityToneObjectiveWave(100, 201, ACCESSIBILITY_OBJECTIVE_HOME, &home);
+		assert(start > middle && middle > home);
+	}
 	return 0;
 }

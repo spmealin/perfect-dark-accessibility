@@ -257,7 +257,28 @@ When the objective is in view and passes line of sight, the automatic pulse fade
 
 The beacon's identity chirp accelerates to twice per second only while the player occupies the native hill room, the player's team controls the hill, and the native point countdown is advancing. Leaving the room, losing control, or another team contesting and pausing the countdown restores the ordinary once-per-second locator cadence. This reports the same scoring state represented by the native hill room, colour, and countdown rather than estimating occupancy from distance to the beacon center.
 
-Automatic guidance uses one dedicated fixed procedural voice, shared between the two scenarios and not with enemy alerts or player markers. It yields to the manual F3 objective pulse. Menu, pause, cutscene, death, match teardown, unsupported player counts, feature disable, and shutdown silence it. Logs distinguish `local`, `radar_pulse`, and suppressed states and retain hill scoring and carrier-transition evidence.
+Automatic guidance uses one dedicated fixed procedural voice, shared between
+scenarios and not with enemy alerts or player markers. It yields to the
+manual F3 objective pulse. Menu, pause, cutscene, death, match teardown,
+unsupported player counts, feature disable, and shutdown silence it.
+
+Capture the Case also uses this voice and `Accessibility.CombatRadarAudio`.
+An enemy case uses the usual 650–1,000–650 Hz arc, the player's stolen case
+uses 1,000–650–1,000 Hz, and the home-case dot uses a low 350–500–350 Hz arc.
+The same 200–750 ms distance timing applies. F3 reports native case dots and
+carriers, excluding the player's own marker and skipping a case already
+sounding its visible marker. Case ownership is distinct from the carrier's
+allegiance, which still determines enemy/ally alerts.
+
+Automatic selection prefers a detectable stolen home case, then the home
+case when the player carries an enemy case, then the nearest detectable
+enemy case when not carrying. The player's actual home pad can play a steady
+260 Hz marker when visible. It takes precedence over an off-screen attack
+target, but not a detectable stolen case. An empty base is never a radar target. A visible stolen
+case carrier uses the mission-marker sweep with an identity chirp; a visible
+enemy case uses the sweep without that chirp. No scoring or respawn rules
+change. The `objective_guide/capture_case` log records team, carrying and
+stolen state, selected profile, visibility, and native radar eligibility.
 
 ### IR Scanner highlight audio
 

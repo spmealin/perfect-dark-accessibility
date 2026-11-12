@@ -158,12 +158,20 @@ void accessibilityTonePlayRadarPing(f32 frequencyhz, f32 volume, f32 pan,
 		s32 height, s32 rear, s32 kind);
 void accessibilityTonePlayRadarBurst(f32 frequencyhz, f32 volume, f32 pan,
 		s32 height, s32 rear, s32 kind, s32 pulses);
-void accessibilityTonePlayRadarObjective(f32 volume, f32 pan, s32 rear, s32 durationms);
+enum accessibilityobjectiveprofile {
+	ACCESSIBILITY_OBJECTIVE_STANDARD,
+	ACCESSIBILITY_OBJECTIVE_RECOVER,
+	ACCESSIBILITY_OBJECTIVE_HOME,
+};
+
+void accessibilityTonePlayRadarObjective(f32 volume, f32 pan, s32 rear,
+		s32 durationms, s32 profile);
 void accessibilityToneStopRadar(void);
 void accessibilityToneSetHillBeacon(s32 enabled, f32 volume, f32 pan,
 		s32 rear, s32 identitychirp, s32 scoring, s32 restart);
 void accessibilityToneSetObjectiveGuide(f32 volume, f32 pan, s32 rear,
-		s32 durationms, s32 restart);
+		s32 durationms, s32 profile, s32 restart);
+void accessibilityToneSetHomeMarker(f32 volume, f32 pan, s32 restart);
 void accessibilityToneStopHillBeacon(void);
 void accessibilityTonePlayCaneSlot(s32 slot, f32 startfrequencyhz,
 		f32 endfrequencyhz, f32 volume, f32 pan, s32 durationms,

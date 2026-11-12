@@ -477,6 +477,12 @@ the accessibility tools.
   objective in its nearest-first list and leaves a playing mission marker
   alone. The visible hill marker still chirps faster
   while your team is scoring and you occupy the hill.
+- In Capture the Case, an **up-then-down** radar sweep means an enemy case,
+  **down-then-up** means your stolen case, and a **low up-then-down** sweep
+  means your case is home. The steady low marker is your visible home base.
+  Automatic guidance favors recovering your stolen case, returning home when
+  carrying an enemy case, then finding the nearest enemy case. F3 reports
+  radar-marked cases; it does not reveal an empty base through walls.
 - Mission-authored navigation targets and Combat Simulator radar contacts are
   scheduled to avoid simultaneous cues when possible.
 

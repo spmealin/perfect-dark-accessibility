@@ -328,6 +328,8 @@ SDL_atomic_t g_AccessibilityRadarKind;
 SDL_atomic_t g_AccessibilityRadarPulses;
 SDL_atomic_t g_AccessibilityRadarObjectiveMs;
 SDL_atomic_t g_AccessibilityHillObjectiveMs;
+SDL_atomic_t g_AccessibilityRadarObjectiveProfile;
+SDL_atomic_t g_AccessibilityHillObjectiveProfile;
 SDL_atomic_t g_AccessibilityHillSequence;
 SDL_atomic_t g_AccessibilityHillEnabled;
 SDL_atomic_t g_AccessibilityHillVolumeMillionths;
@@ -1008,7 +1010,7 @@ void accessibilityToneStopDoors(void)
 }
 
 static void accessibilityTonePublishRadar(f32 frequencyhz, f32 volume, f32 pan,
-		s32 height, s32 rear, s32 kind, s32 pulses, s32 objectivems)
+		s32 height, s32 rear, s32 kind, s32 pulses, s32 objectivems, s32 profile)
 {
 	if (frequencyhz < 1.0f) {
 		frequencyhz = 1.0f;
@@ -1042,6 +1044,7 @@ static void accessibilityTonePublishRadar(f32 frequencyhz, f32 volume, f32 pan,
 	SDL_AtomicSet(&g_AccessibilityRadarKind, kind);
 	SDL_AtomicSet(&g_AccessibilityRadarPulses, pulses >= 1 && pulses <= 3 ? pulses : 0);
 	SDL_AtomicSet(&g_AccessibilityRadarObjectiveMs, objectivems);
+	SDL_AtomicSet(&g_AccessibilityRadarObjectiveProfile, profile);
 	SDL_AtomicSet(&g_AccessibilityRadarEnabled, volume > 0.0f);
 	SDL_AtomicAdd(&g_AccessibilityRadarSequence, 1);
 }
@@ -1052,7 +1055,7 @@ void accessibilityTonePlayRadarPing(f32 frequencyhz, f32 volume, f32 pan,
 	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
-	accessibilityTonePublishRadar(frequencyhz, volume, pan, height, rear, kind, 0, 0);
+	accessibilityTonePublishRadar(frequencyhz, volume, pan, height, rear, kind, 0, 0, 0);
 }
 
 void accessibilityTonePlayRadarBurst(f32 frequencyhz, f32 volume, f32 pan,
@@ -1061,17 +1064,18 @@ void accessibilityTonePlayRadarBurst(f32 frequencyhz, f32 volume, f32 pan,
 	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
-	accessibilityTonePublishRadar(frequencyhz, volume, pan, height, rear, kind, pulses, 0);
+	accessibilityTonePublishRadar(frequencyhz, volume, pan, height, rear, kind, pulses, 0, 0);
 }
 
-void accessibilityTonePlayRadarObjective(f32 volume, f32 pan, s32 rear, s32 durationms)
+void accessibilityTonePlayRadarObjective(f32 volume, f32 pan, s32 rear,
+		s32 durationms, s32 profile)
 {
 	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	accessibilityTonePublishRadar(650.0f, volume, pan, 0, rear,
 			ACCESSIBILITY_TONE_RADAR_OBJECTIVE, 0,
-			durationms < 200 ? 200 : durationms > 750 ? 750 : durationms);
+			durationms < 200 ? 200 : durationms > 750 ? 750 : durationms, profile);
 }
 
 void accessibilityToneStopRadar(void)
@@ -1084,7 +1088,7 @@ void accessibilityToneStopRadar(void)
 }
 
 static void accessibilityTonePublishObjective(s32 enabled, f32 volume, f32 pan,
-		s32 rear, s32 identitychirp, s32 scoring, s32 restart, s32 objectivems)
+		s32 rear, s32 identitychirp, s32 scoring, s32 restart, s32 objectivems, s32 profile)
 {
 	if (volume < 0.0f) {
 		volume = 0.0f;
@@ -1105,6 +1109,7 @@ static void accessibilityTonePublishObjective(s32 enabled, f32 volume, f32 pan,
 	SDL_AtomicSet(&g_AccessibilityHillIdentityChirp, identitychirp != 0);
 	SDL_AtomicSet(&g_AccessibilityHillScoring, scoring != 0);
 	SDL_AtomicSet(&g_AccessibilityHillObjectiveMs, objectivems);
+	SDL_AtomicSet(&g_AccessibilityHillObjectiveProfile, profile);
 	SDL_AtomicSet(&g_AccessibilityHillEnabled, enabled && volume > 0.0f);
 	if (restart) {
 		SDL_AtomicAdd(&g_AccessibilityHillSequence, 1);
@@ -1118,18 +1123,27 @@ void accessibilityToneSetHillBeacon(s32 enabled, f32 volume, f32 pan,
 		return;
 	}
 	accessibilityTonePublishObjective(enabled, volume, pan, rear,
-			identitychirp, scoring, restart, 0);
+			identitychirp, scoring, restart, 0, ACCESSIBILITY_OBJECTIVE_STANDARD);
 }
 
 void accessibilityToneSetObjectiveGuide(f32 volume, f32 pan, s32 rear,
-		s32 durationms, s32 restart)
+		s32 durationms, s32 profile, s32 restart)
 {
 	if (!accessibilityToneOwnershipCanPublish()) {
 		return;
 	}
 	accessibilityTonePublishObjective(true, volume, pan, rear,
 			false, false, restart,
-			durationms < 200 ? 200 : durationms > 750 ? 750 : durationms);
+			durationms < 200 ? 200 : durationms > 750 ? 750 : durationms, profile);
+}
+
+void accessibilityToneSetHomeMarker(f32 volume, f32 pan, s32 restart)
+{
+	if (!accessibilityToneOwnershipCanPublish()) {
+		return;
+	}
+	accessibilityTonePublishObjective(true, volume, pan, false, false, false,
+			restart, 0, ACCESSIBILITY_OBJECTIVE_HOME);
 }
 
 void accessibilityToneStopHillBeacon(void)

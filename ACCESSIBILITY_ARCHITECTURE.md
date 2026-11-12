@@ -188,7 +188,7 @@ src/accessibility/
   accessibility_glossary.c       sound catalog, synthetic previews, bounded menu playback
   accessibility_hazard.c         damaging-laser semantic adapter and sweep policy
   accessibility_projectile.c     hostile-rocket detection, ranking, and warning policy
-  accessibility_hill.c           Hill/briefcase visibility, guidance, and hill scoring policy
+  accessibility_hill.c           Hill and case visibility, objective guidance, and hill scoring policy
   accessibility_hud.c            semantic HUD-message events and direct respawn overlay adapter
   accessibility_incident.c       Shift+F2 bounded history and semantic state capture
   accessibility_log.c            buffered structured development log
